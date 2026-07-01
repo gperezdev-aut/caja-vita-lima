@@ -1,25 +1,12 @@
 -- ============================================================
--- Caja Vita Lima — Supabase SQL v6
+-- Caja Vita Lima — Supabase SQL v6.1 FIX
 -- Archivo: sql/006_reporte_financiero_mensual.sql
 -- Objetivo:
 --   Crear una vista financiera mensual más amigable para socios,
 --   reportes y futura app web.
 --
--- Base:
---   Usa datos ya migrados en:
---   - caja_movimientos
---   - caja_salidas
---   - cupones_convenios
---   - migracion_revision
---
--- Esta vista separa:
---   - ingresos por servicios normales
---   - ingresos por gift cards vendidas
---   - préstamos de caja
---   - cuponidad cobrada en tienda
---   - salidas
---   - resultado neto
---   - pendientes de revisión
+-- FIX:
+--   Corrige el error de GROUP BY en migracion_revision.fecha_original.
 -- ============================================================
 
 
@@ -122,24 +109,29 @@ cupones as (
   group by date_trunc('month', fecha)::date, sede
 ),
 
-revision as (
+revision_limpia as (
   select
-    date_trunc(
-      'month',
-      case
-        when fecha_original ~ '^\d{4}-\d{2}-\d{2}$'
-        then fecha_original::date
-        else null
-      end
-    )::date as mes,
-    'Miraflores'::text as sede,
-    count(*) as pendientes_revision,
-    sum(coalesce(monto_ingreso_detectado, 0)) as monto_ingreso_pendiente_revision,
-    sum(coalesce(monto_salida_detectado, 0)) as monto_salida_pendiente_revision
+    case
+      when fecha_original ~ '^\d{4}-\d{2}-\d{2}$'
+      then fecha_original::date
+      else null
+    end as fecha_revision,
+    coalesce(monto_ingreso_detectado, 0) as monto_ingreso_detectado,
+    coalesce(monto_salida_detectado, 0) as monto_salida_detectado
   from public.migracion_revision
   where estado_revision = 'PENDIENTE'
-    and fecha_original ~ '^\d{4}-\d{2}-\d{2}$'
-  group by date_trunc('month', fecha_original::date)::date
+),
+
+revision as (
+  select
+    date_trunc('month', fecha_revision)::date as mes,
+    'Miraflores'::text as sede,
+    count(*) as pendientes_revision,
+    sum(monto_ingreso_detectado) as monto_ingreso_pendiente_revision,
+    sum(monto_salida_detectado) as monto_salida_pendiente_revision
+  from revision_limpia
+  where fecha_revision is not null
+  group by date_trunc('month', fecha_revision)::date
 ),
 
 base_meses as (
@@ -199,8 +191,6 @@ order by b.mes desc, b.sede;
 
 -- ============================================================
 -- 2) Vista: vista_reporte_financiero_mensual_simple
---
--- Versión reducida para lectura rápida.
 -- ============================================================
 
 create or replace view public.vista_reporte_financiero_mensual_simple as
