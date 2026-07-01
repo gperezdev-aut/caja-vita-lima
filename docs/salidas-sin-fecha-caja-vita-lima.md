@@ -16,6 +16,20 @@ sql/008_salidas_sin_fecha_views.sql
 
 ---
 
+## Corrección v8.1
+
+La primera versión intentaba usar columnas:
+
+```text
+source_type
+source_id
+```
+
+pero la tabla actual `public.caja_salidas` no tiene esas columnas.  
+La versión v8.1 retira esas columnas de la vista `vista_salidas_sin_fecha`.
+
+---
+
 ## Contexto
 
 Durante la migración de `1SEMESTRE2026` se detectó:
@@ -41,46 +55,32 @@ Diferencia: S/ 385.20
 
 Lista detallada de salidas sin fecha.
 
-Consulta:
-
 ```sql
 select *
 from public.vista_salidas_sin_fecha;
 ```
 
----
-
 ### vista_salidas_sin_fecha_resumen
 
 Resumen de cantidad y monto.
-
-Consulta:
 
 ```sql
 select *
 from public.vista_salidas_sin_fecha_resumen;
 ```
 
----
-
 ### vista_salidas_sin_fecha_por_tipo
 
 Resumen por tipo de gasto.
-
-Consulta:
 
 ```sql
 select *
 from public.vista_salidas_sin_fecha_por_tipo;
 ```
 
----
-
 ### vista_reporte_socio_resumen_con_alertas
 
 Resumen para socio con alerta de salidas sin fecha.
-
-Consulta:
 
 ```sql
 select *
@@ -100,12 +100,3 @@ Las salidas sin fecha:
 - Se revisan después para asignar fecha si corresponde.
 ```
 
----
-
-## Estado
-
-```text
-SQL preparado.
-Pendiente: subir a GitHub.
-Pendiente: ejecutar en Supabase.
-```
