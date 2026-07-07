@@ -125,30 +125,7 @@ export default async function NuevaAtencionPage({
 
   return (
     <main className="appShell">
-      <aside className="sidebar">
-        <div>
-          <p className="sidebarEyebrow">Vita Lima</p>
-          <h2>Caja</h2>
-        </div>
-
-        <nav className="nav">
-          <a href="/">Dashboard</a>
-          <a href="/citas-hoy">Citas de hoy</a>
-          <a href="/nueva-atencion">Nueva atención</a>
-          <a href="/registrar-salida">Registrar salida</a>
-          <a href="/comprobantes">Comprobantes</a>
-          <a href="/cierre-caja">Cierre de caja</a>
-          <a href="/#alertas">Alertas</a>
-        </nav>
-
-        <div className="nextModules">
-          <span>Módulos</span>
-          <p>Citas de hoy</p>
-          <p>Nueva atención</p>
-          <p>Registrar salida</p>
-          <p>Cierre de caja</p>
-        </div>
-      </aside>
+      <CajaSidebar session={session} />
 
       <section className="page">
         <section className="hero" style={{ minHeight: "140px" }}>
