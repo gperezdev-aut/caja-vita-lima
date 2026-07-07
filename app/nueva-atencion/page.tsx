@@ -135,7 +135,7 @@ export default async function NuevaAtencionPage({
           <a href="/citas-hoy">Citas de hoy</a>
           <a href="/nueva-atencion">Nueva atención</a>
           <a href="/registrar-salida">Registrar salida</a>
-          <a href="/#comprobantes">Comprobantes</a>
+          <a href="/comprobantes">Comprobantes</a>
           <a href="/#alertas">Alertas</a>
         </nav>
 
