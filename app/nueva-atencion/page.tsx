@@ -136,6 +136,7 @@ export default async function NuevaAtencionPage({
           <a href="/nueva-atencion">Nueva atención</a>
           <a href="/registrar-salida">Registrar salida</a>
           <a href="/comprobantes">Comprobantes</a>
+          <a href="/cierre-caja">Cierre de caja</a>
           <a href="/#alertas">Alertas</a>
         </nav>
 
