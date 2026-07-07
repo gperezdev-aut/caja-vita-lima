@@ -55,14 +55,15 @@ function Sidebar() {
       </div>
 
       <nav className="nav">
-        <a href="#dashboard">Dashboard</a>
-        <a href="#mensual">Reporte mensual</a>
-        <a href="#comprobantes">Comprobantes</a>
-        <a href="#alertas">Alertas</a>
+        <a href="/">Dashboard</a>
+        <a href="/citas-hoy">Citas de hoy</a>
+        <a href="/nueva-atencion">Nueva atención</a>
+        <a href="/#comprobantes">Comprobantes</a>
+        <a href="/#alertas">Alertas</a>
       </nav>
 
       <div className="nextModules">
-        <span>Próximos módulos</span>
+        <span>Módulos</span>
         <p>Citas de hoy</p>
         <p>Nueva atención</p>
         <p>Registrar salida</p>
@@ -174,7 +175,8 @@ export default async function HomePage() {
             <div>
               <h2>Último mes cargado</h2>
               <p>
-                Si el mes todavía no terminó, tomarlo como información preliminar.
+                Si el mes todavía no terminó, tomarlo como información
+                preliminar.
               </p>
             </div>
           </div>
@@ -256,7 +258,7 @@ export default async function HomePage() {
               {comprobantes.data.map((row, index) => (
                 <div className="miniItem" key={index}>
                   <span>
-                    {row.estado_comprobante_final_calculado} · {" "}
+                    {row.estado_comprobante_final_calculado} ·{" "}
                     {row.tipo_comprobante}
                   </span>
                   <strong>
@@ -279,14 +281,14 @@ export default async function HomePage() {
               <div className="miniItem">
                 <span>Salidas sin fecha</span>
                 <strong>
-                  {numberFmt(sinFecha.total_salidas_sin_fecha)} / {" "}
+                  {numberFmt(sinFecha.total_salidas_sin_fecha)} /{" "}
                   {money(sinFecha.total_monto_sin_fecha)}
                 </strong>
               </div>
               <div className="miniItem">
                 <span>Comprobantes para revisar</span>
                 <strong>
-                  {numberFmt(r["Comprobantes para revisar"])} / {" "}
+                  {numberFmt(r["Comprobantes para revisar"])} /{" "}
                   {money(r["Monto comprobantes para revisar"])}
                 </strong>
               </div>
