@@ -15,17 +15,31 @@ function getMessage(error?: string, loggedOut?: string) {
     };
   }
 
+  if (error === "missing") {
+    return {
+      type: "error",
+      text: "Ingresa usuario y PIN para continuar.",
+    };
+  }
+
   if (error === "invalid") {
     return {
       type: "error",
-      text: "Contraseña incorrecta. Revisa e intenta otra vez.",
+      text: "Usuario o PIN incorrecto. Revisa e intenta otra vez.",
+    };
+  }
+
+  if (error === "db") {
+    return {
+      type: "error",
+      text: "No se pudo validar el usuario en Supabase. Revisa conexión o tabla usuarios.",
     };
   }
 
   if (error === "config") {
     return {
       type: "error",
-      text: "Faltan variables de entorno en Vercel: CAJA_APP_PASSWORD o CAJA_SESSION_SECRET.",
+      text: "Faltan variables de entorno en Vercel: CAJA_SESSION_SECRET o conexión Supabase.",
     };
   }
 
@@ -52,7 +66,7 @@ export default async function LoginPage({
         <p className="eyebrow">Vita Lima Spa</p>
         <h1>Caja Vita Lima</h1>
         <p className="subtitle">
-          Acceso interno para revisar caja, reportes y alertas operativas.
+          Acceso interno por usuario y PIN para caja, reportes y operación.
         </p>
 
         {message && (
@@ -60,12 +74,23 @@ export default async function LoginPage({
         )}
 
         <form action={loginAction} className="loginForm">
-          <label htmlFor="password">Contraseña de acceso</label>
+          <label htmlFor="usuario">Usuario</label>
           <input
-            id="password"
-            name="password"
+            id="usuario"
+            name="usuario"
+            type="text"
+            placeholder="gerald, luis, nati o vita"
+            autoComplete="username"
+            required
+          />
+
+          <label htmlFor="pin">PIN</label>
+          <input
+            id="pin"
+            name="pin"
             type="password"
-            placeholder="Ingresa la contraseña"
+            inputMode="numeric"
+            placeholder="Ingresa tu PIN"
             autoComplete="current-password"
             required
           />
@@ -74,8 +99,8 @@ export default async function LoginPage({
         </form>
 
         <p className="loginHint">
-          Este acceso es temporal. Luego se puede cambiar por usuarios y roles:
-          Gerald, socio, caja y lectura.
+          Usuarios activos: Gerald, Luis, Nati y Vita Operación. Los permisos por
+          rol se aplicarán por módulos en la siguiente etapa.
         </p>
       </section>
     </main>

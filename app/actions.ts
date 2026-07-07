@@ -2,24 +2,72 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { authCookieName } from "@/lib/auth";
+import {
+  authCookieName,
+  createSessionToken,
+  type CajaRole,
+} from "@/lib/auth";
+import { supabaseSelectWhere } from "@/lib/supabaseServer";
+
+type UsuarioRow = {
+  id: number;
+  usuario: string;
+  pin: string | null;
+  rol: CajaRole;
+  nombre: string | null;
+  activo: boolean | null;
+};
+
+function clean(value: FormDataEntryValue | null) {
+  return String(value ?? "").trim();
+}
+
+function normalizeUser(value: FormDataEntryValue | null) {
+  return clean(value).toLowerCase();
+}
 
 export async function loginAction(formData: FormData) {
-  const password = String(formData.get("password") ?? "");
-  const expectedPassword = process.env.CAJA_APP_PASSWORD;
+  const usuario = normalizeUser(formData.get("usuario"));
+  const pin = clean(formData.get("pin"));
   const sessionSecret = process.env.CAJA_SESSION_SECRET;
 
-  if (!expectedPassword || !sessionSecret) {
+  if (!sessionSecret) {
     redirect("/login?error=config");
   }
 
-  if (password !== expectedPassword) {
+  if (!usuario || !pin) {
+    redirect("/login?error=missing");
+  }
+
+  const result = await supabaseSelectWhere<UsuarioRow>(
+    "usuarios",
+    [
+      "select=id,usuario,pin,rol,nombre,activo",
+      `usuario=eq.${encodeURIComponent(usuario)}`,
+      "activo=eq.true",
+      "limit=1",
+    ].join("&")
+  );
+
+  if (result.error) {
+    redirect("/login?error=db");
+  }
+
+  const user = result.data?.[0];
+
+  if (!user || user.pin !== pin) {
     redirect("/login?error=invalid");
   }
 
   const cookieStore = await cookies();
+  const token = createSessionToken({
+    usuario: user.usuario,
+    nombre: user.nombre || user.usuario,
+    rol: user.rol,
+    iat: Date.now(),
+  });
 
-  cookieStore.set(authCookieName, sessionSecret, {
+  cookieStore.set(authCookieName, token, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
