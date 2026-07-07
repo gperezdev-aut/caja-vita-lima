@@ -98,6 +98,7 @@ function Sidebar() {
         <a href="/">Dashboard</a>
         <a href="/citas-hoy">Citas de hoy</a>
         <a href="/nueva-atencion">Nueva atención</a>
+        <a href="/registrar-salida">Registrar salida</a>
         <a href="/#comprobantes">Comprobantes</a>
         <a href="/#alertas">Alertas</a>
       </nav>
@@ -225,21 +226,40 @@ export default async function CitasHoyPage() {
               </p>
             </div>
 
-            <a
-              href="/nueva-atencion"
-              style={{
-                alignSelf: "flex-start",
-                background: "var(--green)",
-                color: "white",
-                borderRadius: "16px",
-                padding: "13px 16px",
-                fontWeight: 850,
-                textDecoration: "none",
-                whiteSpace: "nowrap",
-              }}
-            >
-              Nueva atención
-            </a>
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+              <a
+                href="/nueva-atencion"
+                style={{
+                  alignSelf: "flex-start",
+                  background: "var(--green)",
+                  color: "white",
+                  borderRadius: "16px",
+                  padding: "13px 16px",
+                  fontWeight: 850,
+                  textDecoration: "none",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Nueva atención
+              </a>
+
+              <a
+                href="/registrar-salida"
+                style={{
+                  alignSelf: "flex-start",
+                  background: "white",
+                  color: "var(--green)",
+                  border: "1px solid var(--line)",
+                  borderRadius: "16px",
+                  padding: "13px 16px",
+                  fontWeight: 850,
+                  textDecoration: "none",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Registrar salida
+              </a>
+            </div>
           </div>
 
           {movimientos.data.length === 0 ? (

@@ -134,6 +134,7 @@ export default async function NuevaAtencionPage({
           <a href="/">Dashboard</a>
           <a href="/citas-hoy">Citas de hoy</a>
           <a href="/nueva-atencion">Nueva atención</a>
+          <a href="/registrar-salida">Registrar salida</a>
           <a href="/#comprobantes">Comprobantes</a>
           <a href="/#alertas">Alertas</a>
         </nav>
@@ -220,11 +221,7 @@ export default async function NuevaAtencionPage({
             <FormGrid>
               <label style={fieldStyle}>
                 Tipo de registro
-                <select
-                  name="tipo_registro"
-                  defaultValue="ATENCION"
-                  style={inputStyle}
-                >
+                <select name="tipo_registro" defaultValue="ATENCION" style={inputStyle}>
                   <option value="ATENCION">Atención de hoy / sin cita</option>
                   <option value="RESERVA">Reserva futura</option>
                 </select>
@@ -232,13 +229,7 @@ export default async function NuevaAtencionPage({
 
               <label style={fieldStyle}>
                 Fecha
-                <input
-                  name="fecha"
-                  type="date"
-                  defaultValue={todayInLima()}
-                  required
-                  style={inputStyle}
-                />
+                <input name="fecha" type="date" defaultValue={todayInLima()} required style={inputStyle} />
               </label>
 
               <label style={fieldStyle}>
@@ -249,10 +240,7 @@ export default async function NuevaAtencionPage({
               <label style={fieldStyle}>
                 Sede
                 <select name="sede" required style={inputStyle}>
-                  <Options
-                    rows={sedes}
-                    fallback={["Miraflores", "San Borja"]}
-                  />
+                  <Options rows={sedes} fallback={["Miraflores", "San Borja"]} />
                 </select>
               </label>
             </FormGrid>
@@ -262,21 +250,12 @@ export default async function NuevaAtencionPage({
             <FormGrid>
               <label style={fieldStyle}>
                 Cliente
-                <input
-                  name="cliente"
-                  placeholder="Nombre del cliente"
-                  required
-                  style={inputStyle}
-                />
+                <input name="cliente" placeholder="Nombre del cliente" required style={inputStyle} />
               </label>
 
               <label style={fieldStyle}>
                 WhatsApp
-                <input
-                  name="whatsapp"
-                  placeholder="Ej. 987654321"
-                  style={inputStyle}
-                />
+                <input name="whatsapp" placeholder="Ej. 987654321" style={inputStyle} />
               </label>
 
               <label style={fieldStyle}>
@@ -313,11 +292,7 @@ export default async function NuevaAtencionPage({
 
               <label style={fieldStyle}>
                 Duración
-                <select
-                  name="duracion"
-                  defaultValue="60 min"
-                  style={inputStyle}
-                >
+                <select name="duracion" defaultValue="60 min" style={inputStyle}>
                   <option value="45 min">45 min</option>
                   <option value="60 min">60 min</option>
                   <option value="70 min">70 min</option>
@@ -330,10 +305,7 @@ export default async function NuevaAtencionPage({
                 Terapista 1
                 <select name="terapista_1" style={inputStyle}>
                   <option value="">Por asignar</option>
-                  <Options
-                    rows={terapistas}
-                    fallback={["Rossana", "Maria E", "Melissa", "Cecilia", "Otro"]}
-                  />
+                  <Options rows={terapistas} fallback={["Rossana", "Maria E", "Melissa", "Cecilia", "Otro"]} />
                 </select>
               </label>
 
@@ -341,10 +313,7 @@ export default async function NuevaAtencionPage({
                 Terapista 2
                 <select name="terapista_2" style={inputStyle}>
                   <option value="">No aplica / Por asignar</option>
-                  <Options
-                    rows={terapistas}
-                    fallback={["Rossana", "Maria E", "Melissa", "Cecilia", "Otro"]}
-                  />
+                  <Options rows={terapistas} fallback={["Rossana", "Maria E", "Melissa", "Cecilia", "Otro"]} />
                 </select>
               </label>
             </FormGrid>
@@ -354,74 +323,37 @@ export default async function NuevaAtencionPage({
             <FormGrid>
               <label style={fieldStyle}>
                 Monto total
-                <input
-                  name="monto_total"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  placeholder="0.00"
-                  required
-                  style={inputStyle}
-                />
+                <input name="monto_total" type="number" step="0.01" min="0" placeholder="0.00" required style={inputStyle} />
               </label>
 
               <label style={fieldStyle}>
                 Monto pagado / adelanto
-                <input
-                  name="monto_pagado"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  placeholder="0.00"
-                  required
-                  style={inputStyle}
-                />
+                <input name="monto_pagado" type="number" step="0.01" min="0" placeholder="0.00" required style={inputStyle} />
               </label>
 
               <label style={fieldStyle}>
                 Método de pago
                 <select name="metodo_pago" style={inputStyle}>
-                  <Options
-                    rows={metodos}
-                    fallback={["EFECTIVO", "YAPE", "PLIN", "IZIPAY POS", "BCP", "OTRO"]}
-                  />
+                  <Options rows={metodos} fallback={["EFECTIVO", "YAPE", "PLIN", "IZIPAY POS", "BCP", "OTRO"]} />
                 </select>
               </label>
 
               <label style={fieldStyle}>
                 Estado boleta
-                <select
-                  name="estado_boleta"
-                  defaultValue="Pendiente"
-                  style={inputStyle}
-                >
-                  <Options
-                    rows={estadosBoleta}
-                    fallback={["Emitida", "Pendiente", "No aplica", "Anulada"]}
-                  />
+                <select name="estado_boleta" defaultValue="Pendiente" style={inputStyle}>
+                  <Options rows={estadosBoleta} fallback={["Emitida", "Pendiente", "No aplica", "Anulada"]} />
                 </select>
               </label>
 
               <label style={fieldStyle}>
                 Número boleta/factura
-                <input
-                  name="numero_boleta"
-                  placeholder="Opcional"
-                  style={inputStyle}
-                />
+                <input name="numero_boleta" placeholder="Opcional" style={inputStyle} />
               </label>
 
               <label style={fieldStyle}>
                 Responsable
-                <select
-                  name="responsable"
-                  defaultValue="Gerald"
-                  style={inputStyle}
-                >
-                  <Options
-                    rows={responsables}
-                    fallback={["Gerald", "Luis", "Naty", "Otro"]}
-                  />
+                <select name="responsable" defaultValue="Gerald" style={inputStyle}>
+                  <Options rows={responsables} fallback={["Gerald", "Luis", "Naty", "Otro"]} />
                 </select>
               </label>
             </FormGrid>
@@ -434,51 +366,32 @@ export default async function NuevaAtencionPage({
                 name="observacion"
                 placeholder="Ej. Cliente llega directo, reserva por WhatsApp, pendiente de boleta, etc."
                 rows={4}
-                style={{
-                  ...inputStyle,
-                  resize: "vertical",
-                  minHeight: "110px",
-                }}
+                style={{ ...inputStyle, resize: "vertical", minHeight: "110px" }}
               />
             </label>
           </Section>
 
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "flex-end",
-              gap: "12px",
-              flexWrap: "wrap",
-            }}
-          >
-            <a
-              className="ghostButton"
-              href="/"
-              style={{
-                background: "white",
-                color: "var(--green)",
-                border: "1px solid var(--line)",
-                borderRadius: "16px",
-                padding: "15px 18px",
-                fontWeight: 850,
-                textDecoration: "none",
-              }}
-            >
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px", flexWrap: "wrap" }}>
+            <a className="ghostButton" href="/" style={{
+              background: "white",
+              color: "var(--green)",
+              border: "1px solid var(--line)",
+              borderRadius: "16px",
+              padding: "15px 18px",
+              fontWeight: 850,
+              textDecoration: "none",
+            }}>
               Volver al dashboard
             </a>
-
-            <button
-              type="submit"
-              style={{
-                border: 0,
-                borderRadius: "16px",
-                padding: "15px 18px",
-                fontWeight: 850,
-                cursor: "pointer",
-                background: "var(--green)",
-                color: "white",
-              }}
-            >
+            <button type="submit" style={{
+              border: 0,
+              borderRadius: "16px",
+              padding: "15px 18px",
+              fontWeight: 850,
+              cursor: "pointer",
+              background: "var(--green)",
+              color: "white",
+            }}>
               Guardar atención
             </button>
           </div>
