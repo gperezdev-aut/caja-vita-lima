@@ -19,10 +19,9 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const sessionSecret = process.env.CAJA_SESSION_SECRET;
   const token = request.cookies.get(AUTH_COOKIE_NAME)?.value;
 
-  if (!sessionSecret || token !== sessionSecret) {
+  if (!token) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("next", pathname);
     return NextResponse.redirect(loginUrl);
