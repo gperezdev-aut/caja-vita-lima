@@ -9,6 +9,8 @@ type SearchParams = Promise<{
   ok?: string;
   id?: string;
   error?: string;
+  fecha?: string;
+  sede?: string;
 }>;
 
 const fieldStyle = {
@@ -64,6 +66,17 @@ function nowInLima() {
   const m = parts.find((p) => p.type === "minute")?.value ?? "00";
 
   return `${h}:${m}`;
+}
+
+function dateLabel(value: string) {
+  const date = new Date(`${value}T00:00:00`);
+
+  return date.toLocaleDateString("es-PE", {
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  });
 }
 
 function list(config: Row[], name: string) {
@@ -128,6 +141,17 @@ function FormGrid({ children }: { children: React.ReactNode }) {
   );
 }
 
+function safeDate(value: string | undefined, fallback: string) {
+  if (!value) return fallback;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return fallback;
+  return value;
+}
+
+function safeSede(value: string | undefined) {
+  if (!value) return "TODAS";
+  return value;
+}
+
 export default async function RegistrarSalidaPage({
   searchParams,
 }: {
@@ -137,27 +161,37 @@ export default async function RegistrarSalidaPage({
 
   const params = await searchParams;
   const today = todayInLima();
+  const selectedFecha = safeDate(params?.fecha, today);
+  const selectedSede = safeSede(params?.sede);
 
   const config = await supabaseSelect<Row>("config_listas");
-  const salidasHoy = await supabaseSelectWhere<Row>(
+
+  const queryParts = [
+    "select=salida_id,fecha,hora,sede,tipo_gasto,concepto,monto,responsable,observacion,created_at",
+    `fecha=eq.${selectedFecha}`,
+    "order=created_at.desc",
+  ];
+
+  if (selectedSede !== "TODAS") {
+    queryParts.splice(2, 0, `sede=eq.${encodeURIComponent(selectedSede)}`);
+  }
+
+  const salidas = await supabaseSelectWhere<Row>(
     "caja_salidas",
-    [
-      "select=salida_id,fecha,hora,sede,tipo_gasto,concepto,monto,responsable,observacion,created_at",
-      `fecha=eq.${today}`,
-      "order=created_at.desc",
-    ].join("&")
+    queryParts.join("&")
   );
 
   const sedes = list(config.data, "SEDES");
   const responsables = list(config.data, "RESPONSABLES");
   const tiposGasto = list(config.data, "TIPOS_GASTO");
 
-  const totalSalidasHoy = salidasHoy.data.reduce(
+  const totalSalidas = salidas.data.reduce(
     (sum, row) => sum + Number(row.monto ?? 0),
     0
   );
 
-  const errors = [config.error, salidasHoy.error].filter(Boolean);
+  const errors = [config.error, salidas.error].filter(Boolean);
+  const sedeLabel = selectedSede === "TODAS" ? "todas las sedes" : selectedSede;
 
   return (
     <main className="appShell">
@@ -169,14 +203,14 @@ export default async function RegistrarSalidaPage({
             <p className="eyebrow">Operación</p>
             <h1>Registrar salida</h1>
             <p className="subtitle">
-              Registra gastos, compras, pagos operativos o salidas de caja del
-              día. Guardará datos en caja_salidas.
+              Registra gastos, compras, pagos operativos o salidas de caja.
+              La lista inferior muestra salidas de {dateLabel(selectedFecha)} en {sedeLabel}.
             </p>
           </div>
 
           <div className="badge">
-            <span>Salidas hoy</span>
-            <strong>{money(totalSalidasHoy)}</strong>
+            <span>Salidas</span>
+            <strong>{money(totalSalidas)}</strong>
           </div>
         </section>
 
@@ -223,6 +257,70 @@ export default async function RegistrarSalidaPage({
           </div>
         )}
 
+        <section className="panel" style={{ marginBottom: "24px" }}>
+          <div className="panelTitle">
+            <div>
+              <h2>Filtros</h2>
+              <p>Consulta salidas por fecha y sede sin salir del módulo.</p>
+            </div>
+          </div>
+
+          <form method="get" action="/registrar-salida">
+            <FormGrid>
+              <label style={fieldStyle}>
+                Fecha
+                <input
+                  name="fecha"
+                  type="date"
+                  defaultValue={selectedFecha}
+                  required
+                  style={inputStyle}
+                />
+              </label>
+
+              <label style={fieldStyle}>
+                Sede
+                <select name="sede" defaultValue={selectedSede} style={inputStyle}>
+                  <option value="TODAS">Todas las sedes</option>
+                  <Options rows={sedes} fallback={["Miraflores", "San Borja"]} />
+                </select>
+              </label>
+
+              <div style={{ display: "flex", alignItems: "end", gap: "10px", flexWrap: "wrap" }}>
+                <button
+                  type="submit"
+                  style={{
+                    border: 0,
+                    borderRadius: "16px",
+                    padding: "14px 18px",
+                    fontWeight: 850,
+                    cursor: "pointer",
+                    background: "var(--green)",
+                    color: "white",
+                  }}
+                >
+                  Aplicar filtros
+                </button>
+
+                <a
+                  href="/registrar-salida"
+                  style={{
+                    background: "white",
+                    color: "var(--green)",
+                    border: "1px solid var(--line)",
+                    borderRadius: "16px",
+                    padding: "14px 18px",
+                    fontWeight: 850,
+                    textDecoration: "none",
+                  }}
+                >
+                  Ver hoy
+                </a>
+              </div>
+            </FormGrid>
+          </form>
+        </section>
+
         <form
           action={createSalidaAction}
           style={{
@@ -243,7 +341,7 @@ export default async function RegistrarSalidaPage({
                 <input
                   name="fecha"
                   type="date"
-                  defaultValue={today}
+                  defaultValue={selectedFecha}
                   required
                   style={inputStyle}
                 />
@@ -262,7 +360,12 @@ export default async function RegistrarSalidaPage({
 
               <label style={fieldStyle}>
                 Sede
-                <select name="sede" required style={inputStyle}>
+                <select
+                  name="sede"
+                  defaultValue={selectedSede === "TODAS" ? "Miraflores" : selectedSede}
+                  required
+                  style={inputStyle}
+                >
                   <Options rows={sedes} fallback={["Miraflores", "San Borja"]} />
                 </select>
               </label>
@@ -338,7 +441,7 @@ export default async function RegistrarSalidaPage({
               Nota interna
               <textarea
                 name="observacion"
-                placeholder="Ej. Prueba de salida desde Vercel, gasto real, comprobante pendiente, etc."
+                placeholder="Ej. Gasto real, comprobante pendiente, diferencia explicada, etc."
                 rows={4}
                 style={{
                   ...inputStyle,
@@ -358,7 +461,7 @@ export default async function RegistrarSalidaPage({
             }}
           >
             <a
-              href="/"
+              href="/citas-hoy"
               style={{
                 background: "white",
                 color: "var(--green)",
@@ -369,7 +472,7 @@ export default async function RegistrarSalidaPage({
                 textDecoration: "none",
               }}
             >
-              Volver al dashboard
+              Volver a citas
             </a>
 
             <button
@@ -392,14 +495,16 @@ export default async function RegistrarSalidaPage({
         <section className="panel">
           <div className="panelTitle">
             <div>
-              <h2>Salidas registradas hoy</h2>
-              <p>Vista rápida para validar lo ingresado durante el día.</p>
+              <h2>Salidas registradas</h2>
+              <p>
+                Vista rápida para validar lo ingresado en {dateLabel(selectedFecha)} en {sedeLabel}.
+              </p>
             </div>
           </div>
 
-          {salidasHoy.data.length === 0 ? (
+          {salidas.data.length === 0 ? (
             <div className="alert" style={{ marginBottom: 0 }}>
-              No hay salidas registradas para hoy.
+              No hay salidas registradas para la fecha y sede seleccionadas.
             </div>
           ) : (
             <div className="tableWrap">
@@ -417,7 +522,7 @@ export default async function RegistrarSalidaPage({
                   </tr>
                 </thead>
                 <tbody>
-                  {salidasHoy.data.map((row) => (
+                  {salidas.data.map((row) => (
                     <tr key={row.salida_id}>
                       <td>{String(row.hora ?? "-").slice(0, 5)}</td>
                       <td>{row.sede}</td>
