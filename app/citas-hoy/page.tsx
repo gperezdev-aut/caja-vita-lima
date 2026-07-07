@@ -4,6 +4,29 @@ import { supabaseSelectWhere } from "@/lib/supabaseServer";
 
 type Row = Record<string, any>;
 
+type SearchParams = Promise<{
+  fecha?: string;
+  sede?: string;
+}>;
+
+const fieldStyle = {
+  display: "grid",
+  gap: "8px",
+  color: "var(--muted)",
+  fontSize: "13px",
+  fontWeight: 800,
+};
+
+const inputStyle = {
+  width: "100%",
+  border: "1px solid var(--line)",
+  borderRadius: "15px",
+  background: "#fffaf4",
+  color: "var(--text)",
+  padding: "13px 14px",
+  outline: "none",
+};
+
 function money(value: any) {
   const numberValue = Number(value ?? 0);
 
@@ -26,6 +49,19 @@ function todayInLima() {
   const d = parts.find((p) => p.type === "day")?.value;
 
   return `${y}-${m}-${d}`;
+}
+
+function isValidDateInput(value: string | undefined) {
+  if (!value) return false;
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function normalizeSede(value: string | undefined) {
+  if (value === "Miraflores" || value === "San Borja" || value === "TODAS") {
+    return value;
+  }
+
+  return "TODAS";
 }
 
 function dateLabel(value: string) {
@@ -87,27 +123,46 @@ function Badge({
   );
 }
 
-export default async function CitasHoyPage() {
+export default async function CitasHoyPage({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
   const session = await requireModuleAccess("citas-hoy");
+  const params = await searchParams;
 
   const today = todayInLima();
+  const selectedFecha = isValidDateInput(params?.fecha) ? String(params.fecha) : today;
+  const selectedSede = normalizeSede(params?.sede);
+  const sedeLabel = selectedSede === "TODAS" ? "todas las sedes" : selectedSede;
+
+  const movimientosQuery = [
+    "select=movimiento_id,fecha,hora,sede,cliente,whatsapp,servicio,total_cobrar,total_pagado,pendiente,estado,estado_boleta,tipo_comprobante,estado_comprobante_manual,numero_comprobante_final,source_type,created_at",
+    `fecha=eq.${selectedFecha}`,
+  ];
+
+  const detallesQuery = [
+    "select=movimiento_id,fecha,sede,persona_n,terapista,servicio,duracion,monto_asignado",
+    `fecha=eq.${selectedFecha}`,
+  ];
+
+  if (selectedSede !== "TODAS") {
+    const encodedSede = encodeURIComponent(selectedSede);
+    movimientosQuery.push(`sede=eq.${encodedSede}`);
+    detallesQuery.push(`sede=eq.${encodedSede}`);
+  }
+
+  movimientosQuery.push("order=hora.asc");
+  detallesQuery.push("order=persona_n.asc");
 
   const movimientos = await supabaseSelectWhere<Row>(
     "caja_movimientos",
-    [
-      "select=movimiento_id,fecha,hora,sede,cliente,whatsapp,servicio,total_cobrar,total_pagado,pendiente,estado,estado_boleta,tipo_comprobante,estado_comprobante_manual,numero_comprobante_final,source_type,created_at",
-      `fecha=eq.${today}`,
-      "order=hora.asc",
-    ].join("&")
+    movimientosQuery.join("&")
   );
 
   const detalles = await supabaseSelectWhere<Row>(
     "caja_atencion_detalle",
-    [
-      "select=movimiento_id,persona_n,terapista,servicio,duracion,monto_asignado",
-      `fecha=eq.${today}`,
-      "order=persona_n.asc",
-    ].join("&")
+    detallesQuery.join("&")
   );
 
   const errors = [movimientos.error, detalles.error].filter(Boolean);
@@ -146,7 +201,7 @@ export default async function CitasHoyPage() {
             <p className="eyebrow">Operación diaria</p>
             <h1>Citas de hoy</h1>
             <p className="subtitle">
-              Atenciones y reservas registradas para {dateLabel(today)}.
+              Atenciones y reservas registradas para {dateLabel(selectedFecha)} en {sedeLabel}.
             </p>
           </div>
 
@@ -154,6 +209,78 @@ export default async function CitasHoyPage() {
             <span>Registros</span>
             <strong>{movimientos.data.length}</strong>
           </div>
+        </section>
+
+        <section
+          className="panel"
+          style={{
+            padding: "20px",
+            marginBottom: "22px",
+          }}
+        >
+          <div className="panelTitle">
+            <div>
+              <h2>Filtros</h2>
+              <p>Consulta citas por fecha y sede sin salir del módulo.</p>
+            </div>
+          </div>
+
+          <form
+            method="GET"
+            action="/citas-hoy"
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
+              gap: "14px",
+              alignItems: "end",
+            }}
+          >
+            <label style={fieldStyle}>
+              Fecha
+              <input name="fecha" type="date" defaultValue={selectedFecha} style={inputStyle} />
+            </label>
+
+            <label style={fieldStyle}>
+              Sede
+              <select name="sede" defaultValue={selectedSede} style={inputStyle}>
+                <option value="TODAS">Todas las sedes</option>
+                <option value="Miraflores">Miraflores</option>
+                <option value="San Borja">San Borja</option>
+              </select>
+            </label>
+
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+              <button
+                type="submit"
+                style={{
+                  border: 0,
+                  borderRadius: "16px",
+                  padding: "14px 18px",
+                  fontWeight: 850,
+                  cursor: "pointer",
+                  background: "var(--green)",
+                  color: "white",
+                }}
+              >
+                Aplicar filtros
+              </button>
+
+              <a
+                href="/citas-hoy"
+                style={{
+                  background: "white",
+                  color: "var(--green)",
+                  border: "1px solid var(--line)",
+                  borderRadius: "16px",
+                  padding: "14px 18px",
+                  fontWeight: 850,
+                  textDecoration: "none",
+                }}
+              >
+                Ver hoy
+              </a>
+            </div>
+          </form>
         </section>
 
         {errors.length > 0 && (
@@ -237,7 +364,7 @@ export default async function CitasHoyPage() {
 
           {movimientos.data.length === 0 ? (
             <div className="alert" style={{ marginBottom: 0 }}>
-              No hay citas o atenciones registradas para hoy.
+              No hay citas o atenciones registradas para la fecha y sede seleccionadas.
             </div>
           ) : (
             <div className="tableWrap">
