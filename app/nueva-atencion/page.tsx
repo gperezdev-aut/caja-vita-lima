@@ -1,4 +1,5 @@
-import { requireAuth } from "@/lib/auth";
+import { requireModuleAccess } from "@/lib/auth";
+import { CajaSidebar } from "@/components/CajaSidebar";
 import { supabaseSelect } from "@/lib/supabaseServer";
 import { createAtencionAction } from "./actions";
 
@@ -110,7 +111,7 @@ export default async function NuevaAtencionPage({
 }: {
   searchParams: SearchParams;
 }) {
-  await requireAuth();
+  const session = await requireModuleAccess("nueva-atencion");
 
   const params = await searchParams;
   const config = await supabaseSelect<Row>("config_listas");

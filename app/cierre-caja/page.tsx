@@ -1,4 +1,5 @@
-import { requireAuth } from "@/lib/auth";
+import { requireModuleAccess } from "@/lib/auth";
+import { CajaSidebar } from "@/components/CajaSidebar";
 import { supabaseSelectWhere } from "@/lib/supabaseServer";
 import { createCierreCajaAction } from "./actions";
 
@@ -54,35 +55,6 @@ function todayInLima() {
   const d = parts.find((p) => p.type === "day")?.value;
 
   return `${y}-${m}-${d}`;
-}
-
-function Sidebar() {
-  return (
-    <aside className="sidebar">
-      <div>
-        <p className="sidebarEyebrow">Vita Lima</p>
-        <h2>Caja</h2>
-      </div>
-
-      <nav className="nav">
-        <a href="/">Dashboard</a>
-        <a href="/citas-hoy">Citas de hoy</a>
-        <a href="/nueva-atencion">Nueva atención</a>
-        <a href="/registrar-salida">Registrar salida</a>
-        <a href="/comprobantes">Comprobantes</a>
-        <a href="/cierre-caja">Cierre de caja</a>
-      </nav>
-
-      <div className="nextModules">
-        <span>Módulos</span>
-        <p>Citas de hoy</p>
-        <p>Nueva atención</p>
-        <p>Registrar salida</p>
-        <p>Comprobantes</p>
-        <p>Cierre de caja</p>
-      </div>
-    </aside>
-  );
 }
 
 function Section({
@@ -143,7 +115,7 @@ export default async function CierreCajaPage({
 }: {
   searchParams: SearchParams;
 }) {
-  await requireAuth();
+  const session = await requireModuleAccess("cierre-caja");
 
   const params = await searchParams;
   const today = todayInLima();
@@ -207,7 +179,7 @@ export default async function CierreCajaPage({
 
   return (
     <main className="appShell">
-      <Sidebar />
+      <CajaSidebar session={session} />
 
       <section className="page">
         <section className="hero" style={{ minHeight: "150px" }}>

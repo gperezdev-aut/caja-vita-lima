@@ -1,4 +1,5 @@
-import { requireAuth } from "@/lib/auth";
+import { requireModuleAccess } from "@/lib/auth";
+import { CajaSidebar } from "@/components/CajaSidebar";
 import { supabaseSelect, supabaseSelectWhere } from "@/lib/supabaseServer";
 import { createSalidaAction } from "./actions";
 
@@ -127,41 +128,12 @@ function FormGrid({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Sidebar() {
-  return (
-    <aside className="sidebar">
-      <div>
-        <p className="sidebarEyebrow">Vita Lima</p>
-        <h2>Caja</h2>
-      </div>
-
-      <nav className="nav">
-        <a href="/">Dashboard</a>
-        <a href="/citas-hoy">Citas de hoy</a>
-        <a href="/nueva-atencion">Nueva atención</a>
-        <a href="/registrar-salida">Registrar salida</a>
-        <a href="/comprobantes">Comprobantes</a>
-        <a href="/cierre-caja">Cierre de caja</a>
-        <a href="/#alertas">Alertas</a>
-      </nav>
-
-      <div className="nextModules">
-        <span>Módulos</span>
-        <p>Citas de hoy</p>
-        <p>Nueva atención</p>
-        <p>Registrar salida</p>
-        <p>Cierre de caja</p>
-      </div>
-    </aside>
-  );
-}
-
 export default async function RegistrarSalidaPage({
   searchParams,
 }: {
   searchParams: SearchParams;
 }) {
-  await requireAuth();
+  const session = await requireModuleAccess("registrar-salida");
 
   const params = await searchParams;
   const today = todayInLima();
@@ -189,7 +161,7 @@ export default async function RegistrarSalidaPage({
 
   return (
     <main className="appShell">
-      <Sidebar />
+      <CajaSidebar session={session} />
 
       <section className="page">
         <section className="hero" style={{ minHeight: "150px" }}>

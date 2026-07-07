@@ -38,27 +38,20 @@ async function supabaseRequest<T = Record<string, unknown>>(
       cache: "no-store",
     });
 
-    const text = await response.text();
-
     if (!response.ok) {
+      const detail = await response.text();
       return {
         data: [],
-        error: `Supabase respondió ${response.status}: ${
-          text || response.statusText
-        }`,
+        error: `Supabase respondió ${response.status}: ${detail}`,
       };
     }
 
-    if (!text) {
+    if (response.status === 204) {
       return { data: [], error: null };
     }
 
-    const parsed = JSON.parse(text) as T[] | T;
-
-    return {
-      data: Array.isArray(parsed) ? parsed : [parsed],
-      error: null,
-    };
+    const data = (await response.json()) as T[];
+    return { data, error: null };
   } catch (error) {
     return {
       data: [],

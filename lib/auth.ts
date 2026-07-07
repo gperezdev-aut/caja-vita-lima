@@ -8,11 +8,63 @@ const AUTH_COOKIE_NAME = "caja_auth";
 
 export type CajaRole = "ADMIN_GERALD" | "SOCIO" | "VITA_OPERACION";
 
+export type CajaModule =
+  | "dashboard"
+  | "citas-hoy"
+  | "nueva-atencion"
+  | "registrar-salida"
+  | "comprobantes"
+  | "cierre-caja"
+  | "alertas";
+
 export type CajaSession = {
   usuario: string;
   nombre: string;
   rol: CajaRole;
   iat: number;
+};
+
+export type CajaNavItem = {
+  key: CajaModule;
+  label: string;
+  href: string;
+};
+
+const NAV_ITEMS: CajaNavItem[] = [
+  { key: "dashboard", label: "Dashboard", href: "/" },
+  { key: "citas-hoy", label: "Citas de hoy", href: "/citas-hoy" },
+  { key: "nueva-atencion", label: "Nueva atención", href: "/nueva-atencion" },
+  { key: "registrar-salida", label: "Registrar salida", href: "/registrar-salida" },
+  { key: "comprobantes", label: "Comprobantes", href: "/comprobantes" },
+  { key: "cierre-caja", label: "Cierre de caja", href: "/cierre-caja" },
+  { key: "alertas", label: "Alertas", href: "/#alertas" },
+];
+
+const PERMISSIONS: Record<CajaRole, CajaModule[]> = {
+  ADMIN_GERALD: [
+    "dashboard",
+    "citas-hoy",
+    "nueva-atencion",
+    "registrar-salida",
+    "comprobantes",
+    "cierre-caja",
+    "alertas",
+  ],
+  SOCIO: [
+    "dashboard",
+    "citas-hoy",
+    "nueva-atencion",
+    "registrar-salida",
+    "comprobantes",
+    "cierre-caja",
+    "alertas",
+  ],
+  VITA_OPERACION: [
+    "citas-hoy",
+    "nueva-atencion",
+    "registrar-salida",
+    "cierre-caja",
+  ],
 };
 
 function getSessionSecret() {
@@ -40,6 +92,14 @@ function safeCompare(a: string, b: string) {
   }
 
   return timingSafeEqual(aBuffer, bBuffer);
+}
+
+function isCajaRole(value: unknown): value is CajaRole {
+  return (
+    value === "ADMIN_GERALD" ||
+    value === "SOCIO" ||
+    value === "VITA_OPERACION"
+  );
 }
 
 export function createSessionToken(session: CajaSession) {
@@ -82,7 +142,7 @@ function parseSessionToken(token: string, sessionSecret: string): CajaSession | 
   try {
     const parsed = JSON.parse(base64UrlDecode(payload)) as CajaSession;
 
-    if (!parsed.usuario || !parsed.nombre || !parsed.rol) {
+    if (!parsed.usuario || !parsed.nombre || !isCajaRole(parsed.rol)) {
       return null;
     }
 
@@ -125,40 +185,39 @@ export async function requireAuth() {
   return session;
 }
 
+export async function requireModuleAccess(moduleName: CajaModule) {
+  const session = await requireAuth();
+
+  if (!roleCanAccess(session.rol, moduleName)) {
+    redirect(getDefaultPathForRole(session.rol));
+  }
+
+  return session;
+}
+
 export async function isLoggedIn() {
   const session = await getSession();
   return Boolean(session);
 }
 
-export function roleCanAccess(rol: CajaRole, moduleName: string) {
-  const permissions: Record<CajaRole, string[]> = {
-    ADMIN_GERALD: [
-      "dashboard",
-      "citas-hoy",
-      "nueva-atencion",
-      "registrar-salida",
-      "comprobantes",
-      "cierre-caja",
-      "alertas",
-    ],
-    SOCIO: [
-      "dashboard",
-      "citas-hoy",
-      "nueva-atencion",
-      "registrar-salida",
-      "comprobantes",
-      "cierre-caja",
-      "alertas",
-    ],
-    VITA_OPERACION: [
-      "citas-hoy",
-      "nueva-atencion",
-      "registrar-salida",
-      "cierre-caja",
-    ],
-  };
+export function roleCanAccess(rol: CajaRole, moduleName: CajaModule) {
+  return PERMISSIONS[rol]?.includes(moduleName) ?? false;
+}
 
-  return permissions[rol]?.includes(moduleName) ?? false;
+export function getVisibleNavItems(rol: CajaRole) {
+  return NAV_ITEMS.filter((item) => roleCanAccess(rol, item.key));
+}
+
+export function getDefaultPathForRole(rol: CajaRole) {
+  if (roleCanAccess(rol, "dashboard")) {
+    return "/";
+  }
+
+  if (roleCanAccess(rol, "citas-hoy")) {
+    return "/citas-hoy";
+  }
+
+  return "/login";
 }
 
 export const authCookieName = AUTH_COOKIE_NAME;

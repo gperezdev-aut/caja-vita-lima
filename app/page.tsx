@@ -1,5 +1,5 @@
-import { logoutAction } from "@/app/actions";
-import { requireAuth } from "@/lib/auth";
+import { requireModuleAccess } from "@/lib/auth";
+import { CajaSidebar } from "@/components/CajaSidebar";
 import { supabaseSelect } from "@/lib/supabaseServer";
 
 type Row = Record<string, any>;
@@ -46,43 +46,8 @@ function AlertBox({ children }: { children: React.ReactNode }) {
   return <div className="alert">{children}</div>;
 }
 
-function Sidebar() {
-  return (
-    <aside className="sidebar">
-      <div>
-        <p className="sidebarEyebrow">Vita Lima</p>
-        <h2>Caja</h2>
-      </div>
-
-      <nav className="nav">
-        <a href="/">Dashboard</a>
-        <a href="/citas-hoy">Citas de hoy</a>
-        <a href="/nueva-atencion">Nueva atención</a>
-        <a href="/registrar-salida">Registrar salida</a>
-        <a href="/comprobantes">Comprobantes</a>
-        <a href="/cierre-caja">Cierre de caja</a>
-        <a href="/#alertas">Alertas</a>
-      </nav>
-
-      <div className="nextModules">
-        <span>Módulos</span>
-        <p>Citas de hoy</p>
-        <p>Nueva atención</p>
-        <p>Registrar salida</p>
-        <p>Cierre de caja</p>
-      </div>
-
-      <form action={logoutAction}>
-        <button className="logoutButton" type="submit">
-          Cerrar sesión
-        </button>
-      </form>
-    </aside>
-  );
-}
-
 export default async function HomePage() {
-  await requireAuth();
+  const session = await requireModuleAccess("dashboard");
 
   const resumen = await supabaseSelect<Row>(
     "vista_reporte_socio_resumen_con_alertas_v3"
@@ -110,7 +75,7 @@ export default async function HomePage() {
 
   return (
     <main className="appShell">
-      <Sidebar />
+      <CajaSidebar session={session} />
 
       <section className="page">
         <section className="hero" id="dashboard">
