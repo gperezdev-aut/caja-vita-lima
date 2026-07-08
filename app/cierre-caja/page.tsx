@@ -1,6 +1,6 @@
 import { requireModuleAccess } from "@/lib/auth";
 import { CajaSidebar } from "@/components/CajaSidebar";
-import { supabaseSelectWhere } from "@/lib/supabaseServer";
+import { supabaseSelect, supabaseSelectWhere } from "@/lib/supabaseServer";
 import { createCierreCajaAction } from "./actions";
 
 type Row = Record<string, any>;
@@ -9,6 +9,8 @@ type SearchParams = Promise<{
   ok?: string;
   id?: string;
   error?: string;
+  fecha?: string;
+  sede?: string;
 }>;
 
 const fieldStyle = {
@@ -55,6 +57,43 @@ function todayInLima() {
   const d = parts.find((p) => p.type === "day")?.value;
 
   return `${y}-${m}-${d}`;
+}
+
+function dateLabel(value: string) {
+  const date = new Date(`${value}T00:00:00`);
+
+  return date.toLocaleDateString("es-PE", {
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  });
+}
+
+function list(config: Row[], name: string) {
+  return config
+    .filter((row) => row.lista === name && row.activo !== false)
+    .sort((a, b) => Number(a.orden ?? 0) - Number(b.orden ?? 0));
+}
+
+function Options({
+  rows,
+  fallback,
+}: {
+  rows: Row[];
+  fallback: string[];
+}) {
+  const values = rows.length ? rows.map((row) => String(row.valor)) : fallback;
+
+  return (
+    <>
+      {values.map((value) => (
+        <option key={value} value={value}>
+          {value}
+        </option>
+      ))}
+    </>
+  );
 }
 
 function Section({
@@ -110,6 +149,19 @@ function Card({
   );
 }
 
+function safeDate(value: string | undefined, fallback: string) {
+  if (!value) return fallback;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return fallback;
+  return value;
+}
+
+function safeCierreSede(value: string | undefined) {
+  if (!value) return "Miraflores";
+
+  const allowed = ["Miraflores", "San Borja"];
+  return allowed.includes(value) ? value : "Miraflores";
+}
+
 export default async function CierreCajaPage({
   searchParams,
 }: {
@@ -119,14 +171,17 @@ export default async function CierreCajaPage({
 
   const params = await searchParams;
   const today = todayInLima();
-  const defaultSede = "Miraflores";
+  const selectedFecha = safeDate(params?.fecha, today);
+  const selectedSede = safeCierreSede(params?.sede);
+
+  const config = await supabaseSelect<Row>("config_listas");
 
   const movimientos = await supabaseSelectWhere<Row>(
     "caja_movimientos",
     [
       "select=movimiento_id,fecha,sede,n_pax,total_pagado,estado_comprobante_manual,tipo_comprobante,estado_boleta",
-      `fecha=eq.${today}`,
-      `sede=eq.${encodeURIComponent(defaultSede)}`,
+      `fecha=eq.${selectedFecha}`,
+      `sede=eq.${encodeURIComponent(selectedSede)}`,
     ].join("&")
   );
 
@@ -134,21 +189,25 @@ export default async function CierreCajaPage({
     "caja_salidas",
     [
       "select=salida_id,fecha,sede,monto",
-      `fecha=eq.${today}`,
-      `sede=eq.${encodeURIComponent(defaultSede)}`,
+      `fecha=eq.${selectedFecha}`,
+      `sede=eq.${encodeURIComponent(selectedSede)}`,
     ].join("&")
   );
 
   const cierres = await supabaseSelectWhere<Row>(
     "caja_cierres",
     [
-      "select=cierre_id,fecha,sede,total_ingresos,total_salidas,caja_esperada,diferencia,responsable,created_at",
-      `fecha=eq.${today}`,
+      "select=cierre_id,fecha,sede,total_ingresos,total_salidas,caja_esperada,diferencia,responsable,estado,observacion,created_at",
+      `fecha=eq.${selectedFecha}`,
+      `sede=eq.${encodeURIComponent(selectedSede)}`,
       "order=created_at.desc",
     ].join("&")
   );
 
-  const errors = [movimientos.error, salidas.error, cierres.error].filter(Boolean);
+  const sedes = list(config.data, "SEDES");
+  const responsables = list(config.data, "RESPONSABLES");
+
+  const errors = [config.error, movimientos.error, salidas.error, cierres.error].filter(Boolean);
 
   const totalIngresos = movimientos.data.reduce(
     (sum, row) => sum + Number(row.total_pagado ?? 0),
@@ -188,12 +247,12 @@ export default async function CierreCajaPage({
             <h1>Cierre de caja</h1>
             <p className="subtitle">
               Registra el cierre diario por sede. Los valores sugeridos se
-              calculan con movimientos y salidas de hoy en Miraflores.
+              calculan con movimientos y salidas de {dateLabel(selectedFecha)} en {selectedSede}.
             </p>
           </div>
 
           <div className="badge">
-            <span>Cierres hoy</span>
+            <span>Cierres</span>
             <strong>{cierres.data.length}</strong>
           </div>
         </section>
@@ -241,10 +300,73 @@ export default async function CierreCajaPage({
           </div>
         )}
 
+        <section className="panel" style={{ marginBottom: "24px" }}>
+          <div className="panelTitle">
+            <div>
+              <h2>Filtros</h2>
+              <p>Consulta y prepara cierres por fecha y sede.</p>
+            </div>
+          </div>
+
+          <form method="get" action="/cierre-caja">
+            <FormGrid>
+              <label style={fieldStyle}>
+                Fecha
+                <input
+                  name="fecha"
+                  type="date"
+                  defaultValue={selectedFecha}
+                  required
+                  style={inputStyle}
+                />
+              </label>
+
+              <label style={fieldStyle}>
+                Sede
+                <select name="sede" defaultValue={selectedSede} required style={inputStyle}>
+                  <Options rows={sedes} fallback={["Miraflores", "San Borja"]} />
+                </select>
+              </label>
+
+              <div style={{ display: "flex", alignItems: "end", gap: "10px", flexWrap: "wrap" }}>
+                <button
+                  type="submit"
+                  style={{
+                    border: 0,
+                    borderRadius: "16px",
+                    padding: "14px 18px",
+                    fontWeight: 850,
+                    cursor: "pointer",
+                    background: "var(--green)",
+                    color: "white",
+                  }}
+                >
+                  Aplicar filtros
+                </button>
+
+                <a
+                  href="/cierre-caja"
+                  style={{
+                    background: "white",
+                    color: "var(--green)",
+                    border: "1px solid var(--line)",
+                    borderRadius: "16px",
+                    padding: "14px 18px",
+                    fontWeight: 850,
+                    textDecoration: "none",
+                  }}
+                >
+                  Ver hoy
+                </a>
+              </div>
+            </FormGrid>
+          </form>
+        </section>
+
         <section className="grid secondary">
-          <Card label="Ingresos hoy" value={money(totalIngresos)} tone="good" />
-          <Card label="Salidas hoy" value={money(totalSalidas)} />
-          <Card label="Pax hoy" value={numberFmt(paxTotal)} />
+          <Card label="Ingresos" value={money(totalIngresos)} tone="good" />
+          <Card label="Salidas" value={money(totalSalidas)} />
+          <Card label="Pax" value={numberFmt(paxTotal)} />
           <Card label="Boletas pendientes" value={numberFmt(boletasPendientes)} tone="warn" />
         </section>
 
@@ -265,24 +387,20 @@ export default async function CierreCajaPage({
             <FormGrid>
               <label style={fieldStyle}>
                 Fecha
-                <input name="fecha" type="date" defaultValue={today} required style={inputStyle} />
+                <input name="fecha" type="date" defaultValue={selectedFecha} required style={inputStyle} />
               </label>
 
               <label style={fieldStyle}>
                 Sede
-                <select name="sede" defaultValue={defaultSede} required style={inputStyle}>
-                  <option value="Miraflores">Miraflores</option>
-                  <option value="San Borja">San Borja</option>
+                <select name="sede" defaultValue={selectedSede} required style={inputStyle}>
+                  <Options rows={sedes} fallback={["Miraflores", "San Borja"]} />
                 </select>
               </label>
 
               <label style={fieldStyle}>
                 Responsable
                 <select name="responsable" defaultValue="Gerald" style={inputStyle}>
-                  <option value="Gerald">Gerald</option>
-                  <option value="Luis">Luis</option>
-                  <option value="Naty">Naty</option>
-                  <option value="Otro">Otro</option>
+                  <Options rows={responsables} fallback={["Gerald", "Luis", "Naty", "Otro"]} />
                 </select>
               </label>
 
@@ -384,14 +502,14 @@ export default async function CierreCajaPage({
         <section className="panel">
           <div className="panelTitle">
             <div>
-              <h2>Cierres registrados hoy</h2>
-              <p>Últimos cierres guardados para control interno.</p>
+              <h2>Cierres registrados</h2>
+              <p>Últimos cierres guardados para {dateLabel(selectedFecha)} en {selectedSede}.</p>
             </div>
           </div>
 
           {cierres.data.length === 0 ? (
             <div className="alert" style={{ marginBottom: 0 }}>
-              Todavía no hay cierres registrados hoy.
+              Todavía no hay cierres registrados para la fecha y sede seleccionadas.
             </div>
           ) : (
             <div className="tableWrap">
@@ -405,6 +523,7 @@ export default async function CierreCajaPage({
                     <th>Caja esperada</th>
                     <th>Diferencia</th>
                     <th>Responsable</th>
+                    <th>Estado</th>
                     <th>Cierre</th>
                   </tr>
                 </thead>
@@ -418,6 +537,7 @@ export default async function CierreCajaPage({
                       <td>{money(row.caja_esperada)}</td>
                       <td className="strong">{money(row.diferencia)}</td>
                       <td>{row.responsable || "-"}</td>
+                      <td>{row.estado || "-"}</td>
                       <td>{row.cierre_id}</td>
                     </tr>
                   ))}

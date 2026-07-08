@@ -23,6 +23,16 @@ function id(prefix: string) {
   return `${prefix}-APP-${stamp}-${rand}`;
 }
 
+function moduleUrl(fecha: string, sede: string) {
+  const params = new URLSearchParams();
+
+  if (fecha) params.set("fecha", fecha);
+  if (sede) params.set("sede", sede);
+
+  const query = params.toString();
+  return query ? `/cierre-caja?${query}` : "/cierre-caja";
+}
+
 export async function createCierreCajaAction(formData: FormData) {
   const fecha = clean(formData.get("fecha"));
   const sede = clean(formData.get("sede"));
@@ -36,8 +46,11 @@ export async function createCierreCajaAction(formData: FormData) {
   const responsable = clean(formData.get("responsable")) || "Gerald";
   const observacion = clean(formData.get("observacion"));
 
+  const baseUrl = moduleUrl(fecha, sede);
+  const separator = baseUrl.includes("?") ? "&" : "?";
+
   if (!fecha || !sede) {
-    redirect("/cierre-caja?error=Completa fecha y sede.");
+    redirect(`${baseUrl}${separator}error=${encodeURIComponent("Completa fecha y sede.")}`);
   }
 
   if (
@@ -47,7 +60,7 @@ export async function createCierreCajaAction(formData: FormData) {
     totalIngresos < 0 ||
     totalSalidas < 0
   ) {
-    redirect("/cierre-caja?error=Los montos no pueden ser negativos.");
+    redirect(`${baseUrl}${separator}error=${encodeURIComponent("Los montos no pueden ser negativos.")}`);
   }
 
   const cajaEsperada = cajaInicial + totalIngresos - totalSalidas;
@@ -73,8 +86,8 @@ export async function createCierreCajaAction(formData: FormData) {
   });
 
   if (cierre.error) {
-    redirect(`/cierre-caja?error=${encodeURIComponent(cierre.error)}`);
+    redirect(`${baseUrl}${separator}error=${encodeURIComponent(cierre.error)}`);
   }
 
-  redirect(`/cierre-caja?ok=1&id=${encodeURIComponent(cierreId)}`);
+  redirect(`${baseUrl}${separator}ok=1&id=${encodeURIComponent(cierreId)}`);
 }
