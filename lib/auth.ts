@@ -10,6 +10,7 @@ export type CajaRole = "ADMIN_GERALD" | "SOCIO" | "VITA_OPERACION";
 
 export type CajaModule =
   | "dashboard"
+  | "clientes"
   | "citas-hoy"
   | "nueva-atencion"
   | "registrar-salida"
@@ -32,6 +33,7 @@ export type CajaNavItem = {
 
 const NAV_ITEMS: CajaNavItem[] = [
   { key: "dashboard", label: "Dashboard", href: "/" },
+  { key: "clientes", label: "Clientes", href: "/clientes" },
   { key: "citas-hoy", label: "Citas de hoy", href: "/citas-hoy" },
   { key: "nueva-atencion", label: "Nueva atención", href: "/nueva-atencion" },
   { key: "registrar-salida", label: "Registrar salida", href: "/registrar-salida" },
@@ -43,6 +45,7 @@ const NAV_ITEMS: CajaNavItem[] = [
 const PERMISSIONS: Record<CajaRole, CajaModule[]> = {
   ADMIN_GERALD: [
     "dashboard",
+    "clientes",
     "citas-hoy",
     "nueva-atencion",
     "registrar-salida",
@@ -52,6 +55,7 @@ const PERMISSIONS: Record<CajaRole, CajaModule[]> = {
   ],
   SOCIO: [
     "dashboard",
+    "clientes",
     "citas-hoy",
     "nueva-atencion",
     "registrar-salida",
