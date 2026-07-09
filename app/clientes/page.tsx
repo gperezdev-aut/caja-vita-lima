@@ -1,4 +1,3 @@
-import type { CSSProperties, ReactNode } from "react";
 import { requireModuleAccess } from "@/lib/auth";
 import { CajaSidebar } from "@/components/CajaSidebar";
 import { supabaseSelectWhere } from "@/lib/supabaseServer";
@@ -138,10 +137,10 @@ function Badge({
   children,
   tone = "default",
 }: {
-  children: ReactNode;
+  children: React.ReactNode;
   tone?: "default" | "good" | "warn" | "danger";
 }) {
-  const styles: Record<string, CSSProperties> = {
+  const styles: Record<string, React.CSSProperties> = {
     default: {
       background: "white",
       color: "var(--text)",
@@ -182,7 +181,7 @@ function Badge({
   );
 }
 
-const fieldStyle: CSSProperties = {
+const fieldStyle: React.CSSProperties = {
   display: "grid",
   gap: "8px",
   color: "var(--muted)",
@@ -191,7 +190,7 @@ const fieldStyle: CSSProperties = {
   minWidth: 0,
 };
 
-const inputStyle: CSSProperties = {
+const inputStyle: React.CSSProperties = {
   width: "100%",
   minWidth: 0,
   border: "1px solid var(--line)",
@@ -203,7 +202,7 @@ const inputStyle: CSSProperties = {
   fontWeight: 750,
 };
 
-const buttonStyle: CSSProperties = {
+const buttonStyle: React.CSSProperties = {
   border: "0",
   borderRadius: "15px",
   padding: "13px 16px",
@@ -218,7 +217,7 @@ const buttonStyle: CSSProperties = {
   minHeight: "48px",
 };
 
-const ghostButtonStyle: CSSProperties = {
+const ghostButtonStyle: React.CSSProperties = {
   border: "1px solid var(--line)",
   borderRadius: "15px",
   padding: "13px 16px",
@@ -259,7 +258,6 @@ function groupServices(rows: Row[]) {
     const catalogoTipo = safe(row.catalogo_tipo ?? row.tipo_linea_crm);
     const menuGroup = safe(row.catalogo_menu_group);
     const key = `${catalogoNombre}|${catalogoTipo}|${menuGroup}`;
-
     const current = groups.get(key) ?? {
       catalogo_nombre: catalogoNombre,
       catalogo_tipo: catalogoTipo,
@@ -397,7 +395,7 @@ export default async function ClientesPage({ searchParams }: { searchParams: Sea
     <main className="appShell" style={{ overflowX: "hidden" }}>
       <CajaSidebar session={session} />
 
-      <section className="page clientesPage">
+      <section className="page">
         <section className="hero" style={{ minHeight: "150px" }}>
           <div>
             <p className="eyebrow">CRM Vita Lima</p>
@@ -702,20 +700,6 @@ export default async function ClientesPage({ searchParams }: { searchParams: Sea
           </div>
         </section>
       </section>
-
-      <style>
-        {`
-          .clientesPage {
-            transform: translateX(-155px);
-          }
-
-          @media (max-width: 1280px) {
-            .clientesPage {
-              transform: none;
-            }
-          }
-        `}
-      </style>
     </main>
   );
 }
