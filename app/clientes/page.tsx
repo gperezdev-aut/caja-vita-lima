@@ -187,10 +187,12 @@ const fieldStyle: React.CSSProperties = {
   color: "var(--muted)",
   fontSize: "13px",
   fontWeight: 800,
+  minWidth: 0,
 };
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
+  minWidth: 0,
   border: "1px solid var(--line)",
   borderRadius: "15px",
   background: "#fffaf4",
@@ -390,7 +392,7 @@ export default async function ClientesPage({ searchParams }: { searchParams: Sea
   const serviciosTop = serviciosAgrupados.slice(0, 10);
 
   return (
-    <main className="appShell">
+    <main className="appShell" style={{ overflowX: "hidden" }}>
       <CajaSidebar session={session} />
 
       <section className="page">
@@ -437,7 +439,7 @@ export default async function ClientesPage({ searchParams }: { searchParams: Sea
               alignItems: "end",
             }}
           >
-            <label style={{ ...fieldStyle, minWidth: "240px" }}>
+            <label style={fieldStyle}>
               Buscar
               <input
                 name="q"
