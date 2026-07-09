@@ -393,26 +393,7 @@ export default async function ClientesPage({ searchParams }: { searchParams: Sea
     <main className="appShell">
       <CajaSidebar session={session} />
 
-      <style>{`
-        .clientesPage {
-          margin-left: 0 !important;
-          margin-right: auto !important;
-          padding-left: 28px !important;
-          padding-right: 24px !important;
-          width: min(1180px, calc(100% - 32px)) !important;
-        }
-
-        @media (max-width: 1060px) {
-          .clientesPage {
-            margin-left: auto !important;
-            margin-right: auto !important;
-            padding-left: 16px !important;
-            padding-right: 16px !important;
-          }
-        }
-      `}</style>
-
-      <section className="page clientesPage">
+      <section className="page">
         <section className="hero" style={{ minHeight: "150px" }}>
           <div>
             <p className="eyebrow">CRM Vita Lima</p>
