@@ -3,11 +3,17 @@ import { notFound } from "next/navigation";
 import { requireModuleAccess } from "@/lib/auth";
 import { CajaSidebar } from "@/components/CajaSidebar";
 import { supabaseSelectWhere } from "@/lib/supabaseServer";
+import { updateClienteCrmAction } from "./actions";
 
 type Row = Record<string, any>;
 
 type PageParams = Promise<{
   cliente_id: string;
+}>;
+
+type SearchParams = Promise<{
+  updated?: string;
+  error?: string;
 }>;
 
 function money(value: any) {
@@ -28,6 +34,11 @@ function safe(value: any) {
   return text || "-";
 }
 
+function textValue(value: any) {
+  const text = String(value ?? "").trim();
+  return text;
+}
+
 function short(value: any, max = 80) {
   const text = safe(value);
   if (text === "-") return text;
@@ -44,6 +55,11 @@ function dateShort(value: any) {
     month: "short",
     year: "numeric",
   });
+}
+
+function dateInput(value: any) {
+  const text = String(value ?? "").trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : "";
 }
 
 function timeShort(value: any) {
@@ -101,6 +117,14 @@ function badgeTone(value: any): "default" | "good" | "warn" | "danger" {
   }
 
   return "default";
+}
+
+function errorMessage(error?: string) {
+  if (error === "cliente") return "El nombre del cliente no puede quedar vacío.";
+  if (error === "config") return "Falta configurar SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY en Vercel.";
+  if (error === "save") return "No se pudo guardar el cliente. Revisa la tabla public.clientes o la conexión con Supabase.";
+  if (error === "cliente_id") return "No se encontró el ID del cliente.";
+  return "No se pudo completar la acción.";
 }
 
 function Card({
@@ -205,6 +229,50 @@ function InfoItem({ label, value }: { label: string; value: ReactNode }) {
   );
 }
 
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <label
+      style={{
+        display: "grid",
+        gap: "8px",
+        color: "var(--muted)",
+        fontSize: "13px",
+        fontWeight: 850,
+        minWidth: 0,
+      }}
+    >
+      {label}
+      {children}
+    </label>
+  );
+}
+
+const inputStyle: CSSProperties = {
+  width: "100%",
+  minWidth: 0,
+  border: "1px solid var(--line)",
+  borderRadius: "15px",
+  background: "#fffaf4",
+  color: "var(--text)",
+  padding: "13px 14px",
+  outline: "none",
+  fontWeight: 750,
+};
+
+const textareaStyle: CSSProperties = {
+  ...inputStyle,
+  minHeight: "96px",
+  resize: "vertical",
+  fontFamily: "inherit",
+  lineHeight: 1.45,
+};
+
 function groupByService(rows: Row[]) {
   const map = new Map<string, Row>();
 
@@ -242,11 +310,14 @@ function groupByService(rows: Row[]) {
 
 export default async function ClienteDetallePage({
   params,
+  searchParams,
 }: {
   params: PageParams;
+  searchParams: SearchParams;
 }) {
   const session = await requireModuleAccess("clientes");
   const { cliente_id } = await params;
+  const uiParams = await searchParams;
   const clienteId = decodeURIComponent(cliente_id);
 
   const clienteResult = await supabaseSelectWhere<Row>(
@@ -359,6 +430,18 @@ export default async function ClienteDetallePage({
           </a>
         </div>
 
+        {uiParams.updated === "1" && (
+          <div className="alert" style={{ background: "var(--green-soft)", borderColor: "rgba(31, 107, 79, 0.22)" }}>
+            <strong>Cliente actualizado correctamente.</strong>
+          </div>
+        )}
+
+        {uiParams.error && (
+          <div className="alert">
+            <strong>No se pudo guardar:</strong> {errorMessage(uiParams.error)}
+          </div>
+        )}
+
         {errors.length > 0 && (
           <div className="alert">
             <strong>Revisar conexión:</strong>
@@ -394,7 +477,7 @@ export default async function ClienteDetallePage({
 
         <section className="grid secondary">
           <Card label="Total cobrado historial" value={money(totalPagadoHistorial)} />
-          <Card label="Total por cobrar" value={money(totalCobrarHistorial)} />
+          <Card label="Valor total de atenciones" value={money(totalCobrarHistorial)} />
           <Card label="Pendiente historial" value={money(totalPendienteHistorial)} tone="warn" />
           <Card label="Pax acumulado" value={numberFmt(cliente?.total_pax ?? totalPaxHistorial)} />
         </section>
@@ -437,6 +520,163 @@ export default async function ClienteDetallePage({
             <InfoItem label="Segmento" value={safe(cliente?.segmento_cliente)} />
             <InfoItem label="Origen" value={safe(cliente?.origen)} />
           </div>
+        </section>
+
+        <section className="panel">
+          <div className="panelTitle">
+            <div>
+              <h2>Editar datos CRM</h2>
+              <p>Completa contacto, preferencias, alerta interna y segmento del cliente.</p>
+            </div>
+          </div>
+
+          <form action={updateClienteCrmAction}>
+            <input type="hidden" name="cliente_id" value={safe(cliente?.cliente_id)} />
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                gap: "14px",
+              }}
+            >
+              <Field label="Cliente">
+                <input name="cliente" defaultValue={textValue(cliente?.cliente)} style={inputStyle} />
+              </Field>
+
+              <Field label="WhatsApp">
+                <input name="whatsapp" defaultValue={textValue(cliente?.whatsapp)} placeholder="Ej. 987654321" style={inputStyle} />
+              </Field>
+
+              <Field label="DNI">
+                <input name="dni" defaultValue={textValue(cliente?.dni)} placeholder="Opcional" style={inputStyle} />
+              </Field>
+
+              <Field label="Email">
+                <input name="email" type="email" defaultValue={textValue(cliente?.email)} placeholder="Opcional" style={inputStyle} />
+              </Field>
+
+              <Field label="Teléfono alternativo">
+                <input name="telefono_alternativo" defaultValue={textValue(cliente?.telefono_alternativo)} placeholder="Opcional" style={inputStyle} />
+              </Field>
+
+              <Field label="Fecha de nacimiento">
+                <input name="fecha_nacimiento" type="date" defaultValue={dateInput(cliente?.fecha_nacimiento)} style={inputStyle} />
+              </Field>
+
+              <Field label="Cliente potencial">
+                <select name="cliente_potencial" defaultValue={textValue(cliente?.cliente_potencial)} style={inputStyle}>
+                  <option value="">Sin definir</option>
+                  <option value="ALTO">ALTO</option>
+                  <option value="MEDIO">MEDIO</option>
+                  <option value="BAJO">BAJO</option>
+                  <option value="NO">NO</option>
+                </select>
+              </Field>
+
+              <Field label="Segmento cliente">
+                <select name="segmento_cliente" defaultValue={textValue(cliente?.segmento_cliente)} style={inputStyle}>
+                  <option value="">Sin definir</option>
+                  <option value="HISTORICO">HISTORICO</option>
+                  <option value="NUEVO">NUEVO</option>
+                  <option value="VIP">VIP</option>
+                  <option value="RECURRENTE">RECURRENTE</option>
+                  <option value="RECUPERAR">RECUPERAR</option>
+                  <option value="CORPORATIVO">CORPORATIVO</option>
+                </select>
+              </Field>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+                gap: "14px",
+                marginTop: "14px",
+              }}
+            >
+              <Field label="Etiquetas CRM">
+                <input
+                  name="etiquetas_crm"
+                  defaultValue={textValue(cliente?.etiquetas_crm)}
+                  placeholder="Ej. pareja, frecuente, cumpleaños, turista"
+                  style={inputStyle}
+                />
+              </Field>
+
+              <Field label="Preferencias de atención">
+                <textarea
+                  name="preferencias_atencion"
+                  defaultValue={textValue(cliente?.preferencias_atencion)}
+                  placeholder="Ej. prefiere presión fuerte, terapeuta mujer, vino, aromaterapia..."
+                  style={textareaStyle}
+                />
+              </Field>
+
+              <Field label="Alerta de atención">
+                <textarea
+                  name="alerta_atencion"
+                  defaultValue={textValue(cliente?.alerta_atencion)}
+                  placeholder="Ej. no ofrecer X, revisar alergia, tratar con cuidado, cliente sensible..."
+                  style={textareaStyle}
+                />
+              </Field>
+
+              <Field label="Notas internas">
+                <textarea
+                  name="notas"
+                  defaultValue={textValue(cliente?.notas)}
+                  placeholder="Notas comerciales o de seguimiento para socios/caja."
+                  style={textareaStyle}
+                />
+              </Field>
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                flexWrap: "wrap",
+                gap: "14px",
+                marginTop: "18px",
+              }}
+            >
+              <label
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "10px",
+                  color: "var(--muted)",
+                  fontSize: "13px",
+                  fontWeight: 850,
+                }}
+              >
+                <input
+                  type="checkbox"
+                  name="consentimiento_whatsapp"
+                  defaultChecked={cliente?.consentimiento_whatsapp === true}
+                />
+                Cliente autoriza contacto por WhatsApp
+              </label>
+
+              <button
+                type="submit"
+                style={{
+                  border: 0,
+                  borderRadius: "15px",
+                  background: "var(--green)",
+                  color: "white",
+                  fontWeight: 950,
+                  cursor: "pointer",
+                  padding: "14px 22px",
+                  minHeight: "48px",
+                }}
+              >
+                Guardar cambios CRM
+              </button>
+            </div>
+          </form>
         </section>
 
         <section className="twoCols">
