@@ -6,6 +6,7 @@ import {
   supabaseSelectWhere,
   supabaseUpsert,
 } from "@/lib/supabaseServer";
+import { requireModuleAccess } from "@/lib/auth";
 
 type ClienteRow = {
   cliente_id: string;
@@ -125,7 +126,58 @@ async function getOrCreateCliente({
   return clienteId;
 }
 
+
+function isAdminSession(session: unknown) {
+  const role = String(
+    (session as Record<string, unknown>)?.role ??
+    (session as Record<string, unknown>)?.rol ??
+    ""
+  ).toUpperCase();
+
+  return ["ADMIN_GERALD", "ADMIN", "ADMINISTRADOR"].includes(role);
+}
+
+async function saveCustomServiceToCatalog({
+  name,
+  duration,
+  price,
+  nPax,
+}: {
+  name: string;
+  duration: string;
+  price: number;
+  nPax: number;
+}) {
+  const durationNumber = Number.parseInt(duration, 10) || 60;
+  const code = `CUSTOM-${nPax}P-${Date.now().toString(36).toUpperCase()}`;
+
+  return supabaseInsert("stg_services_catalog_v5", {
+    CodeId: code,
+    category: `${nPax}p`,
+    option_name: name,
+    duration_min: String(durationNumber),
+    price: `S/ ${price}`,
+    includes: "Servicio personalizado creado desde Caja Vita Lima",
+    tags: "personalizado,caja",
+    sede: "Ambas",
+    active: "True",
+    modality_allowed: "CUSTOM",
+    sort_order: 999,
+    whatsapp_summary: `${name} — ${durationNumber} min — S/${price}`,
+    whatsapp_detail: `${name}\n${durationNumber} min · S/${price}`,
+    service_mode: "IN_BRANCH",
+    requires_sede: "True",
+    requires_address: "False",
+    price_pen: String(price),
+    service_code: code,
+    pax_type: `${nPax}p`,
+    menu_group: "PERSONALIZADOS",
+    giftcard_enabled: "False",
+  });
+}
+
 export async function createAtencionAction(formData: FormData) {
+  const session = await requireModuleAccess("nueva-atencion");
   const tipoRegistro = clean(formData.get("tipo_registro")) || "ATENCION";
   const fecha = clean(formData.get("fecha"));
   const hora = clean(formData.get("hora"));
@@ -145,11 +197,15 @@ export async function createAtencionAction(formData: FormData) {
   const terapista1 = clean(formData.get("terapista_1"));
   const terapista2 = clean(formData.get("terapista_2"));
   const observacionBase = clean(formData.get("observacion"));
+  const customService = clean(formData.get("custom_service")) === "1";
+  const customServiceName = clean(formData.get("custom_service_name"));
+  const saveToCatalog = clean(formData.get("save_to_catalog")) === "1";
   const serviceCode = clean(formData.get("service_code"));
   const promoCode = clean(formData.get("promo_code"));
   const referencias = [
     serviceCode ? `Servicio catálogo: ${serviceCode}` : "",
     promoCode ? `Promoción: ${promoCode}` : "",
+    customService ? "Servicio personalizado" : "",
   ].filter(Boolean);
   const observacion = [observacionBase, ...referencias]
     .filter(Boolean)
@@ -175,6 +231,27 @@ export async function createAtencionAction(formData: FormData) {
 
   if (dni && !/^\d{8}$/.test(dni)) {
     redirect("/nueva-atencion?error=El DNI debe tener 8 dígitos.");
+  }
+
+  if (customService && !customServiceName) {
+    redirect("/nueva-atencion?error=Ingresa el nombre del servicio personalizado.");
+  }
+
+  if (saveToCatalog && customService && isAdminSession(session)) {
+    const savedService = await saveCustomServiceToCatalog({
+      name: customServiceName,
+      duration,
+      price: montoTotal,
+      nPax,
+    });
+
+    if (savedService.error) {
+      redirect(
+        `/nueva-atencion?error=${encodeURIComponent(
+          `La atención no se guardó porque falló el nuevo servicio: ${savedService.error}`
+        )}`
+      );
+    }
   }
 
   const clienteId = await getOrCreateCliente({

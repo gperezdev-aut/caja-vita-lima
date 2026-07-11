@@ -2,7 +2,7 @@ import { requireModuleAccess } from "@/lib/auth";
 import { CajaSidebar } from "@/components/CajaSidebar";
 import { supabaseSelect } from "@/lib/supabaseServer";
 import { createAtencionAction } from "./actions";
-import { NuevaAtencionDynamicFields } from "./NuevaAtencionDynamicFields";
+import { NuevaAtencionWizard } from "./NuevaAtencionWizard";
 
 type Row = Record<string, unknown>;
 
@@ -77,10 +77,6 @@ function truthy(value: unknown) {
   );
 }
 
-function dateOnlyInLima() {
-  return todayInLima();
-}
-
 function normalizeServices(rows: Row[]): CatalogService[] {
   return rows
     .filter((row) => truthy(row.active))
@@ -93,20 +89,18 @@ function normalizeServices(rows: Row[]): CatalogService[] {
       paxType: String(row.pax_type ?? row.category ?? "").trim(),
       sortOrder: parseNumber(row.sort_order),
     }))
-    .filter((row) => row.codeId && row.name && row.price >= 0)
+    .filter((row) => row.codeId && row.name)
     .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
 }
 
 function normalizePromotions(rows: Row[]): Promotion[] {
-  const today = dateOnlyInLima();
+  const today = todayInLima();
 
   return rows
     .filter((row) => {
       if (!truthy(row.is_active)) return false;
-
       const start = String(row.start_date ?? "").slice(0, 10);
       const end = String(row.end_date ?? "").slice(0, 10);
-
       return (!start || start <= today) && (!end || end >= today);
     })
     .map((row) => ({
@@ -118,8 +112,17 @@ function normalizePromotions(rows: Row[]): Promotion[] {
       price2p: parseNumber(row.price_2p),
       includes: String(row.includes_text ?? "").trim(),
     }))
-    .filter((row) => row.code && row.name)
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .filter((row) => row.code && row.name);
+}
+
+function canSaveServices(session: unknown) {
+  const role = String(
+    (session as Record<string, unknown>)?.role ??
+    (session as Record<string, unknown>)?.rol ??
+    ""
+  ).toUpperCase();
+
+  return ["ADMIN_GERALD", "ADMIN", "ADMINISTRADOR"].includes(role);
 }
 
 export default async function NuevaAtencionPage({
@@ -136,35 +139,6 @@ export default async function NuevaAtencionPage({
     supabaseSelect<Row>("stg_promotions_v1"),
   ]);
 
-  const sedes = list(config.data, "SEDES", ["Miraflores", "San Borja"]);
-  const metodos = list(config.data, "METODOS_PAGO", [
-    "EFECTIVO",
-    "YAPE",
-    "PLIN",
-    "IZIPAY POS",
-    "BCP",
-    "OTRO",
-  ]);
-  const terapistas = list(config.data, "TERAPISTAS", [
-    "Rossana",
-    "Maria E",
-    "Melissa",
-    "Cecilia",
-    "Otro",
-  ]);
-  const estadosBoleta = list(config.data, "ESTADO_BOLETA", [
-    "Emitida",
-    "Pendiente",
-    "No aplica",
-    "Anulada",
-  ]);
-  const responsables = list(config.data, "RESPONSABLES", [
-    "Gerald",
-    "Luis",
-    "Naty",
-    "Otro",
-  ]);
-
   const services = normalizeServices(catalog.data);
   const promotions = normalizePromotions(promotionsResult.data);
 
@@ -175,11 +149,10 @@ export default async function NuevaAtencionPage({
       <section className="page nuevaAtencionPage">
         <section className="hero nuevaAtencionHero">
           <div>
-            <p className="eyebrow">Operación</p>
+            <p className="eyebrow">Operación guiada</p>
             <h1>Nueva atención</h1>
             <p className="subtitle">
-              Registra una atención de hoy o una reserva futura usando el
-              catálogo real de Vita Lima.
+              Completa cada bloque con calma y revisa el resumen antes de guardar.
             </p>
           </div>
 
@@ -191,8 +164,7 @@ export default async function NuevaAtencionPage({
 
         {params?.ok && (
           <div className="formMessage ok">
-            Registro guardado correctamente. Movimiento:{" "}
-            <strong>{params.id}</strong>
+            Registro guardado correctamente. Movimiento: <strong>{params.id}</strong>
           </div>
         )}
 
@@ -205,86 +177,22 @@ export default async function NuevaAtencionPage({
         {(config.error || catalog.error || promotionsResult.error) && (
           <div className="alert">
             <strong>Revisar conexión con Supabase.</strong>
-            {catalog.error && <p>Catálogo: {catalog.error}</p>}
-            {promotionsResult.error && <p>Promociones: {promotionsResult.error}</p>}
-            {config.error && <p>Listas: {config.error}</p>}
           </div>
         )}
 
         <form action={createAtencionAction} className="atencionForm">
-          <section className="atencionSection">
-            <h2>Datos de la operación</h2>
-
-            <div className="atencionGrid">
-              <label className="atencionField">
-                Tipo de registro
-                <select name="tipo_registro" defaultValue="ATENCION">
-                  <option value="ATENCION">Atención de hoy / sin cita</option>
-                  <option value="RESERVA">Reserva futura</option>
-                </select>
-              </label>
-
-              <label className="atencionField">
-                Fecha
-                <input
-                  name="fecha"
-                  type="date"
-                  defaultValue={todayInLima()}
-                  required
-                />
-              </label>
-
-              <label className="atencionField">
-                Hora
-                <input
-                  name="hora"
-                  type="time"
-                  defaultValue={currentTimeInLima()}
-                  required
-                />
-              </label>
-
-              <label className="atencionField">
-                Sede
-                <select name="sede" required>
-                  {sedes.map((value) => (
-                    <option key={value} value={value}>{value}</option>
-                  ))}
-                </select>
-              </label>
-            </div>
-          </section>
-
-          <NuevaAtencionDynamicFields
+          <NuevaAtencionWizard
             services={services}
             promotions={promotions}
-            metodos={metodos}
-            terapistas={terapistas}
-            estadosBoleta={estadosBoleta}
-            responsables={responsables}
+            sedes={list(config.data, "SEDES", ["Miraflores", "San Borja"])}
+            metodos={list(config.data, "METODOS_PAGO", ["EFECTIVO", "YAPE", "PLIN", "IZIPAY POS", "BCP", "OTRO"])}
+            terapistas={list(config.data, "TERAPISTAS", ["Rossana", "Maria E", "Melissa", "Cecilia", "Otro"])}
+            estadosBoleta={list(config.data, "ESTADO_BOLETA", ["Emitida", "Pendiente", "No aplica", "Anulada"])}
+            responsables={list(config.data, "RESPONSABLES", ["Gerald", "Luis", "Naty", "Otro"])}
+            defaultDate={todayInLima()}
+            defaultTime={currentTimeInLima()}
+            canSaveCatalog={canSaveServices(session)}
           />
-
-          <section className="atencionSection">
-            <h2>Observación</h2>
-
-            <label className="atencionField">
-              Nota interna
-              <textarea
-                name="observacion"
-                placeholder="Ej. Cliente llega directo, reserva por WhatsApp, pendiente de boleta, etc."
-                rows={3}
-              />
-            </label>
-          </section>
-
-          <div className="atencionActions">
-            <a className="ghostButton" href="/">
-              Volver al dashboard
-            </a>
-            <button type="submit" className="primaryButton">
-              Guardar atención
-            </button>
-          </div>
         </form>
       </section>
     </main>
