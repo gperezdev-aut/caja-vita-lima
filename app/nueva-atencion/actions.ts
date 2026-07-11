@@ -178,6 +178,13 @@ async function saveCustomServiceToCatalog({
 
 export async function createAtencionAction(formData: FormData) {
   const session = await requireModuleAccess("nueva-atencion");
+  const confirmarGuardado = clean(formData.get("confirmar_guardado"));
+
+  if (confirmarGuardado !== "SI") {
+    redirect(
+      "/nueva-atencion?error=Debes revisar el resumen y presionar Confirmar y guardar."
+    );
+  }
   const tipoRegistro = clean(formData.get("tipo_registro")) || "ATENCION";
   const fecha = clean(formData.get("fecha"));
   const hora = clean(formData.get("hora"));
@@ -202,9 +209,11 @@ export async function createAtencionAction(formData: FormData) {
   const saveToCatalog = clean(formData.get("save_to_catalog")) === "1";
   const serviceCode = clean(formData.get("service_code"));
   const promoCode = clean(formData.get("promo_code"));
+  const estadoPago = clean(formData.get("estado_pago"));
   const referencias = [
     serviceCode ? `Servicio catálogo: ${serviceCode}` : "",
     promoCode ? `Promoción: ${promoCode}` : "",
+    estadoPago ? `Estado de pago: ${estadoPago}` : "",
     customService ? "Servicio personalizado" : "",
   ].filter(Boolean);
   const observacion = [observacionBase, ...referencias]
@@ -240,7 +249,7 @@ export async function createAtencionAction(formData: FormData) {
   if (saveToCatalog && customService && isAdminSession(session)) {
     const savedService = await saveCustomServiceToCatalog({
       name: customServiceName,
-      duration: duracion,
+      duration,
       price: montoTotal,
       nPax,
     });

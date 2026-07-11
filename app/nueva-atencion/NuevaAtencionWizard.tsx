@@ -111,6 +111,14 @@ export function NuevaAtencionWizard({
 
   const balance = Math.max(total - paid, 0);
   const invalidPayment = paid > total;
+  const paymentStatus =
+    total <= 0
+      ? "Sin monto"
+      : paid <= 0
+        ? "Pendiente de pago"
+        : paid < total
+          ? "Pago parcial"
+          : "Pagado completo";
 
   function selectService(value: string) {
     if (value === "__CUSTOM__") {
@@ -443,7 +451,10 @@ export function NuevaAtencionWizard({
           <div><span>Total</span><strong>{money(total)}</strong></div>
           <div><span>Pagado</span><strong>{money(paid)}</strong></div>
           <div><span>Saldo pendiente</span><strong>{invalidPayment ? "Revisar monto" : money(balance)}</strong></div>
+          <div><span>Estado del pago</span><strong>{paymentStatus}</strong></div>
         </div>
+
+        <input type="hidden" name="estado_pago" value={paymentStatus} />
       </section>
 
       <section className={`wizardPanel ${step === 5 ? "visible" : ""}`}>
@@ -463,7 +474,8 @@ export function NuevaAtencionWizard({
           {pax === 2 && <div><span>Terapista 2</span><strong>{terapista2}</strong></div>}
           <div><span>Total</span><strong>{money(total)}</strong></div>
           <div><span>Pagado</span><strong>{money(paid)}</strong></div>
-          <div className={balance > 0 ? "reviewPending" : ""}><span>Pendiente</span><strong>{money(balance)}</strong></div>
+          <div className={balance > 0 ? "reviewPending" : ""}><span>Pago pendiente</span><strong>{money(balance)}</strong></div>
+          <div className={balance > 0 ? "reviewPending" : "reviewImportant"}><span>Estado del pago</span><strong>{paymentStatus}</strong></div>
         </div>
 
         {customService && (
@@ -486,7 +498,14 @@ export function NuevaAtencionWizard({
         {step < 5 ? (
           <button type="button" className="primaryButton" onClick={next}>Siguiente</button>
         ) : (
-          <button type="submit" className="primaryButton">Confirmar y guardar</button>
+          <button
+            type="submit"
+            name="confirmar_guardado"
+            value="SI"
+            className="primaryButton"
+          >
+            Confirmar y guardar
+          </button>
         )}
       </div>
     </div>
