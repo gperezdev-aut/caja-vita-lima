@@ -249,7 +249,7 @@ export async function createAtencionAction(formData: FormData) {
   if (saveToCatalog && customService && isAdminSession(session)) {
     const savedService = await saveCustomServiceToCatalog({
       name: customServiceName,
-      duration,
+      duration: duracion,
       price: montoTotal,
       nPax,
     });
