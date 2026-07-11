@@ -50,7 +50,13 @@ async function supabaseRequest<T = Record<string, unknown>>(
       return { data: [], error: null };
     }
 
-    const data = (await response.json()) as T[];
+    const body = await response.text();
+
+    if (!body.trim()) {
+      return { data: [], error: null };
+    }
+
+    const data = JSON.parse(body) as T[];
     return { data, error: null };
   } catch (error) {
     return {

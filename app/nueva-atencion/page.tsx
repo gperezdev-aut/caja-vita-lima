@@ -2,8 +2,9 @@ import { requireModuleAccess } from "@/lib/auth";
 import { CajaSidebar } from "@/components/CajaSidebar";
 import { supabaseSelect } from "@/lib/supabaseServer";
 import { createAtencionAction } from "./actions";
+import { NuevaAtencionDynamicFields } from "./NuevaAtencionDynamicFields";
 
-type Row = Record<string, any>;
+type Row = Record<string, unknown>;
 
 type SearchParams = Promise<{
   ok?: string;
@@ -11,99 +12,114 @@ type SearchParams = Promise<{
   error?: string;
 }>;
 
-const fieldStyle = {
-  display: "grid",
-  gap: "8px",
-  color: "var(--muted)",
-  fontSize: "13px",
-  fontWeight: 800,
+type CatalogService = {
+  codeId: string;
+  name: string;
+  category: string;
+  duration: number;
+  price: number;
+  paxType: string;
+  sortOrder: number;
 };
 
-const inputStyle = {
-  width: "100%",
-  border: "1px solid var(--line)",
-  borderRadius: "15px",
-  background: "#fffaf4",
-  color: "var(--text)",
-  padding: "13px 14px",
-  outline: "none",
+type Promotion = {
+  code: string;
+  name: string;
+  headline: string;
+  duration: number;
+  price1p: number;
+  price2p: number;
+  includes: string;
 };
 
 function todayInLima() {
-  const parts = new Intl.DateTimeFormat("en-CA", {
+  return new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Lima",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).formatToParts(new Date());
-
-  const y = parts.find((p) => p.type === "year")?.value;
-  const m = parts.find((p) => p.type === "month")?.value;
-  const d = parts.find((p) => p.type === "day")?.value;
-
-  return `${y}-${m}-${d}`;
+  }).format(new Date());
 }
 
-function list(config: Row[], name: string) {
-  return config
+function currentTimeInLima() {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "America/Lima",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date());
+}
+
+function list(config: Row[], name: string, fallback: string[]) {
+  const values = config
     .filter((row) => row.lista === name && row.activo !== false)
-    .sort((a, b) => Number(a.orden ?? 0) - Number(b.orden ?? 0));
+    .sort((a, b) => Number(a.orden ?? 0) - Number(b.orden ?? 0))
+    .map((row) => String(row.valor ?? "").trim())
+    .filter(Boolean);
+
+  return values.length ? values : fallback;
 }
 
-function Options({
-  rows,
-  fallback,
-}: {
-  rows: Row[];
-  fallback: string[];
-}) {
-  const values = rows.length ? rows.map((row) => String(row.valor)) : fallback;
+function parseNumber(value: unknown) {
+  const cleaned = String(value ?? "")
+    .replace(/S\//gi, "")
+    .replace(/\s/g, "")
+    .replace(",", ".")
+    .replace(/[^\d.-]/g, "");
 
-  return (
-    <>
-      {values.map((value) => (
-        <option key={value} value={value}>
-          {value}
-        </option>
-      ))}
-    </>
+  const parsed = Number(cleaned);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function truthy(value: unknown) {
+  return ["true", "1", "yes", "si", "sí"].includes(
+    String(value ?? "").trim().toLowerCase()
   );
 }
 
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section
-      style={{
-        border: "1px solid var(--line)",
-        borderRadius: "22px",
-        background: "white",
-        padding: "20px",
-      }}
-    >
-      <h2 style={{ margin: "0 0 16px", fontSize: "22px" }}>{title}</h2>
-      {children}
-    </section>
-  );
+function dateOnlyInLima() {
+  return todayInLima();
 }
 
-function FormGrid({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
-        gap: "14px",
-      }}
-    >
-      {children}
-    </div>
-  );
+function normalizeServices(rows: Row[]): CatalogService[] {
+  return rows
+    .filter((row) => truthy(row.active))
+    .map((row) => ({
+      codeId: String(row.CodeId ?? "").trim(),
+      name: String(row.option_name ?? "").trim(),
+      category: String(row.category ?? "").trim(),
+      duration: parseNumber(row.duration_min),
+      price: parseNumber(row.price_pen ?? row.price),
+      paxType: String(row.pax_type ?? row.category ?? "").trim(),
+      sortOrder: parseNumber(row.sort_order),
+    }))
+    .filter((row) => row.codeId && row.name && row.price >= 0)
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+}
+
+function normalizePromotions(rows: Row[]): Promotion[] {
+  const today = dateOnlyInLima();
+
+  return rows
+    .filter((row) => {
+      if (!truthy(row.is_active)) return false;
+
+      const start = String(row.start_date ?? "").slice(0, 10);
+      const end = String(row.end_date ?? "").slice(0, 10);
+
+      return (!start || start <= today) && (!end || end >= today);
+    })
+    .map((row) => ({
+      code: String(row.promo_code ?? "").trim(),
+      name: String(row.promo_name ?? "").trim(),
+      headline: String(row.headline_text ?? row.promo_name ?? "").trim(),
+      duration: parseNumber(row.duration_min),
+      price1p: parseNumber(row.price_1p),
+      price2p: parseNumber(row.price_2p),
+      includes: String(row.includes_text ?? "").trim(),
+    }))
+    .filter((row) => row.code && row.name)
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export default async function NuevaAtencionPage({
@@ -112,265 +128,160 @@ export default async function NuevaAtencionPage({
   searchParams: SearchParams;
 }) {
   const session = await requireModuleAccess("nueva-atencion");
-
   const params = await searchParams;
-  const config = await supabaseSelect<Row>("config_listas");
 
-  const sedes = list(config.data, "SEDES");
-  const servicios = list(config.data, "SERVICIOS");
-  const metodos = list(config.data, "METODOS_PAGO");
-  const terapistas = list(config.data, "TERAPISTAS");
-  const estadosBoleta = list(config.data, "ESTADO_BOLETA");
-  const responsables = list(config.data, "RESPONSABLES");
+  const [config, catalog, promotionsResult] = await Promise.all([
+    supabaseSelect<Row>("config_listas"),
+    supabaseSelect<Row>("stg_services_catalog_v5"),
+    supabaseSelect<Row>("stg_promotions_v1"),
+  ]);
+
+  const sedes = list(config.data, "SEDES", ["Miraflores", "San Borja"]);
+  const metodos = list(config.data, "METODOS_PAGO", [
+    "EFECTIVO",
+    "YAPE",
+    "PLIN",
+    "IZIPAY POS",
+    "BCP",
+    "OTRO",
+  ]);
+  const terapistas = list(config.data, "TERAPISTAS", [
+    "Rossana",
+    "Maria E",
+    "Melissa",
+    "Cecilia",
+    "Otro",
+  ]);
+  const estadosBoleta = list(config.data, "ESTADO_BOLETA", [
+    "Emitida",
+    "Pendiente",
+    "No aplica",
+    "Anulada",
+  ]);
+  const responsables = list(config.data, "RESPONSABLES", [
+    "Gerald",
+    "Luis",
+    "Naty",
+    "Otro",
+  ]);
+
+  const services = normalizeServices(catalog.data);
+  const promotions = normalizePromotions(promotionsResult.data);
 
   return (
     <main className="appShell">
       <CajaSidebar session={session} />
 
-      <section className="page">
-        <section className="hero" style={{ minHeight: "140px" }}>
+      <section className="page nuevaAtencionPage">
+        <section className="hero nuevaAtencionHero">
           <div>
             <p className="eyebrow">Operación</p>
             <h1>Nueva atención</h1>
             <p className="subtitle">
-              Registra una atención o reserva manual. Guardará datos en
-              clientes, citas, movimientos, pagos y detalle de atención.
+              Registra una atención de hoy o una reserva futura usando el
+              catálogo real de Vita Lima.
             </p>
           </div>
 
           <div className="badge">
-            <span>Modo</span>
-            <strong>Registro</strong>
+            <span>Catálogo</span>
+            <strong>{services.length} opciones activas</strong>
           </div>
         </section>
 
         {params?.ok && (
-          <div
-            style={{
-              borderRadius: "18px",
-              padding: "16px 18px",
-              marginBottom: "18px",
-              background: "var(--green-soft)",
-              color: "var(--green)",
-              border: "1px solid rgba(31, 107, 79, 0.18)",
-              fontWeight: 800,
-            }}
-          >
+          <div className="formMessage ok">
             Registro guardado correctamente. Movimiento:{" "}
             <strong>{params.id}</strong>
           </div>
         )}
 
         {params?.error && (
-          <div
-            style={{
-              borderRadius: "18px",
-              padding: "16px 18px",
-              marginBottom: "18px",
-              background: "var(--danger)",
-              color: "var(--danger-text)",
-              border: "1px solid rgba(163, 50, 37, 0.18)",
-              fontWeight: 800,
-            }}
-          >
+          <div className="formMessage error">
             <strong>No se pudo guardar:</strong> {params.error}
           </div>
         )}
 
-        {config.error && (
+        {(config.error || catalog.error || promotionsResult.error) && (
           <div className="alert">
-            No se pudieron cargar listas desde Supabase. El formulario usará
-            opciones básicas.
+            <strong>Revisar conexión con Supabase.</strong>
+            {catalog.error && <p>Catálogo: {catalog.error}</p>}
+            {promotionsResult.error && <p>Promociones: {promotionsResult.error}</p>}
+            {config.error && <p>Listas: {config.error}</p>}
           </div>
         )}
 
-        <form
-          action={createAtencionAction}
-          style={{
-            background: "rgba(255, 250, 241, 0.9)",
-            border: "1px solid var(--line)",
-            borderRadius: "26px",
-            boxShadow: "var(--shadow)",
-            padding: "24px",
-            display: "grid",
-            gap: "22px",
-          }}
-        >
-          <Section title="Datos de la operación">
-            <FormGrid>
-              <label style={fieldStyle}>
+        <form action={createAtencionAction} className="atencionForm">
+          <section className="atencionSection">
+            <h2>Datos de la operación</h2>
+
+            <div className="atencionGrid">
+              <label className="atencionField">
                 Tipo de registro
-                <select name="tipo_registro" defaultValue="ATENCION" style={inputStyle}>
+                <select name="tipo_registro" defaultValue="ATENCION">
                   <option value="ATENCION">Atención de hoy / sin cita</option>
                   <option value="RESERVA">Reserva futura</option>
                 </select>
               </label>
 
-              <label style={fieldStyle}>
+              <label className="atencionField">
                 Fecha
-                <input name="fecha" type="date" defaultValue={todayInLima()} required style={inputStyle} />
+                <input
+                  name="fecha"
+                  type="date"
+                  defaultValue={todayInLima()}
+                  required
+                />
               </label>
 
-              <label style={fieldStyle}>
+              <label className="atencionField">
                 Hora
-                <input name="hora" type="time" required style={inputStyle} />
+                <input
+                  name="hora"
+                  type="time"
+                  defaultValue={currentTimeInLima()}
+                  required
+                />
               </label>
 
-              <label style={fieldStyle}>
+              <label className="atencionField">
                 Sede
-                <select name="sede" required style={inputStyle}>
-                  <Options rows={sedes} fallback={["Miraflores", "San Borja"]} />
+                <select name="sede" required>
+                  {sedes.map((value) => (
+                    <option key={value} value={value}>{value}</option>
+                  ))}
                 </select>
               </label>
-            </FormGrid>
-          </Section>
+            </div>
+          </section>
 
-          <Section title="Cliente">
-            <FormGrid>
-              <label style={fieldStyle}>
-                Cliente
-                <input name="cliente" placeholder="Nombre del cliente" required style={inputStyle} />
-              </label>
+          <NuevaAtencionDynamicFields
+            services={services}
+            promotions={promotions}
+            metodos={metodos}
+            terapistas={terapistas}
+            estadosBoleta={estadosBoleta}
+            responsables={responsables}
+          />
 
-              <label style={fieldStyle}>
-                WhatsApp
-                <input name="whatsapp" placeholder="Ej. 987654321" style={inputStyle} />
-              </label>
+          <section className="atencionSection">
+            <h2>Observación</h2>
 
-              <label style={fieldStyle}>
-                DNI
-                <input name="dni" placeholder="Opcional" style={inputStyle} />
-              </label>
-
-              <label style={fieldStyle}>
-                N° personas
-                <select name="n_pax" defaultValue="1" style={inputStyle}>
-                  <option value="1">1 persona</option>
-                  <option value="2">2 personas</option>
-                </select>
-              </label>
-            </FormGrid>
-          </Section>
-
-          <Section title="Servicio y terapistas">
-            <FormGrid>
-              <label style={fieldStyle}>
-                Servicio
-                <select name="servicio" required style={inputStyle}>
-                  <Options
-                    rows={servicios}
-                    fallback={[
-                      "Masaje relajante",
-                      "Masaje descontracturante",
-                      "Masaje terapéutico 60 min",
-                      "Personalizado",
-                    ]}
-                  />
-                </select>
-              </label>
-
-              <label style={fieldStyle}>
-                Duración
-                <select name="duracion" defaultValue="60 min" style={inputStyle}>
-                  <option value="45 min">45 min</option>
-                  <option value="60 min">60 min</option>
-                  <option value="70 min">70 min</option>
-                  <option value="90 min">90 min</option>
-                  <option value="120 min">120 min</option>
-                </select>
-              </label>
-
-              <label style={fieldStyle}>
-                Terapista 1
-                <select name="terapista_1" style={inputStyle}>
-                  <option value="">Por asignar</option>
-                  <Options rows={terapistas} fallback={["Rossana", "Maria E", "Melissa", "Cecilia", "Otro"]} />
-                </select>
-              </label>
-
-              <label style={fieldStyle}>
-                Terapista 2
-                <select name="terapista_2" style={inputStyle}>
-                  <option value="">No aplica / Por asignar</option>
-                  <Options rows={terapistas} fallback={["Rossana", "Maria E", "Melissa", "Cecilia", "Otro"]} />
-                </select>
-              </label>
-            </FormGrid>
-          </Section>
-
-          <Section title="Pago y comprobante">
-            <FormGrid>
-              <label style={fieldStyle}>
-                Monto total
-                <input name="monto_total" type="number" step="0.01" min="0" placeholder="0.00" required style={inputStyle} />
-              </label>
-
-              <label style={fieldStyle}>
-                Monto pagado / adelanto
-                <input name="monto_pagado" type="number" step="0.01" min="0" placeholder="0.00" required style={inputStyle} />
-              </label>
-
-              <label style={fieldStyle}>
-                Método de pago
-                <select name="metodo_pago" style={inputStyle}>
-                  <Options rows={metodos} fallback={["EFECTIVO", "YAPE", "PLIN", "IZIPAY POS", "BCP", "OTRO"]} />
-                </select>
-              </label>
-
-              <label style={fieldStyle}>
-                Estado boleta
-                <select name="estado_boleta" defaultValue="Pendiente" style={inputStyle}>
-                  <Options rows={estadosBoleta} fallback={["Emitida", "Pendiente", "No aplica", "Anulada"]} />
-                </select>
-              </label>
-
-              <label style={fieldStyle}>
-                Número boleta/factura
-                <input name="numero_boleta" placeholder="Opcional" style={inputStyle} />
-              </label>
-
-              <label style={fieldStyle}>
-                Responsable
-                <select name="responsable" defaultValue="Gerald" style={inputStyle}>
-                  <Options rows={responsables} fallback={["Gerald", "Luis", "Naty", "Otro"]} />
-                </select>
-              </label>
-            </FormGrid>
-          </Section>
-
-          <Section title="Observación">
-            <label style={fieldStyle}>
+            <label className="atencionField">
               Nota interna
               <textarea
                 name="observacion"
                 placeholder="Ej. Cliente llega directo, reserva por WhatsApp, pendiente de boleta, etc."
-                rows={4}
-                style={{ ...inputStyle, resize: "vertical", minHeight: "110px" }}
+                rows={3}
               />
             </label>
-          </Section>
+          </section>
 
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px", flexWrap: "wrap" }}>
-            <a className="ghostButton" href="/" style={{
-              background: "white",
-              color: "var(--green)",
-              border: "1px solid var(--line)",
-              borderRadius: "16px",
-              padding: "15px 18px",
-              fontWeight: 850,
-              textDecoration: "none",
-            }}>
+          <div className="atencionActions">
+            <a className="ghostButton" href="/">
               Volver al dashboard
             </a>
-            <button type="submit" style={{
-              border: 0,
-              borderRadius: "16px",
-              padding: "15px 18px",
-              fontWeight: 850,
-              cursor: "pointer",
-              background: "var(--green)",
-              color: "white",
-            }}>
+            <button type="submit" className="primaryButton">
               Guardar atención
             </button>
           </div>

@@ -144,7 +144,16 @@ export async function createAtencionAction(formData: FormData) {
   const responsable = clean(formData.get("responsable")) || "Gerald";
   const terapista1 = clean(formData.get("terapista_1"));
   const terapista2 = clean(formData.get("terapista_2"));
-  const observacion = clean(formData.get("observacion"));
+  const observacionBase = clean(formData.get("observacion"));
+  const serviceCode = clean(formData.get("service_code"));
+  const promoCode = clean(formData.get("promo_code"));
+  const referencias = [
+    serviceCode ? `Servicio catálogo: ${serviceCode}` : "",
+    promoCode ? `Promoción: ${promoCode}` : "",
+  ].filter(Boolean);
+  const observacion = [observacionBase, ...referencias]
+    .filter(Boolean)
+    .join(" | ");
 
   if (!fecha || !hora || !sede || !cliente || !servicio) {
     redirect("/nueva-atencion?error=Completa fecha, hora, sede, cliente y servicio.");
@@ -152,6 +161,20 @@ export async function createAtencionAction(formData: FormData) {
 
   if (montoTotal < 0 || montoPagado < 0) {
     redirect("/nueva-atencion?error=Los montos no pueden ser negativos.");
+  }
+
+  if (montoPagado > montoTotal) {
+    redirect(
+      "/nueva-atencion?error=El monto pagado no puede superar el monto total."
+    );
+  }
+
+  if (whatsapp && !/^\d{9}$/.test(whatsapp)) {
+    redirect("/nueva-atencion?error=El WhatsApp debe tener 9 dígitos.");
+  }
+
+  if (dni && !/^\d{8}$/.test(dni)) {
+    redirect("/nueva-atencion?error=El DNI debe tener 8 dígitos.");
   }
 
   const clienteId = await getOrCreateCliente({
