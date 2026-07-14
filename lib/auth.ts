@@ -3,6 +3,7 @@ import "server-only";
 import { createHmac, timingSafeEqual } from "crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { getServerEnv } from "@/lib/env";
 
 const AUTH_COOKIE_NAME = "caja_auth";
 
@@ -72,7 +73,7 @@ const PERMISSIONS: Record<CajaRole, CajaModule[]> = {
 };
 
 function getSessionSecret() {
-  return process.env.CAJA_SESSION_SECRET;
+  return getServerEnv("CAJA_SESSION_SECRET");
 }
 
 function base64UrlEncode(value: string) {

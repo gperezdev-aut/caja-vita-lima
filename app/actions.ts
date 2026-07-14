@@ -8,6 +8,7 @@ import {
   type CajaRole,
 } from "@/lib/auth";
 import { supabaseSelectWhere } from "@/lib/supabaseServer";
+import { getServerEnv } from "@/lib/env";
 
 type UsuarioRow = {
   id: number;
@@ -29,7 +30,7 @@ function normalizeUser(value: FormDataEntryValue | null) {
 export async function loginAction(formData: FormData) {
   const usuario = normalizeUser(formData.get("usuario"));
   const pin = clean(formData.get("pin"));
-  const sessionSecret = process.env.CAJA_SESSION_SECRET;
+  const sessionSecret = getServerEnv("CAJA_SESSION_SECRET");
 
   if (!sessionSecret) {
     redirect("/login?error=config");
