@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 
 type CatalogService = {
   codeId: string;
@@ -492,7 +493,7 @@ export function NuevaAtencionWizard({
         {step > 1 ? (
           <button type="button" className="ghostButton" onClick={previous}>Anterior</button>
         ) : (
-          <a className="ghostButton" href="/">Cancelar</a>
+          <Link className="ghostButton" href="/">Cancelar</Link>
         )}
 
         {step < 5 ? (

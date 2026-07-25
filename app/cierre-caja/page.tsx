@@ -1,6 +1,7 @@
 import { requireModuleAccess } from "@/lib/auth";
 import { CajaSidebar } from "@/components/CajaSidebar";
 import { supabaseSelect, supabaseSelectWhere } from "@/lib/supabaseServer";
+import Link from "next/link";
 import { createCierreCajaAction } from "./actions";
 
 type Row = Record<string, any>;
@@ -467,7 +468,7 @@ export default async function CierreCajaPage({
           </Section>
 
           <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px", flexWrap: "wrap" }}>
-            <a
+            <Link
               href="/"
               style={{
                 background: "white",
@@ -480,7 +481,7 @@ export default async function CierreCajaPage({
               }}
             >
               Volver al dashboard
-            </a>
+            </Link>
 
             <button
               type="submit"
