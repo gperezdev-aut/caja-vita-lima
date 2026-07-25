@@ -14,57 +14,96 @@ export function CajaSidebar({ session }: { session: CajaSession }) {
   const moduleItems = navItems.filter((item) => item.key !== "dashboard" && item.key !== "alertas");
 
   return (
-    <aside className="sidebar">
-      <div>
-        <p className="sidebarEyebrow">Vita Lima</p>
-        <h2>Caja</h2>
-      </div>
+    <>
+      <aside className="sidebar sidebarDesktop">
+        <div>
+          <p className="sidebarEyebrow">Vita Lima</p>
+          <h2>Caja</h2>
+        </div>
 
-      <div
-        style={{
-          border: "1px solid var(--line)",
-          borderRadius: "18px",
-          padding: "14px",
-          background: "white",
-        }}
-      >
-        <span
+        <div
           style={{
-            display: "block",
-            color: "var(--muted)",
-            fontSize: "12px",
-            fontWeight: 800,
-            marginBottom: "6px",
+            border: "1px solid var(--line)",
+            borderRadius: "18px",
+            padding: "14px",
+            background: "white",
           }}
         >
-          Usuario
-        </span>
-        <strong style={{ display: "block" }}>{session.nombre}</strong>
-        <small style={{ color: "var(--green)", fontWeight: 850 }}>
-          {roleLabel(session.rol)}
-        </small>
-      </div>
+          <span
+            style={{
+              display: "block",
+              color: "var(--muted)",
+              fontSize: "12px",
+              fontWeight: 800,
+              marginBottom: "6px",
+            }}
+          >
+            Usuario
+          </span>
+          <strong style={{ display: "block" }}>{session.nombre}</strong>
+          <small style={{ color: "var(--green)", fontWeight: 850 }}>
+            {roleLabel(session.rol)}
+          </small>
+        </div>
 
-      <nav className="nav">
-        {navItems.map((item) => (
-          <a key={item.key} href={item.href}>
-            {item.label}
-          </a>
-        ))}
-      </nav>
+        <nav className="nav" aria-label="Navegación principal">
+          {navItems.map((item) => (
+            <a key={item.key} href={item.href}>
+              {item.label}
+            </a>
+          ))}
+        </nav>
 
-      <div className="nextModules">
-        <span>Módulos</span>
-        {moduleItems.map((item) => (
-          <p key={item.key}>{item.label}</p>
-        ))}
-      </div>
+        <div className="nextModules">
+          <span>Módulos</span>
+          {moduleItems.map((item) => (
+            <p key={item.key}>{item.label}</p>
+          ))}
+        </div>
 
-      <form action={logoutAction}>
-        <button className="logoutButton" type="submit">
-          Cerrar sesión
-        </button>
-      </form>
-    </aside>
+        <form action={logoutAction}>
+          <button className="logoutButton" type="submit">
+            Cerrar sesión
+          </button>
+        </form>
+      </aside>
+
+      <aside className="sidebarMobile">
+        <details className="mobileMenuDetails">
+          <summary className="mobileMenuSummary">
+            <span className="mobileMenuBrand">
+              <small>Vita Lima</small>
+              <strong>Caja</strong>
+            </span>
+
+            <span className="mobileMenuIdentity">
+              <strong>{session.nombre}</strong>
+              <small>{roleLabel(session.rol)}</small>
+            </span>
+
+            <span className="mobileMenuLabel">Menú</span>
+          </summary>
+
+          <div className="mobileMenuContent">
+            <nav className="mobileMenuNav" aria-label="Navegación principal">
+              {navItems.map((item) => (
+                <a key={item.key} href={item.href}>
+                  {item.label}
+                </a>
+              ))}
+            </nav>
+
+            <form action={logoutAction}>
+              <button
+                className="logoutButton mobileMenuLogout"
+                type="submit"
+              >
+                Cerrar sesión
+              </button>
+            </form>
+          </div>
+        </details>
+      </aside>
+    </>
   );
 }
