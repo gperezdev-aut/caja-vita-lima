@@ -1,6 +1,7 @@
 import { requireModuleAccess } from "@/lib/auth";
 import { CajaSidebar } from "@/components/CajaSidebar";
 import { supabaseSelect } from "@/lib/supabaseServer";
+import Link from "next/link";
 
 type Row = Record<string, any>;
 
@@ -378,7 +379,7 @@ export default async function HomePage({
                 Aplicar filtros
               </button>
 
-              <a
+              <Link
                 href="/"
                 style={{
                   background: "white",
@@ -393,7 +394,7 @@ export default async function HomePage({
                 }}
               >
                 Ver todo
-              </a>
+              </Link>
             </div>
           </form>
         </section>

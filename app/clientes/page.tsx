@@ -522,9 +522,9 @@ export default async function ClientesPage({ searchParams }: { searchParams: Sea
               Aplicar
             </button>
 
-            <a href="/clientes" style={ghostButtonStyle}>
+            <Link href="/clientes" style={ghostButtonStyle}>
               Ver todo
-            </a>
+            </Link>
           </form>
         </section>
 

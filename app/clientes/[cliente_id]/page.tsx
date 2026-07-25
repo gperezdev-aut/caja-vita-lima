@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireModuleAccess } from "@/lib/auth";
 import { CajaSidebar } from "@/components/CajaSidebar";
@@ -411,7 +412,7 @@ export default async function ClienteDetallePage({
         </section>
 
         <div style={{ marginBottom: "20px" }}>
-          <a
+          <Link
             href="/clientes"
             style={{
               display: "inline-flex",
@@ -427,7 +428,7 @@ export default async function ClienteDetallePage({
             }}
           >
             ← Volver a Clientes
-          </a>
+          </Link>
         </div>
 
         {uiParams.updated === "1" && (

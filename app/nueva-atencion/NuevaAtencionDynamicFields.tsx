@@ -65,8 +65,6 @@ export function NuevaAtencionDynamicFields({
   );
 
   const filteredServices = useMemo(() => {
-    const expected = pax === 2 ? "2p" : "1p";
-
     return services.filter((item) => {
       const category = item.category.toLowerCase();
       const paxType = item.paxType.toLowerCase();
