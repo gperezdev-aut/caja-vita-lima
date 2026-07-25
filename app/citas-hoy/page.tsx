@@ -123,6 +123,73 @@ function Badge({
   );
 }
 
+type CitaPresentation = {
+  row: Row;
+  movimientoId: string;
+  terapistas: string;
+  pendiente: number;
+  comprobante: string;
+};
+
+function CitaMobileCard({ cita }: { cita: CitaPresentation }) {
+  const { row, movimientoId, terapistas, pendiente, comprobante } = cita;
+  const comprobanteOk = comprobante.toUpperCase().includes("OK");
+
+  return (
+    <article className="citasHoyCard">
+      <div className="citasHoyCardHeader">
+        <strong className="citasHoyCardHour">{hourLabel(row.hora)}</strong>
+        <Badge>{row.estado || "-"}</Badge>
+      </div>
+
+      <div className="citasHoyCardIdentity">
+        <h3>{row.cliente}</h3>
+        <p>{row.servicio}</p>
+      </div>
+
+      <div className="citasHoyCardTherapist">
+        <span>Terapista</span>
+        <strong>{terapistas}</strong>
+      </div>
+
+      <div className="citasHoyMoneyGrid">
+        <div>
+          <span>Total</span>
+          <strong>{money(row.total_cobrar)}</strong>
+        </div>
+        <div>
+          <span>Pagado</span>
+          <strong>{money(row.total_pagado)}</strong>
+        </div>
+        <div className={pendiente > 0 ? "citasHoyMoneyPending" : ""}>
+          <span>Pendiente</span>
+          <strong>{money(row.pendiente)}</strong>
+        </div>
+      </div>
+
+      <div className="citasHoyCardMeta">
+        <div>
+          <span>Sede</span>
+          <strong>{row.sede}</strong>
+        </div>
+        <div>
+          <span>Comprobante</span>
+          <Badge tone={comprobanteOk ? "good" : "warn"}>{comprobante}</Badge>
+        </div>
+      </div>
+
+      {row.whatsapp && (
+        <p className="citasHoyWhatsapp">
+          <span>WhatsApp</span>
+          <strong>{row.whatsapp}</strong>
+        </p>
+      )}
+
+      <small className="citasHoyMovement">Movimiento: {movimientoId}</small>
+    </article>
+  );
+}
+
 export default async function CitasHoyPage({
   searchParams,
 }: {
@@ -191,6 +258,32 @@ export default async function CitasHoyPage({
     0
   );
 
+  const citas: CitaPresentation[] = movimientos.data.map((row) => {
+    const movimientoId = String(row.movimiento_id ?? "");
+    const detalleRows = detallePorMovimiento.get(movimientoId) ?? [];
+    const terapistas = detalleRows.length
+      ? detalleRows
+          .map((detalle) => detalle.terapista)
+          .filter(Boolean)
+          .join(" / ")
+      : "-";
+    const pendiente = Number(row.pendiente ?? 0);
+    const comprobante = String(
+      row.estado_comprobante_manual ||
+        row.estado_boleta ||
+        row.tipo_comprobante ||
+        "-"
+    );
+
+    return {
+      row,
+      movimientoId,
+      terapistas,
+      pendiente,
+      comprobante,
+    };
+  });
+
   return (
     <main className="appShell">
       <CajaSidebar session={session} />
@@ -226,13 +319,11 @@ export default async function CitasHoyPage({
           </div>
 
           <form
+            className="citasHoyFilters"
             method="GET"
             action="/citas-hoy"
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
-              gap: "14px",
-              alignItems: "end",
             }}
           >
             <label style={fieldStyle}>
@@ -249,8 +340,9 @@ export default async function CitasHoyPage({
               </select>
             </label>
 
-            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+            <div className="citasHoyFilterActions">
               <button
+                className="citasHoyFilterButton"
                 type="submit"
                 style={{
                   border: 0,
@@ -266,6 +358,7 @@ export default async function CitasHoyPage({
               </button>
 
               <a
+                className="citasHoyFilterButton"
                 href="/citas-hoy"
                 style={{
                   background: "white",
@@ -317,7 +410,7 @@ export default async function CitasHoyPage({
         </section>
 
         <section className="panel">
-          <div className="panelTitle">
+          <div className="panelTitle citasHoyAgendaTitle">
             <div>
               <h2>Agenda operativa</h2>
               <p>
@@ -326,8 +419,9 @@ export default async function CitasHoyPage({
               </p>
             </div>
 
-            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+            <div className="citasHoyActions">
               <a
+                className="citasHoyAction"
                 href="/nueva-atencion"
                 style={{
                   alignSelf: "flex-start",
@@ -344,6 +438,7 @@ export default async function CitasHoyPage({
               </a>
 
               <a
+                className="citasHoyAction"
                 href="/registrar-salida"
                 style={{
                   alignSelf: "flex-start",
@@ -367,81 +462,77 @@ export default async function CitasHoyPage({
               No hay citas o atenciones registradas para la fecha y sede seleccionadas.
             </div>
           ) : (
-            <div className="tableWrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Hora</th>
-                    <th>Cliente</th>
-                    <th>WhatsApp</th>
-                    <th>Sede</th>
-                    <th>Servicio</th>
-                    <th>Terapista</th>
-                    <th>Total</th>
-                    <th>Pagado</th>
-                    <th>Pendiente</th>
-                    <th>Estado</th>
-                    <th>Comprobante</th>
-                    <th>Movimiento</th>
-                  </tr>
-                </thead>
+            <>
+              <div className="tableWrap citasHoyDesktopTable">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Hora</th>
+                      <th>Cliente</th>
+                      <th>WhatsApp</th>
+                      <th>Sede</th>
+                      <th>Servicio</th>
+                      <th>Terapista</th>
+                      <th>Total</th>
+                      <th>Pagado</th>
+                      <th>Pendiente</th>
+                      <th>Estado</th>
+                      <th>Comprobante</th>
+                      <th>Movimiento</th>
+                    </tr>
+                  </thead>
 
-                <tbody>
-                  {movimientos.data.map((row) => {
-                    const movimientoId = String(row.movimiento_id ?? "");
-                    const detalleRows =
-                      detallePorMovimiento.get(movimientoId) ?? [];
+                  <tbody>
+                    {citas.map(
+                      ({
+                        row,
+                        movimientoId,
+                        terapistas,
+                        pendiente,
+                        comprobante,
+                      }) => (
+                        <tr key={movimientoId}>
+                          <td>{hourLabel(row.hora)}</td>
+                          <td className="strong">{row.cliente}</td>
+                          <td>{row.whatsapp || "-"}</td>
+                          <td>{row.sede}</td>
+                          <td>{row.servicio}</td>
+                          <td>{terapistas}</td>
+                          <td>{money(row.total_cobrar)}</td>
+                          <td>{money(row.total_pagado)}</td>
+                          <td>
+                            <Badge tone={pendiente > 0 ? "warn" : "good"}>
+                              {money(row.pendiente)}
+                            </Badge>
+                          </td>
+                          <td>
+                            <Badge>{row.estado || "-"}</Badge>
+                          </td>
+                          <td>
+                            <Badge
+                              tone={
+                                comprobante.toUpperCase().includes("OK")
+                                  ? "good"
+                                  : "warn"
+                              }
+                            >
+                              {comprobante}
+                            </Badge>
+                          </td>
+                          <td>{movimientoId}</td>
+                        </tr>
+                      )
+                    )}
+                  </tbody>
+                </table>
+              </div>
 
-                    const terapistas = detalleRows.length
-                      ? detalleRows
-                          .map((detalle) => detalle.terapista)
-                          .filter(Boolean)
-                          .join(" / ")
-                      : "-";
-
-                    const pendiente = Number(row.pendiente ?? 0);
-                    const comprobante =
-                      row.estado_comprobante_manual ||
-                      row.estado_boleta ||
-                      row.tipo_comprobante ||
-                      "-";
-
-                    return (
-                      <tr key={movimientoId}>
-                        <td>{hourLabel(row.hora)}</td>
-                        <td className="strong">{row.cliente}</td>
-                        <td>{row.whatsapp || "-"}</td>
-                        <td>{row.sede}</td>
-                        <td>{row.servicio}</td>
-                        <td>{terapistas}</td>
-                        <td>{money(row.total_cobrar)}</td>
-                        <td>{money(row.total_pagado)}</td>
-                        <td>
-                          <Badge tone={pendiente > 0 ? "warn" : "good"}>
-                            {money(row.pendiente)}
-                          </Badge>
-                        </td>
-                        <td>
-                          <Badge>{row.estado || "-"}</Badge>
-                        </td>
-                        <td>
-                          <Badge
-                            tone={
-                              String(comprobante).toUpperCase().includes("OK")
-                                ? "good"
-                                : "warn"
-                            }
-                          >
-                            {comprobante}
-                          </Badge>
-                        </td>
-                        <td>{movimientoId}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+              <div className="citasHoyMobileList">
+                {citas.map((cita) => (
+                  <CitaMobileCard key={cita.movimientoId} cita={cita} />
+                ))}
+              </div>
+            </>
           )}
         </section>
       </section>
