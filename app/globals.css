@@ -95,3 +95,36 @@ button,input{font:inherit}.loginPage{min-height:100vh;display:grid;place-items:c
   .mobileMenuLabel{padding-inline:10px}
   .mobileMenuNav{grid-template-columns:1fr}
 }
+
+/* Citas de hoy — vista operativa responsive */
+.citasHoyFilters{grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;align-items:end}
+.citasHoyFilterActions,.citasHoyActions{display:flex;gap:10px;flex-wrap:wrap}
+.citasHoyMobileList{display:none}
+.citasHoyCard{width:100%;display:grid;gap:16px;padding:18px;border:1px solid var(--line);border-radius:20px;background:white;box-shadow:var(--shadow)}
+.citasHoyCardHeader{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.citasHoyCardHour{font-size:30px;line-height:1;color:var(--green);letter-spacing:-.04em}
+.citasHoyCardIdentity h3{margin:0 0 5px;font-size:21px;line-height:1.15;color:var(--green)}
+.citasHoyCardIdentity p{margin:0;color:var(--text);font-weight:750;line-height:1.4;overflow-wrap:anywhere}
+.citasHoyCardTherapist{display:grid;gap:5px;padding:12px 14px;border-radius:15px;background:var(--green-soft)}
+.citasHoyCardTherapist span,.citasHoyMoneyGrid span,.citasHoyCardMeta span,.citasHoyWhatsapp span{color:var(--muted);font-size:12px;font-weight:800}
+.citasHoyCardTherapist strong{line-height:1.4;overflow-wrap:anywhere}
+.citasHoyMoneyGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.citasHoyMoneyGrid>div{min-width:0;padding:11px 9px;border:1px solid var(--line);border-radius:14px;background:#fffaf4}
+.citasHoyMoneyGrid strong{display:block;margin-top:5px;font-size:15px;line-height:1.2;overflow-wrap:anywhere}
+.citasHoyMoneyPending{background:var(--warn)!important;border-color:rgba(184,137,58,.35)!important}
+.citasHoyMoneyPending strong{color:#8a5b0a}
+.citasHoyCardMeta{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+.citasHoyCardMeta>div{display:grid;align-content:start;gap:7px}
+.citasHoyCardMeta strong{overflow-wrap:anywhere}
+.citasHoyWhatsapp{display:flex;justify-content:space-between;gap:12px;margin:0;padding-top:13px;border-top:1px solid var(--line)}
+.citasHoyWhatsapp strong{text-align:right;overflow-wrap:anywhere}
+.citasHoyMovement{color:var(--muted);font-size:11px;overflow-wrap:anywhere}
+
+@media(max-width:599px){
+  .citasHoyDesktopTable{display:none}
+  .citasHoyMobileList{display:grid;gap:14px}
+  .citasHoyFilters{grid-template-columns:1fr}
+  .citasHoyFilterActions,.citasHoyActions{display:grid;grid-template-columns:1fr 1fr;width:100%}
+  .citasHoyFilterButton,.citasHoyAction{width:100%;min-height:48px;display:flex;align-items:center;justify-content:center;text-align:center}
+  .citasHoyAgendaTitle{display:grid}
+}
