@@ -3,8 +3,8 @@ FROM node:20-alpine AS dependencies
 WORKDIR /app
 RUN apk add --no-cache libc6-compat
 
-COPY package.json ./
-RUN npm install
+COPY package.json package-lock.json ./
+RUN npm ci
 
 
 FROM node:20-alpine AS builder
@@ -14,11 +14,11 @@ RUN apk add --no-cache libc6-compat
 
 COPY --from=dependencies /app/node_modules ./node_modules
 COPY . .
-RUN echo "=== LIB ===" && ls -la /app/lib && echo "=== COMPONENTS ===" && ls -la /app/components && echo "=== TSCONFIG ===" && cat /app/tsconfig.json
+RUN mkdir -p /app/public
 
 ENV NEXT_TELEMETRY_DISABLED=1
 
-RUN npm run build -- --webpack
+RUN npm run build
 
 
 FROM node:20-alpine AS runner

@@ -1,18 +1,24 @@
 {
+  "private": true,
+  "packageManager": "npm@11.16.0",
+  "engines": {
+    "node": ">=20.9.0 <25",
+    "npm": ">=10 <12"
+  },
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "next dev --webpack",
+    "build": "next build --webpack",
     "start": "next start",
-    "lint": "next lint"
+    "typecheck": "tsc --noEmit --incremental false"
   },
   "dependencies": {
-    "@types/node": "latest",
-    "@types/react": "latest",
-    "@types/react-dom": "latest",
-    "next": "latest",
-    "react": "latest",
-    "react-dom": "latest",
-    "server-only": "^0.0.1",
+    "@types/node": "26.1.1",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "next": "16.2.11",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "server-only": "0.0.1",
     "typescript": "6.0.3"
   },
   "devDependencies": {}
