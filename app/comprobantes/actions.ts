@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { requireModuleAccess } from "@/lib/auth";
 
 function clean(value: FormDataEntryValue | null) {
   return String(value ?? "").trim();
@@ -50,6 +51,8 @@ async function patchMovimientoComprobante(
 }
 
 export async function updateComprobanteAction(formData: FormData) {
+  await requireModuleAccess("comprobantes");
+
   const movimientoId = clean(formData.get("movimiento_id"));
   const tipoComprobante = clean(formData.get("tipo_comprobante"));
   const estadoComprobante = clean(formData.get("estado_comprobante_manual"));

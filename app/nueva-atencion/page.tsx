@@ -163,13 +163,13 @@ export default async function NuevaAtencionPage({
         </section>
 
         {params?.ok && (
-          <div className="formMessage ok">
+          <div className="formMessage ok" role="alert">
             Registro guardado correctamente. Movimiento: <strong>{params.id}</strong>
           </div>
         )}
 
         {params?.error && (
-          <div className="formMessage error">
+          <div className="formMessage error" role="alert">
             <strong>No se pudo guardar:</strong> {params.error}
           </div>
         )}

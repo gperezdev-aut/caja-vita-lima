@@ -319,6 +319,7 @@ export default async function ComprobantesPage({
 
         {params?.ok && (
           <div
+            role="alert"
             style={{
               borderRadius: "18px",
               padding: "16px 18px",
@@ -335,6 +336,7 @@ export default async function ComprobantesPage({
 
         {params?.error && (
           <div
+            role="alert"
             style={{
               borderRadius: "18px",
               padding: "16px 18px",

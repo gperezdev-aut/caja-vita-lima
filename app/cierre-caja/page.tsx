@@ -2,6 +2,7 @@ import { requireModuleAccess } from "@/lib/auth";
 import { CajaSidebar } from "@/components/CajaSidebar";
 import { supabaseSelect, supabaseSelectWhere } from "@/lib/supabaseServer";
 import Link from "next/link";
+import { SubmitButton } from "@/components/SubmitButton";
 import { createCierreCajaAction } from "./actions";
 
 type Row = Record<string, any>;
@@ -260,6 +261,7 @@ export default async function CierreCajaPage({
 
         {params?.ok && (
           <div
+            role="alert"
             style={{
               borderRadius: "18px",
               padding: "16px 18px",
@@ -276,6 +278,7 @@ export default async function CierreCajaPage({
 
         {params?.error && (
           <div
+            role="alert"
             style={{
               borderRadius: "18px",
               padding: "16px 18px",
@@ -483,8 +486,7 @@ export default async function CierreCajaPage({
               Volver al dashboard
             </Link>
 
-            <button
-              type="submit"
+            <SubmitButton
               style={{
                 border: 0,
                 borderRadius: "16px",
@@ -496,7 +498,7 @@ export default async function CierreCajaPage({
               }}
             >
               Guardar cierre
-            </button>
+            </SubmitButton>
           </div>
         </form>
 

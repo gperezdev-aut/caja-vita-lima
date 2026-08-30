@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { supabaseInsert } from "@/lib/supabaseServer";
+import { requireModuleAccess } from "@/lib/auth";
 
 function clean(value: FormDataEntryValue | null) {
   return String(value ?? "").trim();
@@ -34,6 +35,8 @@ function moduleUrl(fecha: string, sede: string) {
 }
 
 export async function createCierreCajaAction(formData: FormData) {
+  await requireModuleAccess("cierre-caja");
+
   const fecha = clean(formData.get("fecha"));
   const sede = clean(formData.get("sede"));
   const cajaInicial = money(formData.get("caja_inicial"));
@@ -63,8 +66,8 @@ export async function createCierreCajaAction(formData: FormData) {
     redirect(`${baseUrl}${separator}error=${encodeURIComponent("Los montos no pueden ser negativos.")}`);
   }
 
-  const cajaEsperada = cajaInicial + totalIngresos - totalSalidas;
-  const diferencia = efectivoContado + pozoFondo - cajaEsperada;
+  const cajaEsperada = cajaInicial + pozoFondo + totalIngresos - totalSalidas;
+  const diferencia = efectivoContado - cajaEsperada;
   const cierreId = id("CIE");
 
   const cierre = await supabaseInsert("caja_cierres", {
