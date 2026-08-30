@@ -66,8 +66,8 @@ export async function createCierreCajaAction(formData: FormData) {
     redirect(`${baseUrl}${separator}error=${encodeURIComponent("Los montos no pueden ser negativos.")}`);
   }
 
-  const cajaEsperada = cajaInicial + totalIngresos - totalSalidas;
-  const diferencia = efectivoContado + pozoFondo - cajaEsperada;
+  const cajaEsperada = cajaInicial + pozoFondo + totalIngresos - totalSalidas;
+  const diferencia = efectivoContado - cajaEsperada;
   const cierreId = id("CIE");
 
   const cierre = await supabaseInsert("caja_cierres", {
