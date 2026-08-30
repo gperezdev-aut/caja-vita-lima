@@ -29,6 +29,13 @@ function getMessage(error?: string, loggedOut?: string) {
     };
   }
 
+  if (error === "bloqueado") {
+    return {
+      type: "error",
+      text: "Demasiados intentos fallidos, espera unos minutos e intenta de nuevo.",
+    };
+  }
+
   if (error === "db") {
     return {
       type: "error",
