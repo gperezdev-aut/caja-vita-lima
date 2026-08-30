@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { supabaseInsert } from "@/lib/supabaseServer";
+import { requireModuleAccess } from "@/lib/auth";
 
 function clean(value: FormDataEntryValue | null) {
   return String(value ?? "").trim();
@@ -19,6 +20,8 @@ function id(prefix: string) {
 }
 
 export async function createSalidaAction(formData: FormData) {
+  await requireModuleAccess("registrar-salida");
+
   const fecha = clean(formData.get("fecha"));
   const hora = clean(formData.get("hora"));
   const sede = clean(formData.get("sede"));

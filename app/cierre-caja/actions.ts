@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { supabaseInsert } from "@/lib/supabaseServer";
+import { requireModuleAccess } from "@/lib/auth";
 
 function clean(value: FormDataEntryValue | null) {
   return String(value ?? "").trim();
@@ -34,6 +35,8 @@ function moduleUrl(fecha: string, sede: string) {
 }
 
 export async function createCierreCajaAction(formData: FormData) {
+  await requireModuleAccess("cierre-caja");
+
   const fecha = clean(formData.get("fecha"));
   const sede = clean(formData.get("sede"));
   const cajaInicial = money(formData.get("caja_inicial"));
