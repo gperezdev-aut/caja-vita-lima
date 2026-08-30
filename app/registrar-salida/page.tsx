@@ -1,6 +1,7 @@
 import { requireModuleAccess } from "@/lib/auth";
 import { CajaSidebar } from "@/components/CajaSidebar";
 import { supabaseSelect, supabaseSelectWhere } from "@/lib/supabaseServer";
+import { SubmitButton } from "@/components/SubmitButton";
 import { createSalidaAction } from "./actions";
 
 type Row = Record<string, any>;
@@ -216,6 +217,7 @@ export default async function RegistrarSalidaPage({
 
         {params?.ok && (
           <div
+            role="alert"
             style={{
               borderRadius: "18px",
               padding: "16px 18px",
@@ -232,6 +234,7 @@ export default async function RegistrarSalidaPage({
 
         {params?.error && (
           <div
+            role="alert"
             style={{
               borderRadius: "18px",
               padding: "16px 18px",
@@ -475,8 +478,7 @@ export default async function RegistrarSalidaPage({
               Volver a citas
             </a>
 
-            <button
-              type="submit"
+            <SubmitButton
               style={{
                 border: 0,
                 borderRadius: "16px",
@@ -488,7 +490,7 @@ export default async function RegistrarSalidaPage({
               }}
             >
               Guardar salida
-            </button>
+            </SubmitButton>
           </div>
         </form>
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useFormStatus } from "react-dom";
 import Link from "next/link";
 
 type CatalogService = {
@@ -56,6 +57,7 @@ export function NuevaAtencionWizard({
   defaultTime,
   canSaveCatalog,
 }: Props) {
+  const { pending } = useFormStatus();
   const [step, setStep] = useState(1);
   const [tipo, setTipo] = useState("ATENCION");
   const [fecha, setFecha] = useState(defaultDate);
@@ -504,8 +506,9 @@ export function NuevaAtencionWizard({
             name="confirmar_guardado"
             value="SI"
             className="primaryButton"
+            disabled={pending}
           >
-            Confirmar y guardar
+            {pending ? "Guardando..." : "Confirmar y guardar"}
           </button>
         )}
       </div>
