@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { requireModuleAccess } from "@/lib/auth";
 import { CajaSidebar } from "@/components/CajaSidebar";
 import { supabaseSelectWhere } from "@/lib/supabaseServer";
+import { SubmitButton } from "@/components/SubmitButton";
 import { updateClienteCrmAction } from "./actions";
 
 type Row = Record<string, any>;
@@ -682,8 +683,7 @@ export default async function ClienteDetallePage({
                 Cliente autoriza contacto por WhatsApp
               </label>
 
-              <button
-                type="submit"
+              <SubmitButton
                 style={{
                   border: 0,
                   borderRadius: "15px",
@@ -696,7 +696,7 @@ export default async function ClienteDetallePage({
                 }}
               >
                 Guardar cambios CRM
-              </button>
+              </SubmitButton>
             </div>
           </form>
         </section>

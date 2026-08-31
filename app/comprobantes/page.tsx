@@ -1,6 +1,7 @@
 import { requireModuleAccess } from "@/lib/auth";
 import { CajaSidebar } from "@/components/CajaSidebar";
 import { supabaseSelectWhere } from "@/lib/supabaseServer";
+import { SubmitButton } from "@/components/SubmitButton";
 import { updateComprobanteAction } from "./actions";
 
 type Row = Record<string, any>;
@@ -265,8 +266,7 @@ function ComprobanteCard({ row }: { row: Row }) {
         </label>
 
         <div style={{ display: "flex", justifyContent: "flex-end" }}>
-          <button
-            type="submit"
+          <SubmitButton
             style={{
               border: 0,
               borderRadius: "16px",
@@ -278,7 +278,7 @@ function ComprobanteCard({ row }: { row: Row }) {
             }}
           >
             Guardar comprobante
-          </button>
+          </SubmitButton>
         </div>
       </form>
     </article>
