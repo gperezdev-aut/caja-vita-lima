@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useFormStatus } from "react-dom";
 import Link from "next/link";
+import { lookupClienteAlertaAction } from "./actions";
 
 type CatalogService = {
   codeId: string;
@@ -79,6 +80,8 @@ export function NuevaAtencionWizard({
   const [terapista1, setTerapista1] = useState("");
   const [terapista2, setTerapista2] = useState("");
 
+  const [clienteAlerta, setClienteAlerta] = useState<{ cliente: string; alerta: string } | null>(null);
+
   const [paid, setPaid] = useState(0);
   const [metodo, setMetodo] = useState("");
   const [estadoBoleta, setEstadoBoleta] = useState("Pendiente");
@@ -122,6 +125,23 @@ export function NuevaAtencionWizard({
         : paid < total
           ? "Pago parcial"
           : "Pagado completo";
+
+  async function checkClienteAlerta(nextWhatsapp: string, nextDni: string) {
+    const validWhatsapp = /^\d{9}$/.test(nextWhatsapp) ? nextWhatsapp : "";
+    const validDni = /^\d{8}$/.test(nextDni) ? nextDni : "";
+
+    if (!validWhatsapp && !validDni) {
+      setClienteAlerta(null);
+      return;
+    }
+
+    try {
+      const result = await lookupClienteAlertaAction(validWhatsapp, validDni);
+      setClienteAlerta(result.alerta ? result : null);
+    } catch {
+      setClienteAlerta(null);
+    }
+  }
 
   function selectService(value: string) {
     if (value === "__CUSTOM__") {
@@ -297,12 +317,26 @@ export function NuevaAtencionWizard({
 
           <label className="atencionField">
             WhatsApp
-            <input name="whatsapp" value={whatsapp} onChange={(e) => setWhatsapp(e.target.value.replace(/\D/g, "").slice(0, 9))} inputMode="numeric" placeholder="Ej. 987654321" />
+            <input
+              name="whatsapp"
+              value={whatsapp}
+              onChange={(e) => setWhatsapp(e.target.value.replace(/\D/g, "").slice(0, 9))}
+              onBlur={() => checkClienteAlerta(whatsapp, dni)}
+              inputMode="numeric"
+              placeholder="Ej. 987654321"
+            />
           </label>
 
           <label className="atencionField">
             DNI
-            <input name="dni" value={dni} onChange={(e) => setDni(e.target.value.replace(/\D/g, "").slice(0, 8))} inputMode="numeric" placeholder="Opcional" />
+            <input
+              name="dni"
+              value={dni}
+              onChange={(e) => setDni(e.target.value.replace(/\D/g, "").slice(0, 8))}
+              onBlur={() => checkClienteAlerta(whatsapp, dni)}
+              inputMode="numeric"
+              placeholder="Opcional"
+            />
           </label>
 
           <label className="atencionField">
@@ -313,6 +347,15 @@ export function NuevaAtencionWizard({
             </select>
           </label>
         </div>
+
+        {clienteAlerta?.alerta && (
+          <div className="clienteAlertaNotice" role="alert">
+            <span>⚠</span>
+            <span>
+              Alerta registrada{clienteAlerta.cliente ? ` para ${clienteAlerta.cliente}` : ""}: {clienteAlerta.alerta}
+            </span>
+          </div>
+        )}
       </section>
 
       <section className={`wizardPanel ${step === 3 ? "visible" : ""}`}>

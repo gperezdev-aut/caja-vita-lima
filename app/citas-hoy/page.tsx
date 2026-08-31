@@ -118,9 +118,11 @@ function waHref(value: any) {
 function Badge({
   children,
   tone = "default",
+  title,
 }: {
   children: React.ReactNode;
-  tone?: "default" | "good" | "warn";
+  tone?: "default" | "good" | "warn" | "danger";
+  title?: string;
 }) {
   const styles: Record<string, React.CSSProperties> = {
     default: {
@@ -138,10 +140,16 @@ function Badge({
       color: "var(--text)",
       border: "1px solid var(--line)",
     },
+    danger: {
+      background: "var(--danger)",
+      color: "var(--danger-text)",
+      border: "1px solid rgba(163, 50, 37, 0.18)",
+    },
   };
 
   return (
     <span
+      title={title}
       style={{
         display: "inline-flex",
         alignItems: "center",
@@ -158,16 +166,27 @@ function Badge({
   );
 }
 
+function AlertaBadge({ alerta }: { alerta: string }) {
+  if (!alerta) return null;
+
+  return (
+    <Badge tone="danger" title={alerta}>
+      ⚠ Alerta cliente
+    </Badge>
+  );
+}
+
 type CitaPresentation = {
   row: Row;
   movimientoId: string;
   terapistas: string;
   pendiente: number;
   comprobante: string;
+  alerta: string;
 };
 
 function CitaMobileCard({ cita }: { cita: CitaPresentation }) {
-  const { row, movimientoId, terapistas, pendiente, comprobante } = cita;
+  const { row, movimientoId, terapistas, pendiente, comprobante, alerta } = cita;
   const comprobanteOk = comprobante.toUpperCase().includes("OK");
 
   return (
@@ -180,6 +199,11 @@ function CitaMobileCard({ cita }: { cita: CitaPresentation }) {
       <div className="citasHoyCardIdentity">
         <h3>{row.cliente}</h3>
         <p>{row.servicio}</p>
+        {alerta && (
+          <div style={{ marginTop: "8px" }}>
+            <AlertaBadge alerta={alerta} />
+          </div>
+        )}
       </div>
 
       <div className="citasHoyCardTherapist">
@@ -276,7 +300,37 @@ export default async function CitasHoyPage({
     detallesQuery.join("&")
   );
 
-  const errors = [config.error, movimientos.error, detalles.error].filter(Boolean);
+  const whatsappList = Array.from(
+    new Set(
+      movimientos.data
+        .map((row) => String(row.whatsapp ?? "").trim())
+        .filter(Boolean)
+    )
+  );
+
+  const alertasResult = whatsappList.length
+    ? await supabaseSelectWhere<Row>(
+        "vista_clientes_crm_catalogo",
+        [
+          "select=whatsapp,alerta_atencion",
+          `whatsapp=in.(${whatsappList.map((value) => encodeURIComponent(value)).join(",")})`,
+        ].join("&")
+      )
+    : { data: [] as Row[], error: null };
+
+  const alertaPorWhatsapp = new Map<string, string>();
+
+  for (const row of alertasResult.data) {
+    const whatsapp = String(row.whatsapp ?? "").trim();
+    const alerta = String(row.alerta_atencion ?? "").trim();
+    if (whatsapp && alerta) {
+      alertaPorWhatsapp.set(whatsapp, alerta);
+    }
+  }
+
+  const errors = [config.error, movimientos.error, detalles.error, alertasResult.error].filter(
+    Boolean
+  );
 
   const detallePorMovimiento = new Map<string, Row[]>();
 
@@ -318,6 +372,7 @@ export default async function CitasHoyPage({
         row.tipo_comprobante ||
         "-"
     );
+    const alerta = alertaPorWhatsapp.get(String(row.whatsapp ?? "").trim()) ?? "";
 
     return {
       row,
@@ -325,6 +380,7 @@ export default async function CitasHoyPage({
       terapistas,
       pendiente,
       comprobante,
+      alerta,
     };
   });
 
@@ -533,10 +589,18 @@ export default async function CitasHoyPage({
                         terapistas,
                         pendiente,
                         comprobante,
+                        alerta,
                       }) => (
                         <tr key={movimientoId}>
                           <td>{hourLabel(row.hora)}</td>
-                          <td className="strong">{row.cliente}</td>
+                          <td className="strong">
+                            {row.cliente}
+                            {alerta && (
+                              <div style={{ marginTop: "6px" }}>
+                                <AlertaBadge alerta={alerta} />
+                              </div>
+                            )}
+                          </td>
                           <td>
                             {row.whatsapp ? (
                               <a href={waHref(row.whatsapp)} target="_blank" rel="noopener noreferrer" style={{ color: "var(--green)" }}>

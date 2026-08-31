@@ -56,6 +56,7 @@ button,input{font:inherit}.loginPage{min-height:100vh;display:grid;place-items:c
 .reviewImportant strong{color:var(--green);font-size:18px}
 .reviewPending{background:var(--warn)!important}
 .customServiceNotice{margin-top:14px;padding:13px 15px;border-radius:14px;background:var(--warn);font-weight:750}
+.clienteAlertaNotice{margin-top:14px;padding:13px 15px;border-radius:14px;background:var(--danger);color:var(--danger-text);font-weight:800;display:flex;align-items:flex-start;gap:8px}
 @media(max-width:900px){.atencionGrid{grid-template-columns:repeat(2,minmax(0,1fr))}.atencionFieldWide{grid-column:span 2}}
 @media(max-width:760px){.wizardProgress{grid-template-columns:repeat(5,auto);overflow-x:auto;padding-bottom:5px}.wizardStep small{display:none}.reviewGrid{grid-template-columns:1fr 1fr}.reviewWide{grid-column:span 2}}
 @media(max-width:520px){.nuevaAtencionPage{width:min(100% - 20px,1180px);padding-top:18px}.atencionForm{padding:12px}.wizardPanel{padding:16px;min-height:0}.atencionGrid,.reviewGrid,.paymentSummary{grid-template-columns:1fr}.atencionFieldWide,.reviewWide,.catalogCheckbox{grid-column:auto}.wizardActions button,.wizardActions a{min-width:0;flex:1}}
