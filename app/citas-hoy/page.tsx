@@ -105,6 +105,16 @@ function hourLabel(value: any) {
   return String(value).slice(0, 5);
 }
 
+function waHref(value: any) {
+  let digits = String(value ?? "").replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.length > 9 && digits.startsWith("51")) {
+    digits = digits.slice(2);
+  }
+  digits = digits.slice(-9);
+  return `https://wa.me/51${digits}`;
+}
+
 function Badge({
   children,
   tone = "default",
@@ -206,7 +216,11 @@ function CitaMobileCard({ cita }: { cita: CitaPresentation }) {
       {row.whatsapp && (
         <p className="citasHoyWhatsapp">
           <span>WhatsApp</span>
-          <strong>{row.whatsapp}</strong>
+          <strong>
+            <a href={waHref(row.whatsapp)} target="_blank" rel="noopener noreferrer" style={{ color: "var(--green)" }}>
+              {row.whatsapp}
+            </a>
+          </strong>
         </p>
       )}
 
@@ -523,7 +537,15 @@ export default async function CitasHoyPage({
                         <tr key={movimientoId}>
                           <td>{hourLabel(row.hora)}</td>
                           <td className="strong">{row.cliente}</td>
-                          <td>{row.whatsapp || "-"}</td>
+                          <td>
+                            {row.whatsapp ? (
+                              <a href={waHref(row.whatsapp)} target="_blank" rel="noopener noreferrer" style={{ color: "var(--green)" }}>
+                                {row.whatsapp}
+                              </a>
+                            ) : (
+                              "-"
+                            )}
+                          </td>
                           <td>{row.sede}</td>
                           <td>{row.servicio}</td>
                           <td>{terapistas}</td>

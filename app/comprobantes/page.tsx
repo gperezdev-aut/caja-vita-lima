@@ -54,6 +54,16 @@ function hourLabel(value: any) {
   return String(value).slice(0, 5);
 }
 
+function waHref(value: any) {
+  let digits = String(value ?? "").replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.length > 9 && digits.startsWith("51")) {
+    digits = digits.slice(2);
+  }
+  digits = digits.slice(-9);
+  return `https://wa.me/51${digits}`;
+}
+
 function isPendingComprobante(row: Row) {
   const estadoManual = String(row.estado_comprobante_manual ?? "").toUpperCase();
   const tipo = String(row.tipo_comprobante ?? "").toUpperCase();
@@ -166,7 +176,15 @@ function ComprobanteCard({ row }: { row: Row }) {
             {row.servicio || "-"}
           </p>
           <p style={{ margin: "8px 0 0", color: "var(--muted)", lineHeight: 1.5 }}>
-            WhatsApp: {row.whatsapp || "-"} · Movimiento: {movimientoId}
+            WhatsApp:{" "}
+            {row.whatsapp ? (
+              <a href={waHref(row.whatsapp)} target="_blank" rel="noopener noreferrer" style={{ color: "var(--green)" }}>
+                {row.whatsapp}
+              </a>
+            ) : (
+              "-"
+            )}{" "}
+            · Movimiento: {movimientoId}
           </p>
         </div>
 

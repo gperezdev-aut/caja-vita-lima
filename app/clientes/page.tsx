@@ -45,6 +45,27 @@ function safe(value: any) {
   return text || "-";
 }
 
+function waHref(value: any) {
+  let digits = String(value ?? "").replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.length > 9 && digits.startsWith("51")) {
+    digits = digits.slice(2);
+  }
+  digits = digits.slice(-9);
+  return `https://wa.me/51${digits}`;
+}
+
+function WhatsappCell({ value }: { value: any }) {
+  const text = safe(value);
+  if (text === "-") return <>{text}</>;
+
+  return (
+    <a href={waHref(value)} target="_blank" rel="noopener noreferrer" style={{ color: "var(--green)" }}>
+      {text}
+    </a>
+  );
+}
+
 function short(value: any, max = 72) {
   const text = safe(value);
   if (text === "-") return text;
@@ -672,7 +693,7 @@ export default async function ClientesPage({ searchParams }: { searchParams: Sea
                         {safe(row.cliente)}
                       </Link>
                     </td>
-                    <td>{safe(row.whatsapp)}</td>
+                    <td><WhatsappCell value={row.whatsapp} /></td>
                     <td>{dateShort(row.ultima_visita ?? row.ultima_reserva)}</td>
                     <td>{safe(row.dias_sin_visita)}</td>
                     <td>
@@ -732,7 +753,7 @@ export default async function ClientesPage({ searchParams }: { searchParams: Sea
                         {safe(row.cliente)}
                       </Link>
                     </td>
-                    <td>{safe(row.whatsapp)}</td>
+                    <td><WhatsappCell value={row.whatsapp} /></td>
                     <td>{dateShort(row.ultima_visita ?? row.ultima_reserva)}</td>
                     <td>
                       <Badge tone={cardToneByEstado(getEstado(row))}>{getEstado(row)}</Badge>

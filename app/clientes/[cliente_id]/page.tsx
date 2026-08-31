@@ -63,6 +63,16 @@ function dateInput(value: any) {
   return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : "";
 }
 
+function waHref(value: any) {
+  let digits = String(value ?? "").replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.length > 9 && digits.startsWith("51")) {
+    digits = digits.slice(2);
+  }
+  digits = digits.slice(-9);
+  return `https://wa.me/51${digits}`;
+}
+
 function timeShort(value: any) {
   if (!value) return "-";
   return String(value).slice(0, 5);
@@ -499,7 +509,18 @@ export default async function ClienteDetallePage({
             }}
           >
             <InfoItem label="Cliente ID" value={safe(cliente?.cliente_id)} />
-            <InfoItem label="WhatsApp" value={whatsapp} />
+            <InfoItem
+              label="WhatsApp"
+              value={
+                whatsapp === "-" ? (
+                  whatsapp
+                ) : (
+                  <a href={waHref(whatsapp)} target="_blank" rel="noopener noreferrer" style={{ color: "var(--green)" }}>
+                    {whatsapp}
+                  </a>
+                )
+              }
+            />
             <InfoItem label="DNI" value={dni} />
             <InfoItem label="Email" value={email} />
             <InfoItem label="Primera visita" value={dateShort(cliente?.primera_visita)} />
