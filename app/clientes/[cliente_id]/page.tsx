@@ -856,20 +856,6 @@ export default async function ClienteDetallePage({
           </div>
         </section>
       </section>
-
-      <style>
-        {`
-          .clienteDetallePage {
-            transform: translateX(-155px);
-          }
-
-          @media (max-width: 1280px) {
-            .clienteDetallePage {
-              transform: none;
-            }
-          }
-        `}
-      </style>
     </main>
   );
 }

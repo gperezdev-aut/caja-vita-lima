@@ -727,10 +727,6 @@ export default async function ClientesPage({ searchParams }: { searchParams: Sea
 
       <style>
         {`
-          .clientesPage {
-            transform: translateX(-155px);
-          }
-
           .crmLink {
             color: var(--green);
             font-weight: 950;
@@ -739,12 +735,6 @@ export default async function ClientesPage({ searchParams }: { searchParams: Sea
 
           .crmLink:hover {
             text-decoration: underline;
-          }
-
-          @media (max-width: 1280px) {
-            .clientesPage {
-              transform: none;
-            }
           }
         `}
       </style>
