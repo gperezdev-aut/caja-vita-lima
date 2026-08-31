@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { requireModuleAccess } from "@/lib/auth";
 import { CajaSidebar } from "@/components/CajaSidebar";
 import { supabaseSelectWhere } from "@/lib/supabaseServer";
+import { SubmitButton } from "@/components/SubmitButton";
 import { updateClienteCrmAction } from "./actions";
 
 type Row = Record<string, any>;
@@ -61,6 +62,16 @@ function dateShort(value: any) {
 function dateInput(value: any) {
   const text = String(value ?? "").trim();
   return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : "";
+}
+
+function waHref(value: any) {
+  let digits = String(value ?? "").replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.length > 9 && digits.startsWith("51")) {
+    digits = digits.slice(2);
+  }
+  digits = digits.slice(-9);
+  return `https://wa.me/51${digits}`;
 }
 
 function timeShort(value: any) {
@@ -499,7 +510,18 @@ export default async function ClienteDetallePage({
             }}
           >
             <InfoItem label="Cliente ID" value={safe(cliente?.cliente_id)} />
-            <InfoItem label="WhatsApp" value={whatsapp} />
+            <InfoItem
+              label="WhatsApp"
+              value={
+                whatsapp === "-" ? (
+                  whatsapp
+                ) : (
+                  <a href={waHref(whatsapp)} target="_blank" rel="noopener noreferrer" style={{ color: "var(--green)" }}>
+                    {whatsapp}
+                  </a>
+                )
+              }
+            />
             <InfoItem label="DNI" value={dni} />
             <InfoItem label="Email" value={email} />
             <InfoItem label="Primera visita" value={dateShort(cliente?.primera_visita)} />
@@ -661,8 +683,7 @@ export default async function ClienteDetallePage({
                 Cliente autoriza contacto por WhatsApp
               </label>
 
-              <button
-                type="submit"
+              <SubmitButton
                 style={{
                   border: 0,
                   borderRadius: "15px",
@@ -675,7 +696,7 @@ export default async function ClienteDetallePage({
                 }}
               >
                 Guardar cambios CRM
-              </button>
+              </SubmitButton>
             </div>
           </form>
         </section>
@@ -856,20 +877,6 @@ export default async function ClienteDetallePage({
           </div>
         </section>
       </section>
-
-      <style>
-        {`
-          .clienteDetallePage {
-            transform: translateX(-155px);
-          }
-
-          @media (max-width: 1280px) {
-            .clienteDetallePage {
-              transform: none;
-            }
-          }
-        `}
-      </style>
     </main>
   );
 }

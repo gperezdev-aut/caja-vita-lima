@@ -2,7 +2,7 @@ import type { CSSProperties, ReactNode } from "react";
 import Link from "next/link";
 import { requireModuleAccess } from "@/lib/auth";
 import { CajaSidebar } from "@/components/CajaSidebar";
-import { supabaseSelectWhere } from "@/lib/supabaseServer";
+import { supabaseSelect, supabaseSelectWhere } from "@/lib/supabaseServer";
 
 type Row = Record<string, any>;
 
@@ -45,6 +45,27 @@ function safe(value: any) {
   return text || "-";
 }
 
+function waHref(value: any) {
+  let digits = String(value ?? "").replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.length > 9 && digits.startsWith("51")) {
+    digits = digits.slice(2);
+  }
+  digits = digits.slice(-9);
+  return `https://wa.me/51${digits}`;
+}
+
+function WhatsappCell({ value }: { value: any }) {
+  const text = safe(value);
+  if (text === "-") return <>{text}</>;
+
+  return (
+    <a href={waHref(value)} target="_blank" rel="noopener noreferrer" style={{ color: "var(--green)" }}>
+      {text}
+    </a>
+  );
+}
+
 function short(value: any, max = 72) {
   const text = safe(value);
   if (text === "-") return text;
@@ -57,6 +78,32 @@ function norm(value: any) {
     .normalize("NFD")
     .replace(/\p{Diacritic}/gu, "")
     .trim();
+}
+
+function list(config: Row[], name: string) {
+  return config
+    .filter((row) => row.lista === name && row.activo !== false)
+    .sort((a, b) => Number(a.orden ?? 0) - Number(b.orden ?? 0));
+}
+
+function Options({
+  rows,
+  fallback,
+}: {
+  rows: Row[];
+  fallback: string[];
+}) {
+  const values = rows.length ? rows.map((row) => String(row.valor)) : fallback;
+
+  return (
+    <>
+      {values.map((value) => (
+        <option key={value} value={value}>
+          {value}
+        </option>
+      ))}
+    </>
+  );
 }
 
 function clienteHref(row: Row) {
@@ -313,6 +360,10 @@ export default async function ClientesPage({ searchParams }: { searchParams: Sea
   const sede = String(params.sede ?? "TODAS");
   const tipo = String(params.tipo ?? "TODOS");
 
+  const config = await supabaseSelect<Row>("config_listas");
+  const sedeFallback = ["Miraflores", "San Borja"];
+  const sedesRows = list(config.data, "SEDES");
+
   const clientesResult = await supabaseSelectWhere<Row>(
     "vista_clientes_crm_catalogo",
     ["select=*", "order=total_gastado.desc", "limit=1000"].join("&")
@@ -323,7 +374,7 @@ export default async function ClientesPage({ searchParams }: { searchParams: Sea
     ["select=*", "order=total_ingresado.desc", "limit=300"].join("&")
   );
 
-  const errors = [clientesResult.error, serviciosResult.error].filter(Boolean);
+  const errors = [config.error, clientesResult.error, serviciosResult.error].filter(Boolean);
 
   let clientes = clientesResult.data ?? [];
 
@@ -500,8 +551,7 @@ export default async function ClientesPage({ searchParams }: { searchParams: Sea
               Sede
               <select name="sede" defaultValue={sede} style={inputStyle}>
                 <option value="TODAS">Todas</option>
-                <option value="Miraflores">Miraflores</option>
-                <option value="San Borja">San Borja</option>
+                <Options rows={sedesRows} fallback={sedeFallback} />
               </select>
             </label>
 
@@ -643,7 +693,7 @@ export default async function ClientesPage({ searchParams }: { searchParams: Sea
                         {safe(row.cliente)}
                       </Link>
                     </td>
-                    <td>{safe(row.whatsapp)}</td>
+                    <td><WhatsappCell value={row.whatsapp} /></td>
                     <td>{dateShort(row.ultima_visita ?? row.ultima_reserva)}</td>
                     <td>{safe(row.dias_sin_visita)}</td>
                     <td>
@@ -703,7 +753,7 @@ export default async function ClientesPage({ searchParams }: { searchParams: Sea
                         {safe(row.cliente)}
                       </Link>
                     </td>
-                    <td>{safe(row.whatsapp)}</td>
+                    <td><WhatsappCell value={row.whatsapp} /></td>
                     <td>{dateShort(row.ultima_visita ?? row.ultima_reserva)}</td>
                     <td>
                       <Badge tone={cardToneByEstado(getEstado(row))}>{getEstado(row)}</Badge>
@@ -727,10 +777,6 @@ export default async function ClientesPage({ searchParams }: { searchParams: Sea
 
       <style>
         {`
-          .clientesPage {
-            transform: translateX(-155px);
-          }
-
           .crmLink {
             color: var(--green);
             font-weight: 950;
@@ -739,12 +785,6 @@ export default async function ClientesPage({ searchParams }: { searchParams: Sea
 
           .crmLink:hover {
             text-decoration: underline;
-          }
-
-          @media (max-width: 1280px) {
-            .clientesPage {
-              transform: none;
-            }
           }
         `}
       </style>

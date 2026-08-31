@@ -176,6 +176,33 @@ async function saveCustomServiceToCatalog({
   });
 }
 
+export async function lookupClienteAlertaAction(whatsapp: string, dni: string) {
+  await requireModuleAccess("nueva-atencion");
+
+  const cleanWhatsapp = clean(whatsapp);
+  const cleanDni = clean(dni);
+
+  if (!cleanWhatsapp && !cleanDni) {
+    return { cliente: "", alerta: "" };
+  }
+
+  const filter = cleanWhatsapp
+    ? `whatsapp=eq.${encodeURIComponent(cleanWhatsapp)}`
+    : `dni=eq.${encodeURIComponent(cleanDni)}`;
+
+  const result = await supabaseSelectWhere<{ cliente?: string; alerta_atencion?: string }>(
+    "clientes",
+    `select=cliente,alerta_atencion&${filter}&limit=1`
+  );
+
+  const row = result.data?.[0];
+
+  return {
+    cliente: String(row?.cliente ?? "").trim(),
+    alerta: String(row?.alerta_atencion ?? "").trim(),
+  };
+}
+
 export async function createAtencionAction(formData: FormData) {
   const session = await requireModuleAccess("nueva-atencion");
   const confirmarGuardado = clean(formData.get("confirmar_guardado"));

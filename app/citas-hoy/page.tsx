@@ -1,6 +1,6 @@
 import { requireModuleAccess } from "@/lib/auth";
 import { CajaSidebar } from "@/components/CajaSidebar";
-import { supabaseSelectWhere } from "@/lib/supabaseServer";
+import { supabaseSelect, supabaseSelectWhere } from "@/lib/supabaseServer";
 
 type Row = Record<string, any>;
 
@@ -56,12 +56,37 @@ function isValidDateInput(value: string | undefined) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
-function normalizeSede(value: string | undefined) {
-  if (value === "Miraflores" || value === "San Borja" || value === "TODAS") {
-    return value;
-  }
+function normalizeSede(value: string | undefined, validSedes: string[]) {
+  if (value === "TODAS") return value;
+  if (value && validSedes.includes(value)) return value;
 
   return "TODAS";
+}
+
+function list(config: Row[], name: string) {
+  return config
+    .filter((row) => row.lista === name && row.activo !== false)
+    .sort((a, b) => Number(a.orden ?? 0) - Number(b.orden ?? 0));
+}
+
+function Options({
+  rows,
+  fallback,
+}: {
+  rows: Row[];
+  fallback: string[];
+}) {
+  const values = rows.length ? rows.map((row) => String(row.valor)) : fallback;
+
+  return (
+    <>
+      {values.map((value) => (
+        <option key={value} value={value}>
+          {value}
+        </option>
+      ))}
+    </>
+  );
 }
 
 function dateLabel(value: string) {
@@ -80,12 +105,24 @@ function hourLabel(value: any) {
   return String(value).slice(0, 5);
 }
 
+function waHref(value: any) {
+  let digits = String(value ?? "").replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.length > 9 && digits.startsWith("51")) {
+    digits = digits.slice(2);
+  }
+  digits = digits.slice(-9);
+  return `https://wa.me/51${digits}`;
+}
+
 function Badge({
   children,
   tone = "default",
+  title,
 }: {
   children: React.ReactNode;
-  tone?: "default" | "good" | "warn";
+  tone?: "default" | "good" | "warn" | "danger";
+  title?: string;
 }) {
   const styles: Record<string, React.CSSProperties> = {
     default: {
@@ -103,10 +140,16 @@ function Badge({
       color: "var(--text)",
       border: "1px solid var(--line)",
     },
+    danger: {
+      background: "var(--danger)",
+      color: "var(--danger-text)",
+      border: "1px solid rgba(163, 50, 37, 0.18)",
+    },
   };
 
   return (
     <span
+      title={title}
       style={{
         display: "inline-flex",
         alignItems: "center",
@@ -123,16 +166,27 @@ function Badge({
   );
 }
 
+function AlertaBadge({ alerta }: { alerta: string }) {
+  if (!alerta) return null;
+
+  return (
+    <Badge tone="danger" title={alerta}>
+      ⚠ Alerta cliente
+    </Badge>
+  );
+}
+
 type CitaPresentation = {
   row: Row;
   movimientoId: string;
   terapistas: string;
   pendiente: number;
   comprobante: string;
+  alerta: string;
 };
 
 function CitaMobileCard({ cita }: { cita: CitaPresentation }) {
-  const { row, movimientoId, terapistas, pendiente, comprobante } = cita;
+  const { row, movimientoId, terapistas, pendiente, comprobante, alerta } = cita;
   const comprobanteOk = comprobante.toUpperCase().includes("OK");
 
   return (
@@ -145,6 +199,11 @@ function CitaMobileCard({ cita }: { cita: CitaPresentation }) {
       <div className="citasHoyCardIdentity">
         <h3>{row.cliente}</h3>
         <p>{row.servicio}</p>
+        {alerta && (
+          <div style={{ marginTop: "8px" }}>
+            <AlertaBadge alerta={alerta} />
+          </div>
+        )}
       </div>
 
       <div className="citasHoyCardTherapist">
@@ -181,7 +240,11 @@ function CitaMobileCard({ cita }: { cita: CitaPresentation }) {
       {row.whatsapp && (
         <p className="citasHoyWhatsapp">
           <span>WhatsApp</span>
-          <strong>{row.whatsapp}</strong>
+          <strong>
+            <a href={waHref(row.whatsapp)} target="_blank" rel="noopener noreferrer" style={{ color: "var(--green)" }}>
+              {row.whatsapp}
+            </a>
+          </strong>
         </p>
       )}
 
@@ -198,9 +261,14 @@ export default async function CitasHoyPage({
   const session = await requireModuleAccess("citas-hoy");
   const params = await searchParams;
 
+  const config = await supabaseSelect<Row>("config_listas");
+  const sedeFallback = ["Miraflores", "San Borja"];
+  const sedesRows = list(config.data, "SEDES");
+  const sedeValues = sedesRows.length ? sedesRows.map((row) => String(row.valor)) : sedeFallback;
+
   const today = todayInLima();
   const selectedFecha = isValidDateInput(params?.fecha) ? String(params.fecha) : today;
-  const selectedSede = normalizeSede(params?.sede);
+  const selectedSede = normalizeSede(params?.sede, sedeValues);
   const sedeLabel = selectedSede === "TODAS" ? "todas las sedes" : selectedSede;
 
   const movimientosQuery = [
@@ -232,7 +300,37 @@ export default async function CitasHoyPage({
     detallesQuery.join("&")
   );
 
-  const errors = [movimientos.error, detalles.error].filter(Boolean);
+  const whatsappList = Array.from(
+    new Set(
+      movimientos.data
+        .map((row) => String(row.whatsapp ?? "").trim())
+        .filter(Boolean)
+    )
+  );
+
+  const alertasResult = whatsappList.length
+    ? await supabaseSelectWhere<Row>(
+        "vista_clientes_crm_catalogo",
+        [
+          "select=whatsapp,alerta_atencion",
+          `whatsapp=in.(${whatsappList.map((value) => encodeURIComponent(value)).join(",")})`,
+        ].join("&")
+      )
+    : { data: [] as Row[], error: null };
+
+  const alertaPorWhatsapp = new Map<string, string>();
+
+  for (const row of alertasResult.data) {
+    const whatsapp = String(row.whatsapp ?? "").trim();
+    const alerta = String(row.alerta_atencion ?? "").trim();
+    if (whatsapp && alerta) {
+      alertaPorWhatsapp.set(whatsapp, alerta);
+    }
+  }
+
+  const errors = [config.error, movimientos.error, detalles.error, alertasResult.error].filter(
+    Boolean
+  );
 
   const detallePorMovimiento = new Map<string, Row[]>();
 
@@ -274,6 +372,7 @@ export default async function CitasHoyPage({
         row.tipo_comprobante ||
         "-"
     );
+    const alerta = alertaPorWhatsapp.get(String(row.whatsapp ?? "").trim()) ?? "";
 
     return {
       row,
@@ -281,6 +380,7 @@ export default async function CitasHoyPage({
       terapistas,
       pendiente,
       comprobante,
+      alerta,
     };
   });
 
@@ -335,8 +435,7 @@ export default async function CitasHoyPage({
               Sede
               <select name="sede" defaultValue={selectedSede} style={inputStyle}>
                 <option value="TODAS">Todas las sedes</option>
-                <option value="Miraflores">Miraflores</option>
-                <option value="San Borja">San Borja</option>
+                <Options rows={sedesRows} fallback={sedeFallback} />
               </select>
             </label>
 
@@ -490,11 +589,27 @@ export default async function CitasHoyPage({
                         terapistas,
                         pendiente,
                         comprobante,
+                        alerta,
                       }) => (
                         <tr key={movimientoId}>
                           <td>{hourLabel(row.hora)}</td>
-                          <td className="strong">{row.cliente}</td>
-                          <td>{row.whatsapp || "-"}</td>
+                          <td className="strong">
+                            {row.cliente}
+                            {alerta && (
+                              <div style={{ marginTop: "6px" }}>
+                                <AlertaBadge alerta={alerta} />
+                              </div>
+                            )}
+                          </td>
+                          <td>
+                            {row.whatsapp ? (
+                              <a href={waHref(row.whatsapp)} target="_blank" rel="noopener noreferrer" style={{ color: "var(--green)" }}>
+                                {row.whatsapp}
+                              </a>
+                            ) : (
+                              "-"
+                            )}
+                          </td>
                           <td>{row.sede}</td>
                           <td>{row.servicio}</td>
                           <td>{terapistas}</td>

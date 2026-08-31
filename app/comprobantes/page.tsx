@@ -1,6 +1,7 @@
 import { requireModuleAccess } from "@/lib/auth";
 import { CajaSidebar } from "@/components/CajaSidebar";
 import { supabaseSelectWhere } from "@/lib/supabaseServer";
+import { SubmitButton } from "@/components/SubmitButton";
 import { updateComprobanteAction } from "./actions";
 
 type Row = Record<string, any>;
@@ -52,6 +53,16 @@ function dateLabel(value: any) {
 function hourLabel(value: any) {
   if (!value) return "-";
   return String(value).slice(0, 5);
+}
+
+function waHref(value: any) {
+  let digits = String(value ?? "").replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.length > 9 && digits.startsWith("51")) {
+    digits = digits.slice(2);
+  }
+  digits = digits.slice(-9);
+  return `https://wa.me/51${digits}`;
 }
 
 function isPendingComprobante(row: Row) {
@@ -166,7 +177,15 @@ function ComprobanteCard({ row }: { row: Row }) {
             {row.servicio || "-"}
           </p>
           <p style={{ margin: "8px 0 0", color: "var(--muted)", lineHeight: 1.5 }}>
-            WhatsApp: {row.whatsapp || "-"} · Movimiento: {movimientoId}
+            WhatsApp:{" "}
+            {row.whatsapp ? (
+              <a href={waHref(row.whatsapp)} target="_blank" rel="noopener noreferrer" style={{ color: "var(--green)" }}>
+                {row.whatsapp}
+              </a>
+            ) : (
+              "-"
+            )}{" "}
+            · Movimiento: {movimientoId}
           </p>
         </div>
 
@@ -247,8 +266,7 @@ function ComprobanteCard({ row }: { row: Row }) {
         </label>
 
         <div style={{ display: "flex", justifyContent: "flex-end" }}>
-          <button
-            type="submit"
+          <SubmitButton
             style={{
               border: 0,
               borderRadius: "16px",
@@ -260,7 +278,7 @@ function ComprobanteCard({ row }: { row: Row }) {
             }}
           >
             Guardar comprobante
-          </button>
+          </SubmitButton>
         </div>
       </form>
     </article>
