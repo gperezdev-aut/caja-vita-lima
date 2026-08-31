@@ -1,6 +1,6 @@
 import { requireModuleAccess } from "@/lib/auth";
 import { CajaSidebar } from "@/components/CajaSidebar";
-import { supabaseSelectWhere } from "@/lib/supabaseServer";
+import { supabaseSelect, supabaseSelectWhere } from "@/lib/supabaseServer";
 
 type Row = Record<string, any>;
 
@@ -56,12 +56,37 @@ function isValidDateInput(value: string | undefined) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
-function normalizeSede(value: string | undefined) {
-  if (value === "Miraflores" || value === "San Borja" || value === "TODAS") {
-    return value;
-  }
+function normalizeSede(value: string | undefined, validSedes: string[]) {
+  if (value === "TODAS") return value;
+  if (value && validSedes.includes(value)) return value;
 
   return "TODAS";
+}
+
+function list(config: Row[], name: string) {
+  return config
+    .filter((row) => row.lista === name && row.activo !== false)
+    .sort((a, b) => Number(a.orden ?? 0) - Number(b.orden ?? 0));
+}
+
+function Options({
+  rows,
+  fallback,
+}: {
+  rows: Row[];
+  fallback: string[];
+}) {
+  const values = rows.length ? rows.map((row) => String(row.valor)) : fallback;
+
+  return (
+    <>
+      {values.map((value) => (
+        <option key={value} value={value}>
+          {value}
+        </option>
+      ))}
+    </>
+  );
 }
 
 function dateLabel(value: string) {
@@ -198,9 +223,14 @@ export default async function CitasHoyPage({
   const session = await requireModuleAccess("citas-hoy");
   const params = await searchParams;
 
+  const config = await supabaseSelect<Row>("config_listas");
+  const sedeFallback = ["Miraflores", "San Borja"];
+  const sedesRows = list(config.data, "SEDES");
+  const sedeValues = sedesRows.length ? sedesRows.map((row) => String(row.valor)) : sedeFallback;
+
   const today = todayInLima();
   const selectedFecha = isValidDateInput(params?.fecha) ? String(params.fecha) : today;
-  const selectedSede = normalizeSede(params?.sede);
+  const selectedSede = normalizeSede(params?.sede, sedeValues);
   const sedeLabel = selectedSede === "TODAS" ? "todas las sedes" : selectedSede;
 
   const movimientosQuery = [
@@ -232,7 +262,7 @@ export default async function CitasHoyPage({
     detallesQuery.join("&")
   );
 
-  const errors = [movimientos.error, detalles.error].filter(Boolean);
+  const errors = [config.error, movimientos.error, detalles.error].filter(Boolean);
 
   const detallePorMovimiento = new Map<string, Row[]>();
 
@@ -335,8 +365,7 @@ export default async function CitasHoyPage({
               Sede
               <select name="sede" defaultValue={selectedSede} style={inputStyle}>
                 <option value="TODAS">Todas las sedes</option>
-                <option value="Miraflores">Miraflores</option>
-                <option value="San Borja">San Borja</option>
+                <Options rows={sedesRows} fallback={sedeFallback} />
               </select>
             </label>
 

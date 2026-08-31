@@ -2,7 +2,7 @@ import type { CSSProperties, ReactNode } from "react";
 import Link from "next/link";
 import { requireModuleAccess } from "@/lib/auth";
 import { CajaSidebar } from "@/components/CajaSidebar";
-import { supabaseSelectWhere } from "@/lib/supabaseServer";
+import { supabaseSelect, supabaseSelectWhere } from "@/lib/supabaseServer";
 
 type Row = Record<string, any>;
 
@@ -57,6 +57,32 @@ function norm(value: any) {
     .normalize("NFD")
     .replace(/\p{Diacritic}/gu, "")
     .trim();
+}
+
+function list(config: Row[], name: string) {
+  return config
+    .filter((row) => row.lista === name && row.activo !== false)
+    .sort((a, b) => Number(a.orden ?? 0) - Number(b.orden ?? 0));
+}
+
+function Options({
+  rows,
+  fallback,
+}: {
+  rows: Row[];
+  fallback: string[];
+}) {
+  const values = rows.length ? rows.map((row) => String(row.valor)) : fallback;
+
+  return (
+    <>
+      {values.map((value) => (
+        <option key={value} value={value}>
+          {value}
+        </option>
+      ))}
+    </>
+  );
 }
 
 function clienteHref(row: Row) {
@@ -313,6 +339,10 @@ export default async function ClientesPage({ searchParams }: { searchParams: Sea
   const sede = String(params.sede ?? "TODAS");
   const tipo = String(params.tipo ?? "TODOS");
 
+  const config = await supabaseSelect<Row>("config_listas");
+  const sedeFallback = ["Miraflores", "San Borja"];
+  const sedesRows = list(config.data, "SEDES");
+
   const clientesResult = await supabaseSelectWhere<Row>(
     "vista_clientes_crm_catalogo",
     ["select=*", "order=total_gastado.desc", "limit=1000"].join("&")
@@ -323,7 +353,7 @@ export default async function ClientesPage({ searchParams }: { searchParams: Sea
     ["select=*", "order=total_ingresado.desc", "limit=300"].join("&")
   );
 
-  const errors = [clientesResult.error, serviciosResult.error].filter(Boolean);
+  const errors = [config.error, clientesResult.error, serviciosResult.error].filter(Boolean);
 
   let clientes = clientesResult.data ?? [];
 
@@ -500,8 +530,7 @@ export default async function ClientesPage({ searchParams }: { searchParams: Sea
               Sede
               <select name="sede" defaultValue={sede} style={inputStyle}>
                 <option value="TODAS">Todas</option>
-                <option value="Miraflores">Miraflores</option>
-                <option value="San Borja">San Borja</option>
+                <Options rows={sedesRows} fallback={sedeFallback} />
               </select>
             </label>
 
