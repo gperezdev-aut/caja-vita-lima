@@ -119,6 +119,22 @@ export function getDashboardTotals({
   };
 }
 
+/**
+ * Convierte un rango de meses "YYYY-MM" (como los que ya usa el dashboard)
+ * al primer y último día calendario de ese rango, en formato "YYYY-MM-DD",
+ * para poder filtrar tablas con columna fecha (DATE) como caja_movimientos
+ * o caja_salidas.
+ */
+export function monthRangeToDates(desde: string, hasta: string) {
+  const fechaDesde = `${desde}-01`;
+
+  const [hastaYear, hastaMonth] = hasta.split("-").map(Number);
+  const lastDay = new Date(hastaYear, hastaMonth, 0).getDate();
+  const fechaHasta = `${hasta}-${String(lastDay).padStart(2, "0")}`;
+
+  return { fechaDesde, fechaHasta };
+}
+
 export type DashboardFilterParams = {
   desde?: string;
   hasta?: string;
