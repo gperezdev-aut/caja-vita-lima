@@ -16,6 +16,7 @@
     "@types/node": "26.1.1",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
+    "exceljs": "^4.4.0",
     "next": "16.2.11",
     "react": "19.2.8",
     "react-dom": "19.2.8",
