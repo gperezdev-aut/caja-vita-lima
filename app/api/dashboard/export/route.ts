@@ -1,15 +1,18 @@
 import ExcelJS from "exceljs";
 import { NextRequest, NextResponse } from "next/server";
 import { requireModuleAccess } from "@/lib/auth";
-import { supabaseSelect } from "@/lib/supabaseServer";
+import { supabaseSelect, supabaseSelectAllWhere } from "@/lib/supabaseServer";
 import {
   DASHBOARD_KPIS,
   TODAS_LAS_SEDES,
   getDashboardTotals,
   monthLabel,
+  monthRangeToDates,
   resolveDashboardFilters,
   type Row,
 } from "@/lib/dashboardTotals";
+
+const MONEY_FORMAT = '"S/" #,##0.00';
 
 function money(value: number) {
   return `S/ ${value.toLocaleString("es-PE", {
@@ -20,6 +23,23 @@ function money(value: number) {
 
 function numberFmt(value: number) {
   return value.toLocaleString("es-PE");
+}
+
+function hourLabel(value: unknown) {
+  if (!value) return "";
+  return String(value).slice(0, 5);
+}
+
+function setColumnWidths(sheet: ExcelJS.Worksheet, widths: number[]) {
+  widths.forEach((width, index) => {
+    sheet.getColumn(index + 1).width = width;
+  });
+}
+
+function addMoneyCell(row: ExcelJS.Row, columnIndex: number, value: unknown) {
+  const cell = row.getCell(columnIndex);
+  cell.value = Number(value ?? 0);
+  cell.numFmt = MONEY_FORMAT;
 }
 
 export async function GET(request: NextRequest) {
@@ -76,6 +96,100 @@ export async function GET(request: NextRequest) {
 
   sheet.getColumn(1).width = 30;
   sheet.getColumn(2).width = 22;
+
+  const { fechaDesde, fechaHasta } = monthRangeToDates(desde, hasta);
+  const sedeFilter = selectedSede !== TODAS_LAS_SEDES
+    ? [`sede=eq.${encodeURIComponent(selectedSede)}`]
+    : [];
+
+  const ingresosQuery = [
+    "select=fecha,hora,sede,cliente,whatsapp,servicio,total_cobrar,total_pagado,pendiente,estado_boleta",
+    `fecha=gte.${fechaDesde}`,
+    `fecha=lte.${fechaHasta}`,
+    ...sedeFilter,
+    "order=fecha.asc,hora.asc",
+  ].join("&");
+
+  const salidasQuery = [
+    "select=fecha,hora,sede,tipo_gasto,concepto,monto,responsable,observacion",
+    `fecha=gte.${fechaDesde}`,
+    `fecha=lte.${fechaHasta}`,
+    ...sedeFilter,
+    "order=fecha.asc,hora.asc",
+  ].join("&");
+
+  const [ingresosResult, salidasResult] = await Promise.all([
+    supabaseSelectAllWhere<Row>("caja_movimientos", ingresosQuery),
+    supabaseSelectAllWhere<Row>("caja_salidas", salidasQuery),
+  ]);
+
+  const ingresosSheet = workbook.addWorksheet("Ingresos");
+  const ingresosHeaderRow = ingresosSheet.addRow([
+    "Fecha",
+    "Hora",
+    "Sede",
+    "Cliente",
+    "WhatsApp",
+    "Servicio",
+    "Total cobrar",
+    "Total pagado",
+    "Pendiente",
+    "Estado boleta",
+  ]);
+  ingresosHeaderRow.font = { bold: true };
+
+  if (ingresosResult.error) {
+    ingresosSheet.addRow([`No se pudo cargar Ingresos: ${ingresosResult.error}`]);
+  }
+
+  for (const row of ingresosResult.data) {
+    const excelRow = ingresosSheet.addRow([
+      row.fecha ?? "",
+      hourLabel(row.hora),
+      row.sede ?? "",
+      row.cliente ?? "",
+      row.whatsapp ?? "",
+      row.servicio ?? "",
+    ]);
+    addMoneyCell(excelRow, 7, row.total_cobrar);
+    addMoneyCell(excelRow, 8, row.total_pagado);
+    addMoneyCell(excelRow, 9, row.pendiente);
+    excelRow.getCell(10).value = row.estado_boleta ?? "";
+  }
+
+  setColumnWidths(ingresosSheet, [12, 8, 14, 26, 14, 32, 14, 14, 14, 16]);
+
+  const salidasSheet = workbook.addWorksheet("Salidas");
+  const salidasHeaderRow = salidasSheet.addRow([
+    "Fecha",
+    "Hora",
+    "Sede",
+    "Tipo de gasto",
+    "Concepto",
+    "Monto",
+    "Responsable",
+    "Observación",
+  ]);
+  salidasHeaderRow.font = { bold: true };
+
+  if (salidasResult.error) {
+    salidasSheet.addRow([`No se pudo cargar Salidas: ${salidasResult.error}`]);
+  }
+
+  for (const row of salidasResult.data) {
+    const excelRow = salidasSheet.addRow([
+      row.fecha ?? "",
+      hourLabel(row.hora),
+      row.sede ?? "",
+      row.tipo_gasto ?? "",
+      row.concepto ?? "",
+    ]);
+    addMoneyCell(excelRow, 6, row.monto);
+    excelRow.getCell(7).value = row.responsable ?? "";
+    excelRow.getCell(8).value = row.observacion ?? "";
+  }
+
+  setColumnWidths(salidasSheet, [12, 8, 14, 16, 32, 14, 16, 34]);
 
   const buffer = await workbook.xlsx.writeBuffer();
   const filename = `dashboard_${desde}_${hasta}.xlsx`;
