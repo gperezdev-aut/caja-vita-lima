@@ -2,16 +2,22 @@ import { requireModuleAccess } from "@/lib/auth";
 import { CajaSidebar } from "@/components/CajaSidebar";
 import { supabaseSelect } from "@/lib/supabaseServer";
 import Link from "next/link";
-
-type Row = Record<string, any>;
+import {
+  TODAS_LAS_SEDES,
+  getCuponidadFromMonthlyRow,
+  getDashboardTotals,
+  getNumber,
+  monthLabel,
+  normalizeMonth,
+  resolveDashboardFilters,
+  type Row,
+} from "@/lib/dashboardTotals";
 
 type SearchParams = Promise<{
   desde?: string;
   hasta?: string;
   sede?: string;
 }>;
-
-const TODAS_LAS_SEDES = "TODAS";
 
 function money(value: any) {
   const numberValue = Number(value ?? 0);
@@ -23,93 +29,6 @@ function money(value: any) {
 
 function numberFmt(value: any) {
   return Number(value ?? 0).toLocaleString("es-PE");
-}
-
-function monthLabel(value: any) {
-  if (!value) return "-";
-
-  const safeValue = String(value).length === 7 ? `${value}-01` : String(value);
-  const date = new Date(`${safeValue}T00:00:00`);
-
-  if (Number.isNaN(date.getTime())) return "-";
-
-  return date.toLocaleDateString("es-PE", {
-    month: "long",
-    year: "numeric",
-  });
-}
-
-function normalizeMonth(value: any) {
-  const text = String(value ?? "").trim();
-
-  if (/^\d{4}-\d{2}$/.test(text)) return text;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text.slice(0, 7);
-
-  return "";
-}
-
-function getNumber(row: Row, key: string) {
-  return Number(row?.[key] ?? 0);
-}
-
-function getCuponidadFromMonthlyRow(row: Row) {
-  const totalIngresos = getNumber(row, "Total ingresos confirmados");
-  const servicios = getNumber(row, "Ingresos por servicios");
-  const giftCards = getNumber(row, "Ingresos por Gift Cards");
-  const prestamos = getNumber(row, "Préstamos de caja");
-
-  return totalIngresos - servicios - giftCards - prestamos;
-}
-
-function sumMonthlyRows(rows: Row[]) {
-  return rows.reduce(
-    (acc, row) => {
-      acc.ingresos += getNumber(row, "Total ingresos confirmados");
-      acc.salidas += getNumber(row, "Total salidas");
-      acc.neto += getNumber(row, "Resultado neto confirmado");
-      acc.pendientes += getNumber(row, "Filas pendientes de revisión");
-      acc.servicios += getNumber(row, "Ingresos por servicios");
-      acc.giftCards += getNumber(row, "Ingresos por Gift Cards");
-      acc.prestamos += getNumber(row, "Préstamos de caja");
-      acc.cuponidad += getCuponidadFromMonthlyRow(row);
-      return acc;
-    },
-    {
-      ingresos: 0,
-      salidas: 0,
-      neto: 0,
-      pendientes: 0,
-      servicios: 0,
-      giftCards: 0,
-      prestamos: 0,
-      cuponidad: 0,
-    }
-  );
-}
-
-function getDashboardTotals({
-  filterActive,
-  resumenRow,
-  filteredMonthlyRows,
-}: {
-  filterActive: boolean;
-  resumenRow: Row;
-  filteredMonthlyRows: Row[];
-}) {
-  if (filterActive) {
-    return sumMonthlyRows(filteredMonthlyRows);
-  }
-
-  return {
-    ingresos: getNumber(resumenRow, "Total ingresos confirmados"),
-    salidas: getNumber(resumenRow, "Total salidas"),
-    neto: getNumber(resumenRow, "Resultado neto confirmado"),
-    pendientes: getNumber(resumenRow, "Total filas pendientes"),
-    servicios: getNumber(resumenRow, "Total servicios"),
-    giftCards: getNumber(resumenRow, "Total Gift Cards"),
-    prestamos: getNumber(resumenRow, "Total préstamos de caja"),
-    cuponidad: getNumber(resumenRow, "Total Cuponidad en caja"),
-  };
 }
 
 function Card({
@@ -164,24 +83,8 @@ export default async function HomePage({
   const r = resumen.data?.[0] ?? {};
   const sinFecha = salidasSinFecha.data?.[0] ?? {};
 
-  const months = mensual.data
-    .map((row) => normalizeMonth(row.mes))
-    .filter(Boolean)
-    .sort();
-
-  const minMonth = months[0] ?? "2026-01";
-  const maxMonth = months[months.length - 1] ?? "2026-12";
-
-  const rawDesde = normalizeMonth(params?.desde) || minMonth;
-  const rawHasta = normalizeMonth(params?.hasta) || maxMonth;
-  const selectedSede = String(params?.sede || TODAS_LAS_SEDES);
-
-  const desde = rawDesde <= rawHasta ? rawDesde : rawHasta;
-  const hasta = rawDesde <= rawHasta ? rawHasta : rawDesde;
-
-  const filterActive = Boolean(
-    params?.desde || params?.hasta || selectedSede !== TODAS_LAS_SEDES
-  );
+  const { desde, hasta, selectedSede, filterActive, filteredMonthlyRows } =
+    resolveDashboardFilters({ params, mensualRows: mensual.data });
 
   const sedes = Array.from(
     new Set(
@@ -190,19 +93,6 @@ export default async function HomePage({
         .filter(Boolean)
     )
   ).sort((a, b) => a.localeCompare(b, "es"));
-
-  const filteredMonthlyRows = mensual.data.filter((row) => {
-    const rowMonth = normalizeMonth(row.mes);
-    const rowSede = String(row.sede ?? "").trim();
-
-    if (!rowMonth) return false;
-    if (rowMonth < desde || rowMonth > hasta) return false;
-    if (selectedSede !== TODAS_LAS_SEDES && rowSede !== selectedSede) {
-      return false;
-    }
-
-    return true;
-  });
 
   const dashboardTotals = getDashboardTotals({
     filterActive,
@@ -395,6 +285,23 @@ export default async function HomePage({
               >
                 Ver todo
               </Link>
+
+              <a
+                href={`/api/dashboard/export?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}&sede=${encodeURIComponent(selectedSede)}`}
+                style={{
+                  background: "white",
+                  color: "var(--green)",
+                  border: "1px solid var(--line)",
+                  borderRadius: "16px",
+                  padding: "15px 18px",
+                  fontWeight: 850,
+                  textDecoration: "none",
+                  display: "inline-flex",
+                  alignItems: "center",
+                }}
+              >
+                Descargar Excel
+              </a>
             </div>
           </form>
         </section>
