@@ -456,7 +456,7 @@ export default async function ClientesPage({ searchParams }: { searchParams: Sea
   const serviciosTop = serviciosAgrupados.slice(0, 10);
 
   return (
-    <main className="appShell" style={{ overflowX: "hidden" }}>
+    <main className="appShell">
       <CajaSidebar session={session} />
 
       <section className="page clientesPage">

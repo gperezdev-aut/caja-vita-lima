@@ -403,7 +403,7 @@ export default async function ClienteDetallePage({
   const email = safe(cliente?.email);
 
   return (
-    <main className="appShell" style={{ overflowX: "hidden" }}>
+    <main className="appShell">
       <CajaSidebar session={session} />
 
       <section className="page clienteDetallePage">
