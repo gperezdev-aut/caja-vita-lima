@@ -1,10 +1,15 @@
-import type { CSSProperties, ReactNode } from "react";
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireModuleAccess } from "@/lib/auth";
 import { CajaSidebar } from "@/components/CajaSidebar";
 import { supabaseSelectWhere } from "@/lib/supabaseServer";
 import { SubmitButton } from "@/components/SubmitButton";
+import { Badge } from "@/components/Badge";
+import { FormField } from "@/components/FormField";
+import { Input } from "@/components/Input";
+import { Select } from "@/components/Select";
+import { Textarea } from "@/components/Textarea";
 import { updateClienteCrmAction } from "./actions";
 
 type Row = Record<string, any>;
@@ -156,54 +161,6 @@ function Card({
   );
 }
 
-function Badge({
-  children,
-  tone = "default",
-}: {
-  children: ReactNode;
-  tone?: "default" | "good" | "warn" | "danger";
-}) {
-  const styles: Record<string, CSSProperties> = {
-    default: {
-      background: "white",
-      color: "var(--text)",
-      border: "1px solid var(--line)",
-    },
-    good: {
-      background: "var(--green-soft)",
-      color: "var(--green)",
-      border: "1px solid rgba(31, 107, 79, 0.18)",
-    },
-    warn: {
-      background: "var(--warn)",
-      color: "var(--text)",
-      border: "1px solid var(--line)",
-    },
-    danger: {
-      background: "var(--danger)",
-      color: "var(--danger-text)",
-      border: "1px solid rgba(163, 50, 37, 0.18)",
-    },
-  };
-
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        borderRadius: "999px",
-        padding: "7px 10px",
-        fontSize: "12px",
-        fontWeight: 850,
-        whiteSpace: "nowrap",
-        ...styles[tone],
-      }}
-    >
-      {children}
-    </span>
-  );
-}
-
 function InfoItem({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div
@@ -240,50 +197,6 @@ function InfoItem({ label, value }: { label: string; value: ReactNode }) {
     </div>
   );
 }
-
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}) {
-  return (
-    <label
-      style={{
-        display: "grid",
-        gap: "8px",
-        color: "var(--muted)",
-        fontSize: "13px",
-        fontWeight: 850,
-        minWidth: 0,
-      }}
-    >
-      {label}
-      {children}
-    </label>
-  );
-}
-
-const inputStyle: CSSProperties = {
-  width: "100%",
-  minWidth: 0,
-  border: "1px solid var(--line)",
-  borderRadius: "15px",
-  background: "#fffaf4",
-  color: "var(--text)",
-  padding: "13px 14px",
-  outline: "none",
-  fontWeight: 750,
-};
-
-const textareaStyle: CSSProperties = {
-  ...inputStyle,
-  minHeight: "96px",
-  resize: "vertical",
-  fontFamily: "inherit",
-  lineHeight: 1.45,
-};
 
 function groupByService(rows: Row[]) {
   const map = new Map<string, Row>();
@@ -556,115 +469,123 @@ export default async function ClienteDetallePage({
           <form action={updateClienteCrmAction}>
             <input type="hidden" name="cliente_id" value={safe(cliente?.cliente_id)} />
 
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                gap: "14px",
-              }}
-            >
-              <Field label="Cliente">
-                <input name="cliente" defaultValue={textValue(cliente?.cliente)} style={inputStyle} />
-              </Field>
+            <fieldset className="formSection">
+              <legend className="formSectionTitle">Contacto</legend>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                  gap: "14px",
+                }}
+              >
+                <FormField label="Cliente">
+                  <Input name="cliente" defaultValue={textValue(cliente?.cliente)} className="formControlEmphasis" />
+                </FormField>
 
-              <Field label="WhatsApp">
-                <input name="whatsapp" defaultValue={textValue(cliente?.whatsapp)} placeholder="Ej. 987654321" style={inputStyle} />
-              </Field>
+                <FormField label="WhatsApp">
+                  <Input name="whatsapp" defaultValue={textValue(cliente?.whatsapp)} placeholder="Ej. 987654321" className="formControlEmphasis" />
+                </FormField>
 
-              <Field label="DNI">
-                <input name="dni" defaultValue={textValue(cliente?.dni)} placeholder="Opcional" style={inputStyle} />
-              </Field>
+                <FormField label="DNI">
+                  <Input name="dni" defaultValue={textValue(cliente?.dni)} placeholder="Opcional" className="formControlEmphasis" />
+                </FormField>
 
-              <Field label="Email">
-                <input name="email" type="email" defaultValue={textValue(cliente?.email)} placeholder="Opcional" style={inputStyle} />
-              </Field>
+                <FormField label="Email">
+                  <Input name="email" type="email" defaultValue={textValue(cliente?.email)} placeholder="Opcional" className="formControlEmphasis" />
+                </FormField>
 
-              <Field label="Teléfono alternativo">
-                <input name="telefono_alternativo" defaultValue={textValue(cliente?.telefono_alternativo)} placeholder="Opcional" style={inputStyle} />
-              </Field>
+                <FormField label="Teléfono alternativo">
+                  <Input name="telefono_alternativo" defaultValue={textValue(cliente?.telefono_alternativo)} placeholder="Opcional" className="formControlEmphasis" />
+                </FormField>
+              </div>
+            </fieldset>
 
-              <Field label="Fecha de nacimiento">
-                <input name="fecha_nacimiento" type="date" defaultValue={dateInput(cliente?.fecha_nacimiento)} style={inputStyle} />
-              </Field>
+            <fieldset className="formSection">
+              <legend className="formSectionTitle">Segmentación</legend>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                  gap: "14px",
+                }}
+              >
+                <FormField label="Fecha de nacimiento">
+                  <Input name="fecha_nacimiento" type="date" defaultValue={dateInput(cliente?.fecha_nacimiento)} className="formControlEmphasis" />
+                </FormField>
 
-              <Field label="Cliente potencial">
-                <select name="cliente_potencial" defaultValue={textValue(cliente?.cliente_potencial)} style={inputStyle}>
-                  <option value="">Sin definir</option>
-                  <option value="ALTO">ALTO</option>
-                  <option value="MEDIO">MEDIO</option>
-                  <option value="BAJO">BAJO</option>
-                  <option value="NO">NO</option>
-                </select>
-              </Field>
+                <FormField label="Cliente potencial">
+                  <Select name="cliente_potencial" defaultValue={textValue(cliente?.cliente_potencial)} className="formControlEmphasis">
+                    <option value="">Sin definir</option>
+                    <option value="ALTO">ALTO</option>
+                    <option value="MEDIO">MEDIO</option>
+                    <option value="BAJO">BAJO</option>
+                    <option value="NO">NO</option>
+                  </Select>
+                </FormField>
 
-              <Field label="Segmento cliente">
-                <select name="segmento_cliente" defaultValue={textValue(cliente?.segmento_cliente)} style={inputStyle}>
-                  <option value="">Sin definir</option>
-                  <option value="HISTORICO">HISTORICO</option>
-                  <option value="NUEVO">NUEVO</option>
-                  <option value="VIP">VIP</option>
-                  <option value="RECURRENTE">RECURRENTE</option>
-                  <option value="RECUPERAR">RECUPERAR</option>
-                  <option value="CORPORATIVO">CORPORATIVO</option>
-                </select>
-              </Field>
-            </div>
+                <FormField label="Segmento cliente">
+                  <Select name="segmento_cliente" defaultValue={textValue(cliente?.segmento_cliente)} className="formControlEmphasis">
+                    <option value="">Sin definir</option>
+                    <option value="HISTORICO">HISTORICO</option>
+                    <option value="NUEVO">NUEVO</option>
+                    <option value="VIP">VIP</option>
+                    <option value="RECURRENTE">RECURRENTE</option>
+                    <option value="RECUPERAR">RECUPERAR</option>
+                    <option value="CORPORATIVO">CORPORATIVO</option>
+                  </Select>
+                </FormField>
 
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-                gap: "14px",
-                marginTop: "14px",
-              }}
-            >
-              <Field label="Etiquetas CRM">
-                <input
-                  name="etiquetas_crm"
-                  defaultValue={textValue(cliente?.etiquetas_crm)}
-                  placeholder="Ej. pareja, frecuente, cumpleaños, turista"
-                  style={inputStyle}
-                />
-              </Field>
+                <FormField label="Etiquetas CRM">
+                  <Input
+                    name="etiquetas_crm"
+                    defaultValue={textValue(cliente?.etiquetas_crm)}
+                    placeholder="Ej. pareja, frecuente, cumpleaños, turista"
+                    className="formControlEmphasis"
+                  />
+                </FormField>
+              </div>
+            </fieldset>
 
-              <Field label="Preferencias de atención">
-                <textarea
-                  name="preferencias_atencion"
-                  defaultValue={textValue(cliente?.preferencias_atencion)}
-                  placeholder="Ej. prefiere presión fuerte, terapeuta mujer, vino, aromaterapia..."
-                  style={textareaStyle}
-                />
-              </Field>
+            <fieldset className="formSection">
+              <legend className="formSectionTitle">Notas y preferencias</legend>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+                  gap: "14px",
+                }}
+              >
+                <FormField label="Preferencias de atención">
+                  <Textarea
+                    name="preferencias_atencion"
+                    defaultValue={textValue(cliente?.preferencias_atencion)}
+                    placeholder="Ej. prefiere presión fuerte, terapeuta mujer, vino, aromaterapia..."
+                    className="formControlEmphasis"
+                    style={{ minHeight: "96px", lineHeight: 1.45 }}
+                  />
+                </FormField>
 
-              <Field label="Alerta de atención">
-                <textarea
-                  name="alerta_atencion"
-                  defaultValue={textValue(cliente?.alerta_atencion)}
-                  placeholder="Ej. no ofrecer X, revisar alergia, tratar con cuidado, cliente sensible..."
-                  style={textareaStyle}
-                />
-              </Field>
+                <FormField label="Alerta de atención">
+                  <Textarea
+                    name="alerta_atencion"
+                    defaultValue={textValue(cliente?.alerta_atencion)}
+                    placeholder="Ej. no ofrecer X, revisar alergia, tratar con cuidado, cliente sensible..."
+                    className="formControlEmphasis"
+                    style={{ minHeight: "96px", lineHeight: 1.45 }}
+                  />
+                </FormField>
 
-              <Field label="Notas internas">
-                <textarea
-                  name="notas"
-                  defaultValue={textValue(cliente?.notas)}
-                  placeholder="Notas comerciales o de seguimiento para socios/caja."
-                  style={textareaStyle}
-                />
-              </Field>
-            </div>
+                <FormField label="Notas internas">
+                  <Textarea
+                    name="notas"
+                    defaultValue={textValue(cliente?.notas)}
+                    placeholder="Notas comerciales o de seguimiento para socios/caja."
+                    className="formControlEmphasis"
+                    style={{ minHeight: "96px", lineHeight: 1.45 }}
+                  />
+                </FormField>
+              </div>
 
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                flexWrap: "wrap",
-                gap: "14px",
-                marginTop: "18px",
-              }}
-            >
               <label
                 style={{
                   display: "inline-flex",
@@ -673,6 +594,7 @@ export default async function ClienteDetallePage({
                   color: "var(--muted)",
                   fontSize: "13px",
                   fontWeight: 850,
+                  marginTop: "14px",
                 }}
               >
                 <input
@@ -682,7 +604,15 @@ export default async function ClienteDetallePage({
                 />
                 Cliente autoriza contacto por WhatsApp
               </label>
+            </fieldset>
 
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                marginTop: "18px",
+              }}
+            >
               <SubmitButton
                 style={{
                   border: 0,

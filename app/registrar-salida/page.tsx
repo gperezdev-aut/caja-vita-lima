@@ -2,6 +2,10 @@ import { requireModuleAccess } from "@/lib/auth";
 import { CajaSidebar } from "@/components/CajaSidebar";
 import { supabaseSelect, supabaseSelectWhere } from "@/lib/supabaseServer";
 import { SubmitButton } from "@/components/SubmitButton";
+import { FormField } from "@/components/FormField";
+import { Input } from "@/components/Input";
+import { Select } from "@/components/Select";
+import { Textarea } from "@/components/Textarea";
 import { createSalidaAction } from "./actions";
 
 type Row = Record<string, any>;
@@ -13,24 +17,6 @@ type SearchParams = Promise<{
   fecha?: string;
   sede?: string;
 }>;
-
-const fieldStyle = {
-  display: "grid",
-  gap: "8px",
-  color: "var(--muted)",
-  fontSize: "13px",
-  fontWeight: 800,
-};
-
-const inputStyle = {
-  width: "100%",
-  border: "1px solid var(--line)",
-  borderRadius: "15px",
-  background: "#fffaf4",
-  color: "var(--text)",
-  padding: "13px 14px",
-  outline: "none",
-};
 
 function money(value: any) {
   const numberValue = Number(value ?? 0);
@@ -270,24 +256,21 @@ export default async function RegistrarSalidaPage({
 
           <form method="get" action="/registrar-salida">
             <FormGrid>
-              <label style={fieldStyle}>
-                Fecha
-                <input
+              <FormField label="Fecha">
+                <Input
                   name="fecha"
                   type="date"
                   defaultValue={selectedFecha}
                   required
-                  style={inputStyle}
                 />
-              </label>
+              </FormField>
 
-              <label style={fieldStyle}>
-                Sede
-                <select name="sede" defaultValue={selectedSede} style={inputStyle}>
+              <FormField label="Sede">
+                <Select name="sede" defaultValue={selectedSede}>
                   <option value="TODAS">Todas las sedes</option>
                   <Options rows={sedes} fallback={["Miraflores", "San Borja"]} />
-                </select>
-              </label>
+                </Select>
+              </FormField>
 
               <div style={{ display: "flex", alignItems: "end", gap: "10px", flexWrap: "wrap" }}>
                 <button
@@ -339,43 +322,36 @@ export default async function RegistrarSalidaPage({
         >
           <Section title="Datos de la salida">
             <FormGrid>
-              <label style={fieldStyle}>
-                Fecha
-                <input
+              <FormField label="Fecha">
+                <Input
                   name="fecha"
                   type="date"
                   defaultValue={selectedFecha}
                   required
-                  style={inputStyle}
                 />
-              </label>
+              </FormField>
 
-              <label style={fieldStyle}>
-                Hora
-                <input
+              <FormField label="Hora">
+                <Input
                   name="hora"
                   type="time"
                   defaultValue={nowInLima()}
                   required
-                  style={inputStyle}
                 />
-              </label>
+              </FormField>
 
-              <label style={fieldStyle}>
-                Sede
-                <select
+              <FormField label="Sede">
+                <Select
                   name="sede"
                   defaultValue={selectedSede === "TODAS" ? "Miraflores" : selectedSede}
                   required
-                  style={inputStyle}
                 >
                   <Options rows={sedes} fallback={["Miraflores", "San Borja"]} />
-                </select>
-              </label>
+                </Select>
+              </FormField>
 
-              <label style={fieldStyle}>
-                Tipo de gasto
-                <select name="tipo_gasto" required style={inputStyle}>
+              <FormField label="Tipo de gasto">
+                <Select name="tipo_gasto" required>
                   <Options
                     rows={tiposGasto}
                     fallback={[
@@ -388,71 +364,59 @@ export default async function RegistrarSalidaPage({
                       "Otro",
                     ]}
                   />
-                </select>
-              </label>
+                </Select>
+              </FormField>
             </FormGrid>
           </Section>
 
           <Section title="Detalle">
             <FormGrid>
-              <label style={fieldStyle}>
-                Concepto
-                <input
+              <FormField label="Concepto">
+                <Input
                   name="concepto"
                   placeholder="Ej. Compra de aceite, movilidad, limpieza, etc."
                   required
-                  style={inputStyle}
                 />
-              </label>
+              </FormField>
 
-              <label style={fieldStyle}>
-                Monto
-                <input
+              <FormField label="Monto">
+                <Input
                   name="monto"
                   type="number"
                   step="0.01"
                   min="0"
                   placeholder="0.00"
                   required
-                  style={inputStyle}
                 />
-              </label>
+              </FormField>
 
-              <label style={fieldStyle}>
-                Responsable
-                <select name="responsable" defaultValue="Gerald" style={inputStyle}>
+              <FormField label="Responsable">
+                <Select name="responsable" defaultValue="Gerald">
                   <Options
                     rows={responsables}
                     fallback={["Gerald", "Luis", "Naty", "Otro"]}
                   />
-                </select>
-              </label>
+                </Select>
+              </FormField>
 
-              <label style={fieldStyle}>
-                Movimiento relacionado
-                <input
+              <FormField label="Movimiento relacionado">
+                <Input
                   name="source_movimiento_id"
                   placeholder="Opcional. Ej. MOV-APP-..."
-                  style={inputStyle}
                 />
-              </label>
+              </FormField>
             </FormGrid>
           </Section>
 
           <Section title="Observación">
-            <label style={fieldStyle}>
-              Nota interna
-              <textarea
+            <FormField label="Nota interna">
+              <Textarea
                 name="observacion"
                 placeholder="Ej. Gasto real, comprobante pendiente, diferencia explicada, etc."
                 rows={4}
-                style={{
-                  ...inputStyle,
-                  resize: "vertical",
-                  minHeight: "110px",
-                }}
+                style={{ minHeight: "110px" }}
               />
-            </label>
+            </FormField>
           </Section>
 
           <div

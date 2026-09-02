@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { logoutAction } from "@/app/actions";
 import type { CajaSession } from "@/lib/auth";
 import { getVisibleNavItems } from "@/lib/auth";
@@ -48,9 +49,9 @@ export function CajaSidebar({ session }: { session: CajaSession }) {
 
         <nav className="nav" aria-label="Navegación principal">
           {navItems.map((item) => (
-            <a key={item.key} href={item.href}>
+            <Link key={item.key} href={item.href}>
               {item.label}
-            </a>
+            </Link>
           ))}
         </nav>
 
@@ -87,9 +88,9 @@ export function CajaSidebar({ session }: { session: CajaSession }) {
           <div className="mobileMenuContent">
             <nav className="mobileMenuNav" aria-label="Navegación principal">
               {navItems.map((item) => (
-                <a key={item.key} href={item.href}>
+                <Link key={item.key} href={item.href}>
                   {item.label}
-                </a>
+                </Link>
               ))}
             </nav>
 
