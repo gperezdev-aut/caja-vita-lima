@@ -3,6 +3,10 @@ import { CajaSidebar } from "@/components/CajaSidebar";
 import { supabaseSelect, supabaseSelectWhere } from "@/lib/supabaseServer";
 import Link from "next/link";
 import { SubmitButton } from "@/components/SubmitButton";
+import { FormField } from "@/components/FormField";
+import { Input } from "@/components/Input";
+import { Select } from "@/components/Select";
+import { Textarea } from "@/components/Textarea";
 import { createCierreCajaAction } from "./actions";
 
 type Row = Record<string, any>;
@@ -14,24 +18,6 @@ type SearchParams = Promise<{
   fecha?: string;
   sede?: string;
 }>;
-
-const fieldStyle = {
-  display: "grid",
-  gap: "8px",
-  color: "var(--muted)",
-  fontSize: "13px",
-  fontWeight: 800,
-};
-
-const inputStyle = {
-  width: "100%",
-  border: "1px solid var(--line)",
-  borderRadius: "15px",
-  background: "#fffaf4",
-  color: "var(--text)",
-  padding: "13px 14px",
-  outline: "none",
-};
 
 function money(value: any) {
   const numberValue = Number(value ?? 0);
@@ -314,23 +300,20 @@ export default async function CierreCajaPage({
 
           <form method="get" action="/cierre-caja">
             <FormGrid>
-              <label style={fieldStyle}>
-                Fecha
-                <input
+              <FormField label="Fecha">
+                <Input
                   name="fecha"
                   type="date"
                   defaultValue={selectedFecha}
                   required
-                  style={inputStyle}
                 />
-              </label>
+              </FormField>
 
-              <label style={fieldStyle}>
-                Sede
-                <select name="sede" defaultValue={selectedSede} required style={inputStyle}>
+              <FormField label="Sede">
+                <Select name="sede" defaultValue={selectedSede} required>
                   <Options rows={sedes} fallback={["Miraflores", "San Borja"]} />
-                </select>
-              </label>
+                </Select>
+              </FormField>
 
               <div style={{ display: "flex", alignItems: "end", gap: "10px", flexWrap: "wrap" }}>
                 <button
@@ -389,85 +372,69 @@ export default async function CierreCajaPage({
         >
           <Section title="Datos del cierre">
             <FormGrid>
-              <label style={fieldStyle}>
-                Fecha
-                <input name="fecha" type="date" defaultValue={selectedFecha} required style={inputStyle} />
-              </label>
+              <FormField label="Fecha">
+                <Input name="fecha" type="date" defaultValue={selectedFecha} required />
+              </FormField>
 
-              <label style={fieldStyle}>
-                Sede
-                <select name="sede" defaultValue={selectedSede} required style={inputStyle}>
+              <FormField label="Sede">
+                <Select name="sede" defaultValue={selectedSede} required>
                   <Options rows={sedes} fallback={["Miraflores", "San Borja"]} />
-                </select>
-              </label>
+                </Select>
+              </FormField>
 
-              <label style={fieldStyle}>
-                Responsable
-                <select name="responsable" defaultValue="Gerald" style={inputStyle}>
+              <FormField label="Responsable">
+                <Select name="responsable" defaultValue="Gerald">
                   <Options rows={responsables} fallback={["Gerald", "Luis", "Naty", "Otro"]} />
-                </select>
-              </label>
+                </Select>
+              </FormField>
 
-              <label style={fieldStyle}>
-                Estado
-                <input value="CERRADO" readOnly style={inputStyle} />
-              </label>
+              <FormField label="Estado">
+                <Input value="CERRADO" readOnly />
+              </FormField>
             </FormGrid>
           </Section>
 
           <Section title="Montos">
             <FormGrid>
-              <label style={fieldStyle}>
-                Caja inicial
-                <input name="caja_inicial" type="number" step="0.01" min="0" defaultValue="0.00" required style={inputStyle} />
-              </label>
+              <FormField label="Caja inicial">
+                <Input name="caja_inicial" type="number" step="0.01" min="0" defaultValue="0.00" required />
+              </FormField>
 
-              <label style={fieldStyle}>
-                Efectivo contado
-                <input name="efectivo_contado" type="number" step="0.01" min="0" defaultValue="0.00" required style={inputStyle} />
-              </label>
+              <FormField label="Efectivo contado">
+                <Input name="efectivo_contado" type="number" step="0.01" min="0" defaultValue="0.00" required />
+              </FormField>
 
-              <label style={fieldStyle}>
-                Pozo / fondo
-                <input name="pozo_fondo" type="number" step="0.01" min="0" defaultValue="0.00" required style={inputStyle} />
-              </label>
+              <FormField label="Pozo / fondo">
+                <Input name="pozo_fondo" type="number" step="0.01" min="0" defaultValue="0.00" required />
+              </FormField>
 
-              <label style={fieldStyle}>
-                Total ingresos
-                <input name="total_ingresos" type="number" step="0.01" min="0" defaultValue={totalIngresos.toFixed(2)} required style={inputStyle} />
-              </label>
+              <FormField label="Total ingresos">
+                <Input name="total_ingresos" type="number" step="0.01" min="0" defaultValue={totalIngresos.toFixed(2)} required />
+              </FormField>
 
-              <label style={fieldStyle}>
-                Total salidas
-                <input name="total_salidas" type="number" step="0.01" min="0" defaultValue={totalSalidas.toFixed(2)} required style={inputStyle} />
-              </label>
+              <FormField label="Total salidas">
+                <Input name="total_salidas" type="number" step="0.01" min="0" defaultValue={totalSalidas.toFixed(2)} required />
+              </FormField>
 
-              <label style={fieldStyle}>
-                Pax total
-                <input name="pax_total" type="number" min="0" defaultValue={String(paxTotal)} required style={inputStyle} />
-              </label>
+              <FormField label="Pax total">
+                <Input name="pax_total" type="number" min="0" defaultValue={String(paxTotal)} required />
+              </FormField>
 
-              <label style={fieldStyle}>
-                Boletas pendientes
-                <input name="boletas_pendientes" type="number" min="0" defaultValue={String(boletasPendientes)} required style={inputStyle} />
-              </label>
+              <FormField label="Boletas pendientes">
+                <Input name="boletas_pendientes" type="number" min="0" defaultValue={String(boletasPendientes)} required />
+              </FormField>
             </FormGrid>
           </Section>
 
           <Section title="Observación">
-            <label style={fieldStyle}>
-              Nota interna
-              <textarea
+            <FormField label="Nota interna">
+              <Textarea
                 name="observacion"
                 placeholder="Ej. Cierre de prueba, faltó efectivo, boleta pendiente, diferencia explicada, etc."
                 rows={4}
-                style={{
-                  ...inputStyle,
-                  resize: "vertical",
-                  minHeight: "110px",
-                }}
+                style={{ minHeight: "110px" }}
               />
-            </label>
+            </FormField>
           </Section>
 
           <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px", flexWrap: "wrap" }}>

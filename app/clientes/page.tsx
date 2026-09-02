@@ -1,8 +1,12 @@
-import type { CSSProperties, ReactNode } from "react";
+import type { CSSProperties } from "react";
 import Link from "next/link";
 import { requireModuleAccess } from "@/lib/auth";
 import { CajaSidebar } from "@/components/CajaSidebar";
 import { supabaseSelect, supabaseSelectWhere } from "@/lib/supabaseServer";
+import { Badge } from "@/components/Badge";
+import { FormField } from "@/components/FormField";
+import { Input } from "@/components/Input";
+import { Select } from "@/components/Select";
 
 type Row = Record<string, any>;
 
@@ -191,75 +195,6 @@ function Card({
     </div>
   );
 }
-
-function Badge({
-  children,
-  tone = "default",
-}: {
-  children: ReactNode;
-  tone?: "default" | "good" | "warn" | "danger";
-}) {
-  const styles: Record<string, CSSProperties> = {
-    default: {
-      background: "white",
-      color: "var(--text)",
-      border: "1px solid var(--line)",
-    },
-    good: {
-      background: "var(--green-soft)",
-      color: "var(--green)",
-      border: "1px solid rgba(31, 107, 79, 0.18)",
-    },
-    warn: {
-      background: "var(--warn)",
-      color: "var(--text)",
-      border: "1px solid var(--line)",
-    },
-    danger: {
-      background: "var(--danger)",
-      color: "var(--danger-text)",
-      border: "1px solid rgba(163, 50, 37, 0.18)",
-    },
-  };
-
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        borderRadius: "999px",
-        padding: "7px 10px",
-        fontSize: "12px",
-        fontWeight: 850,
-        whiteSpace: "nowrap",
-        ...styles[tone],
-      }}
-    >
-      {children}
-    </span>
-  );
-}
-
-const fieldStyle: CSSProperties = {
-  display: "grid",
-  gap: "8px",
-  color: "var(--muted)",
-  fontSize: "13px",
-  fontWeight: 800,
-  minWidth: 0,
-};
-
-const inputStyle: CSSProperties = {
-  width: "100%",
-  minWidth: 0,
-  border: "1px solid var(--line)",
-  borderRadius: "15px",
-  background: "#fffaf4",
-  color: "var(--text)",
-  padding: "13px 14px",
-  outline: "none",
-  fontWeight: 750,
-};
 
 const buttonStyle: CSSProperties = {
   border: "0",
@@ -503,19 +438,17 @@ export default async function ClientesPage({ searchParams }: { searchParams: Sea
               alignItems: "end",
             }}
           >
-            <label style={fieldStyle}>
-              Buscar
-              <input
+            <FormField label="Buscar">
+              <Input
                 name="q"
                 defaultValue={q}
                 placeholder="Ej. María, 987..., Royale"
-                style={inputStyle}
+                className="formControlEmphasis"
               />
-            </label>
+            </FormField>
 
-            <label style={fieldStyle}>
-              Estado CRM
-              <select name="estado" defaultValue={estado} style={inputStyle}>
+            <FormField label="Estado CRM">
+              <Select name="estado" defaultValue={estado} className="formControlEmphasis">
                 <option value="TODOS">Todos</option>
                 <option value="VIP">VIP</option>
                 <option value="Recurrente">Recurrente</option>
@@ -523,41 +456,37 @@ export default async function ClientesPage({ searchParams }: { searchParams: Sea
                 <option value="Inactivo">Inactivo</option>
                 <option value="Reservó">Reservó</option>
                 <option value="Sin historial">Sin historial</option>
-              </select>
-            </label>
+              </Select>
+            </FormField>
 
-            <label style={fieldStyle}>
-              Actividad
-              <select name="actividad" defaultValue={actividad} style={inputStyle}>
+            <FormField label="Actividad">
+              <Select name="actividad" defaultValue={actividad} className="formControlEmphasis">
                 <option value="TODOS">Todos</option>
                 <option value="Activo">Activo</option>
                 <option value="Inactivo">Inactivo</option>
                 <option value="Sin fecha">Sin fecha</option>
-              </select>
-            </label>
+              </Select>
+            </FormField>
 
-            <label style={fieldStyle}>
-              Contacto
-              <select name="contacto" defaultValue={contacto} style={inputStyle}>
+            <FormField label="Contacto">
+              <Select name="contacto" defaultValue={contacto} className="formControlEmphasis">
                 <option value="TODOS">Todos</option>
                 <option value="Con WhatsApp">Con WhatsApp</option>
                 <option value="Con dato parcial">Con dato parcial</option>
                 <option value="Histórico sin contacto">Histórico sin contacto</option>
                 <option value="Sin contacto">Sin contacto</option>
-              </select>
-            </label>
+              </Select>
+            </FormField>
 
-            <label style={fieldStyle}>
-              Sede
-              <select name="sede" defaultValue={sede} style={inputStyle}>
+            <FormField label="Sede">
+              <Select name="sede" defaultValue={sede} className="formControlEmphasis">
                 <option value="TODAS">Todas</option>
                 <Options rows={sedesRows} fallback={sedeFallback} />
-              </select>
-            </label>
+              </Select>
+            </FormField>
 
-            <label style={fieldStyle}>
-              Tipo
-              <select name="tipo" defaultValue={tipo} style={inputStyle}>
+            <FormField label="Tipo">
+              <Select name="tipo" defaultValue={tipo} className="formControlEmphasis">
                 <option value="TODOS">Todos</option>
                 <option value="CATALOGO">Catálogo actual</option>
                 <option value="PROMOS_1P">Promos 1 persona</option>
@@ -565,8 +494,8 @@ export default async function ClientesPage({ searchParams }: { searchParams: Sea
                 <option value="SESSIONS">Programas / sesiones</option>
                 <option value="HISTORICO">Históricos</option>
                 <option value="GIFT_CARD">Gift Card</option>
-              </select>
-            </label>
+              </Select>
+            </FormField>
 
             <button type="submit" style={buttonStyle}>
               Aplicar

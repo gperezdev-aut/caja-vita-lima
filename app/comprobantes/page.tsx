@@ -2,6 +2,11 @@ import { requireModuleAccess } from "@/lib/auth";
 import { CajaSidebar } from "@/components/CajaSidebar";
 import { supabaseSelectWhere } from "@/lib/supabaseServer";
 import { SubmitButton } from "@/components/SubmitButton";
+import { Badge } from "@/components/Badge";
+import { FormField } from "@/components/FormField";
+import { Input } from "@/components/Input";
+import { Select } from "@/components/Select";
+import { Textarea } from "@/components/Textarea";
 import { updateComprobanteAction } from "./actions";
 
 type Row = Record<string, any>;
@@ -11,24 +16,6 @@ type SearchParams = Promise<{
   id?: string;
   error?: string;
 }>;
-
-const fieldStyle = {
-  display: "grid",
-  gap: "8px",
-  color: "var(--muted)",
-  fontSize: "13px",
-  fontWeight: 800,
-};
-
-const inputStyle = {
-  width: "100%",
-  border: "1px solid var(--line)",
-  borderRadius: "15px",
-  background: "#fffaf4",
-  color: "var(--text)",
-  padding: "13px 14px",
-  outline: "none",
-};
 
 function money(value: any) {
   const numberValue = Number(value ?? 0);
@@ -75,54 +62,6 @@ function isPendingComprobante(row: Row) {
     estadoManual.includes("OBSERVAR") ||
     tipo.includes("POR_DEFINIR") ||
     (!estadoManual && estadoBoleta.includes("PEND"))
-  );
-}
-
-function Badge({
-  children,
-  tone = "default",
-}: {
-  children: React.ReactNode;
-  tone?: "default" | "good" | "warn" | "danger";
-}) {
-  const styles: Record<string, React.CSSProperties> = {
-    default: {
-      background: "white",
-      color: "var(--text)",
-      border: "1px solid var(--line)",
-    },
-    good: {
-      background: "var(--green-soft)",
-      color: "var(--green)",
-      border: "1px solid rgba(31, 107, 79, 0.18)",
-    },
-    warn: {
-      background: "var(--warn)",
-      color: "var(--text)",
-      border: "1px solid var(--line)",
-    },
-    danger: {
-      background: "var(--danger)",
-      color: "var(--danger-text)",
-      border: "1px solid rgba(163, 50, 37, 0.18)",
-    },
-  };
-
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        borderRadius: "999px",
-        padding: "7px 10px",
-        fontSize: "12px",
-        fontWeight: 850,
-        whiteSpace: "nowrap",
-        ...styles[tone],
-      }}
-    >
-      {children}
-    </span>
   );
 }
 
@@ -200,70 +139,60 @@ function ComprobanteCard({ row }: { row: Row }) {
         <input type="hidden" name="movimiento_id" value={movimientoId} />
 
         <FormGrid>
-          <label style={fieldStyle}>
-            Tipo comprobante
-            <select name="tipo_comprobante" defaultValue={tipoActual} style={inputStyle}>
+          <FormField label="Tipo comprobante">
+            <Select name="tipo_comprobante" defaultValue={tipoActual}>
               <option value="POR_DEFINIR">Por definir</option>
               <option value="BOLETA">Boleta</option>
               <option value="FACTURA">Factura</option>
               <option value="NO_APLICA">No aplica</option>
-            </select>
-          </label>
+            </Select>
+          </FormField>
 
-          <label style={fieldStyle}>
-            Estado
-            <select
+          <FormField label="Estado">
+            <Select
               name="estado_comprobante_manual"
               defaultValue={estadoActual}
-              style={inputStyle}
             >
               <option value="PENDIENTE">Pendiente</option>
               <option value="OBSERVAR">Observar</option>
               <option value="OK">OK</option>
               <option value="NO_APLICA">No aplica</option>
-            </select>
-          </label>
+            </Select>
+          </FormField>
 
-          <label style={fieldStyle}>
-            Número final
-            <input
+          <FormField label="Número final">
+            <Input
               name="numero_comprobante_final"
               defaultValue={row.numero_comprobante_final ?? row.numero_boleta ?? ""}
               placeholder="Ej. B001-000123"
-              style={inputStyle}
             />
-          </label>
+          </FormField>
 
-          <label style={fieldStyle}>
-            Fecha emisión
-            <input
+          <FormField label="Fecha emisión">
+            <Input
               name="fecha_emision_comprobante"
               type="date"
               defaultValue={row.fecha_emision_comprobante ?? ""}
-              style={inputStyle}
             />
-          </label>
+          </FormField>
 
-          <label style={fieldStyle}>
-            Revisado por
-            <input
+          <FormField label="Revisado por">
+            <Input
               name="comprobante_revisado_por"
               defaultValue={row.comprobante_revisado_por ?? "Gerald"}
-              style={inputStyle}
             />
-          </label>
+          </FormField>
         </FormGrid>
 
-        <label style={fieldStyle}>
-          Observación comprobante
-          <textarea
+        <FormField label="Observación comprobante">
+          <Textarea
             name="observacion_comprobante"
             rows={3}
             defaultValue={row.observacion_comprobante ?? ""}
             placeholder="Ej. Falta número, boleta emitida, factura solicitada, no aplica, etc."
-            style={{ ...inputStyle, resize: "vertical", minHeight: "90px" }}
+            style={{ minHeight: "90px" }}
           />
-        </label>
+        </FormField>
 
         <div style={{ display: "flex", justifyContent: "flex-end" }}>
           <SubmitButton

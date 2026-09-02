@@ -2,6 +2,9 @@ import { requireModuleAccess } from "@/lib/auth";
 import { CajaSidebar } from "@/components/CajaSidebar";
 import { supabaseSelect } from "@/lib/supabaseServer";
 import Link from "next/link";
+import { FormField } from "@/components/FormField";
+import { Input } from "@/components/Input";
+import { Select } from "@/components/Select";
 import {
   TODAS_LAS_SEDES,
   getCuponidadFromMonthlyRow,
@@ -169,89 +172,24 @@ export default async function HomePage({
               alignItems: "end",
             }}
           >
-            <label
-              style={{
-                display: "grid",
-                gap: "8px",
-                color: "var(--muted)",
-                fontSize: "13px",
-                fontWeight: 800,
-              }}
-            >
-              Desde
-              <input
-                name="desde"
-                type="month"
-                defaultValue={desde}
-                style={{
-                  width: "100%",
-                  border: "1px solid var(--line)",
-                  borderRadius: "15px",
-                  background: "#fffaf4",
-                  color: "var(--text)",
-                  padding: "13px 14px",
-                  outline: "none",
-                }}
-              />
-            </label>
+            <FormField label="Desde">
+              <Input name="desde" type="month" defaultValue={desde} />
+            </FormField>
 
-            <label
-              style={{
-                display: "grid",
-                gap: "8px",
-                color: "var(--muted)",
-                fontSize: "13px",
-                fontWeight: 800,
-              }}
-            >
-              Hasta
-              <input
-                name="hasta"
-                type="month"
-                defaultValue={hasta}
-                style={{
-                  width: "100%",
-                  border: "1px solid var(--line)",
-                  borderRadius: "15px",
-                  background: "#fffaf4",
-                  color: "var(--text)",
-                  padding: "13px 14px",
-                  outline: "none",
-                }}
-              />
-            </label>
+            <FormField label="Hasta">
+              <Input name="hasta" type="month" defaultValue={hasta} />
+            </FormField>
 
-            <label
-              style={{
-                display: "grid",
-                gap: "8px",
-                color: "var(--muted)",
-                fontSize: "13px",
-                fontWeight: 800,
-              }}
-            >
-              Sede
-              <select
-                name="sede"
-                defaultValue={selectedSede}
-                style={{
-                  width: "100%",
-                  border: "1px solid var(--line)",
-                  borderRadius: "15px",
-                  background: "#fffaf4",
-                  color: "var(--text)",
-                  padding: "13px 14px",
-                  outline: "none",
-                }}
-              >
+            <FormField label="Sede">
+              <Select name="sede" defaultValue={selectedSede}>
                 <option value={TODAS_LAS_SEDES}>Todas las sedes</option>
                 {sedes.map((sede) => (
                   <option key={sede} value={sede}>
                     {sede}
                   </option>
                 ))}
-              </select>
-            </label>
+              </Select>
+            </FormField>
 
             <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
               <button

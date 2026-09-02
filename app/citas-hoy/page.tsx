@@ -1,6 +1,10 @@
 import { requireModuleAccess } from "@/lib/auth";
 import { CajaSidebar } from "@/components/CajaSidebar";
 import { supabaseSelect, supabaseSelectWhere } from "@/lib/supabaseServer";
+import { Badge } from "@/components/Badge";
+import { FormField } from "@/components/FormField";
+import { Input } from "@/components/Input";
+import { Select } from "@/components/Select";
 
 type Row = Record<string, any>;
 
@@ -8,24 +12,6 @@ type SearchParams = Promise<{
   fecha?: string;
   sede?: string;
 }>;
-
-const fieldStyle = {
-  display: "grid",
-  gap: "8px",
-  color: "var(--muted)",
-  fontSize: "13px",
-  fontWeight: 800,
-};
-
-const inputStyle = {
-  width: "100%",
-  border: "1px solid var(--line)",
-  borderRadius: "15px",
-  background: "#fffaf4",
-  color: "var(--text)",
-  padding: "13px 14px",
-  outline: "none",
-};
 
 function money(value: any) {
   const numberValue = Number(value ?? 0);
@@ -113,57 +99,6 @@ function waHref(value: any) {
   }
   digits = digits.slice(-9);
   return `https://wa.me/51${digits}`;
-}
-
-function Badge({
-  children,
-  tone = "default",
-  title,
-}: {
-  children: React.ReactNode;
-  tone?: "default" | "good" | "warn" | "danger";
-  title?: string;
-}) {
-  const styles: Record<string, React.CSSProperties> = {
-    default: {
-      background: "white",
-      color: "var(--text)",
-      border: "1px solid var(--line)",
-    },
-    good: {
-      background: "var(--green-soft)",
-      color: "var(--green)",
-      border: "1px solid rgba(31, 107, 79, 0.18)",
-    },
-    warn: {
-      background: "var(--warn)",
-      color: "var(--text)",
-      border: "1px solid var(--line)",
-    },
-    danger: {
-      background: "var(--danger)",
-      color: "var(--danger-text)",
-      border: "1px solid rgba(163, 50, 37, 0.18)",
-    },
-  };
-
-  return (
-    <span
-      title={title}
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        borderRadius: "999px",
-        padding: "7px 10px",
-        fontSize: "12px",
-        fontWeight: 850,
-        whiteSpace: "nowrap",
-        ...styles[tone],
-      }}
-    >
-      {children}
-    </span>
-  );
 }
 
 function AlertaBadge({ alerta }: { alerta: string }) {
@@ -426,18 +361,16 @@ export default async function CitasHoyPage({
               display: "grid",
             }}
           >
-            <label style={fieldStyle}>
-              Fecha
-              <input name="fecha" type="date" defaultValue={selectedFecha} style={inputStyle} />
-            </label>
+            <FormField label="Fecha">
+              <Input name="fecha" type="date" defaultValue={selectedFecha} />
+            </FormField>
 
-            <label style={fieldStyle}>
-              Sede
-              <select name="sede" defaultValue={selectedSede} style={inputStyle}>
+            <FormField label="Sede">
+              <Select name="sede" defaultValue={selectedSede}>
                 <option value="TODAS">Todas las sedes</option>
                 <Options rows={sedesRows} fallback={sedeFallback} />
-              </select>
-            </label>
+              </Select>
+            </FormField>
 
             <div className="citasHoyFilterActions">
               <button
