@@ -1,5 +1,14 @@
 # Arquitectura — Caja Vita Lima
 
+> **Nota de 2026-09-06.** Este documento describe la arquitectura tal como se *propuso* al
+> inicio del proyecto y conserva valor como registro de las decisiones de entonces, pero en
+> un punto ya no coincide con la realidad: **la app no se publica en Vercel**, sino en un
+> contenedor Docker sobre Contabo, servido por nginx en `caja.vitalimaspa.com`. El resto
+> —Supabase como base, n8n para automatizaciones, Google Calendar y WhatsApp Cloud API— se
+> cumplió como estaba previsto.
+>
+> Para el estado real: `README.md` de la raíz y `docs/CHECKPOINT_AUDITORIA_2026_08_30.md` §4.
+
 ## Objetivo técnico
 
 Definir la arquitectura inicial de la nueva Caja Vita Lima, separando claramente código, base de datos, despliegue, automatizaciones y reportes.
