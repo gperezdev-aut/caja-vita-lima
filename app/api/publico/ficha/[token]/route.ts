@@ -343,28 +343,35 @@ export async function POST(
     return errorResponse("validacion", `No se pudo guardar el cliente: ${clienteUpsert.error}`);
   }
 
-  const fichaSaludUpsert = await supabaseUpsert(
-    "fichas_salud",
-    {
-      ficha_id: idFicha(),
-      reserva_id: cita.reserva_id,
-      cliente_id: clienteId,
-      embarazo: Boolean(salud.embarazo),
-      presion: Boolean(salud.presion),
-      cirugia_reciente: Boolean(salud.cirugiaReciente),
-      alergias: salud.alergias || null,
-      zonas_evitar: salud.zonasEvitar || null,
-      notas: salud.notas || null,
-      consent_salud_en: ahora,
-    },
-    "reserva_id"
-  );
-
-  if (fichaSaludUpsert.error) {
-    return errorResponse(
-      "validacion",
-      `No se pudo guardar la ficha de salud: ${fichaSaludUpsert.error}`
+  // Decisión del dueño (docs/caja-cambios-para-la-ficha-de-cita.md,
+  // sección 2): si el cliente no marcó ninguna condición, no hay dato
+  // sensible que guardar — no se crea fila en fichas_salud. Si se
+  // llegó hasta acá con alguna condición marcada, la validación de
+  // arriba ya garantizó consentimientos.salud === true.
+  if (requiereConsentimientoSalud(salud)) {
+    const fichaSaludUpsert = await supabaseUpsert(
+      "fichas_salud",
+      {
+        ficha_id: idFicha(),
+        reserva_id: cita.reserva_id,
+        cliente_id: clienteId,
+        embarazo: Boolean(salud.embarazo),
+        presion: Boolean(salud.presion),
+        cirugia_reciente: Boolean(salud.cirugiaReciente),
+        alergias: salud.alergias || null,
+        zonas_evitar: salud.zonasEvitar || null,
+        notas: salud.notas || null,
+        consent_salud_en: ahora,
+      },
+      "reserva_id"
     );
+
+    if (fichaSaludUpsert.error) {
+      return errorResponse(
+        "validacion",
+        `No se pudo guardar la ficha de salud: ${fichaSaludUpsert.error}`
+      );
+    }
   }
 
   if (codigoCupon) {

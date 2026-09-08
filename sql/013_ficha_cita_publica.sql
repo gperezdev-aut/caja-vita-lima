@@ -21,6 +21,96 @@
 --   (001-012): el acceso se controla en la capa de aplicación con la
 --   service role key (lib/supabaseServer.ts), y las referencias entre
 --   tablas son texto simple (reserva_id, cliente_id), no FKs.
+--
+-- Orden de ejecución (tres partes separadas a propósito):
+--   PARTE 0 — Pre-chequeos. Correr cada consulta POR SEPARADO antes
+--             de tocar nada. Si alguna devuelve filas, resolverlas a
+--             mano (fusionar clientes duplicados, corregir cupones
+--             repetidos, confirmar nombres de sede) ANTES de seguir.
+--   PARTE 1 — La migración en sí. Pensada para correrse como un solo
+--             bloque, de principio a fin, en el editor SQL de
+--             Supabase. Es re-ejecutable: si se corta a mitad (error,
+--             timeout, cierre del editor) y se vuelve a correr desde
+--             el principio, no falla por "already exists" — todo usa
+--             `if not exists` o un `drop ... if exists` previo.
+--   PARTE 2 — Validación posterior. Cada SELECT es independiente:
+--             correrlos uno por uno, no todos juntos — si se corren
+--             de un tirón en el editor de Supabase, solo se ve el
+--             resultado del último.
+-- ============================================================
+
+
+-- ============================================================
+-- PARTE 0 — PRE-CHEQUEOS (correr antes de la Parte 1, uno por uno)
+-- ============================================================
+
+-- ------------------------------------------------------------
+-- 0.1) Duplicados de whatsapp por E.164
+--
+-- La misma normalización que va a aplicar el UPDATE de la Parte 1
+-- (paso 3), no los dígitos crudos: "987654321" y "+51987654321" son
+-- la misma persona y normalizan al mismo E.164, aunque sus dígitos
+-- crudos sean distintos. Si esta consulta devuelve filas, hay que
+-- decidir a mano cuál `cliente_id` es el bueno (fusionar los otros o
+-- vaciarles el whatsapp) ANTES de correr la Parte 1: si no, el UPDATE
+-- del backfill choca contra el índice único que se crea después.
+-- ------------------------------------------------------------
+
+with norm as (
+  select cliente_id, cliente, whatsapp,
+    case
+      when whatsapp is null or btrim(whatsapp) = '' then null
+      when btrim(whatsapp) like '+%'
+        and length(regexp_replace(whatsapp, '\D', '', 'g')) between 8 and 15
+        then '+' || regexp_replace(whatsapp, '\D', '', 'g')
+      when regexp_replace(whatsapp, '\D', '', 'g') ~ '^9\d{8}$'
+        then '+51' || regexp_replace(whatsapp, '\D', '', 'g')
+      when regexp_replace(whatsapp, '\D', '', 'g') ~ '^519\d{8}$'
+        then '+' || regexp_replace(whatsapp, '\D', '', 'g')
+      else null
+    end as e164
+  from public.clientes
+)
+select e164, count(*) as total, array_agg(cliente_id) as cliente_ids, array_agg(cliente) as nombres
+from norm
+where e164 is not null
+group by e164
+having count(*) > 1;
+
+-- ------------------------------------------------------------
+-- 0.2) Duplicados de cupón por (plataforma, codigo_cupon)
+--
+-- El índice único de la Parte 1 (paso 5) los rechazaría igual, pero
+-- es mejor saberlo antes: decidir a mano cuál fila es la real.
+-- ------------------------------------------------------------
+
+select plataforma, codigo_cupon, count(*)
+from public.cupones_convenios
+where codigo_cupon is not null and btrim(codigo_cupon) <> ''
+group by 1, 2
+having count(*) > 1;
+
+-- ------------------------------------------------------------
+-- 0.3) Nombres de sede reales
+--
+-- La Parte 1 (paso 7) siembra `sedes` con 'San Borja' y 'Miraflores'
+-- — los mismos nombres que ya siembra config_listas desde
+-- 001_create_tables.sql. Pero el cruce en el GET de la sección 6 es
+-- por `citas_reservadas.sede = sedes.nombre` (texto exacto), así que
+-- hay que confirmar que son los mismos literales que trae la
+-- operación real, no solo los del seed original. Si esta consulta
+-- trae algo distinto de 'San Borja' / 'Miraflores' (mayúsculas,
+-- tildes, espacios, un nombre de sede que ya no se usa, etc.), avisar
+-- antes de correr el INSERT del paso 7.
+-- ------------------------------------------------------------
+
+select distinct sede
+from public.citas_reservadas
+order by 1;
+
+
+-- ============================================================
+-- PARTE 1 — MIGRACIÓN (correr como un solo bloque)
 -- ============================================================
 
 
@@ -70,21 +160,41 @@ create index if not exists idx_citas_requiere_confirmacion
 create index if not exists idx_citas_canal
   on public.citas_reservadas (canal);
 
+-- `add constraint` no soporta `if not exists` en Postgres — este
+-- script se corre a mano en el editor de Supabase, donde reintentar
+-- tras un corte a mitad es lo normal. Por eso cada constraint lleva
+-- su `drop ... if exists` antes, para que sea re-ejecutable.
+
+alter table public.citas_reservadas drop constraint if exists chk_citas_estado_ficha;
 alter table public.citas_reservadas
   add constraint chk_citas_estado_ficha
     check (estado_ficha in ('pendiente', 'completa'));
 
+alter table public.citas_reservadas drop constraint if exists chk_citas_canal;
 alter table public.citas_reservadas
   add constraint chk_citas_canal
     check (canal in ('directo', 'cuponidad', 'bee'));
 
+alter table public.citas_reservadas drop constraint if exists chk_citas_idioma;
 alter table public.citas_reservadas
   add constraint chk_citas_idioma
     check (idioma in ('es', 'en'));
 
 
 -- ============================================================
--- 2) CLIENTES — columnas nuevas
+-- 2) CAJA_PAGOS — columna nueva
+--
+-- La sección 3 del documento: al registrar el pago se anota monto,
+-- método y número de operación — ese número es lo que después deja
+-- cuadrar caja sin abrir el chat. Faltaba la columna.
+-- ============================================================
+
+alter table public.caja_pagos
+  add column if not exists numero_operacion text;
+
+
+-- ============================================================
+-- 3) CLIENTES — columnas nuevas
 -- ============================================================
 
 alter table public.clientes
@@ -96,18 +206,17 @@ alter table public.clientes
   add column if not exists consent_datos_en timestamptz,
   add column if not exists consent_promos_en timestamptz;
 
-create unique index if not exists uq_clientes_whatsapp_e164
-  on public.clientes (whatsapp_e164)
-  where whatsapp_e164 is not null;
-
+alter table public.clientes drop constraint if exists chk_clientes_idioma;
 alter table public.clientes
   add constraint chk_clientes_idioma
     check (idioma is null or idioma in ('es', 'en'));
 
+alter table public.clientes drop constraint if exists chk_clientes_cumple_dia;
 alter table public.clientes
   add constraint chk_clientes_cumple_dia
     check (cumple_dia is null or cumple_dia between 1 and 31);
 
+alter table public.clientes drop constraint if exists chk_clientes_cumple_mes;
 alter table public.clientes
   add constraint chk_clientes_cumple_mes
     check (cumple_mes is null or cumple_mes between 1 and 12);
@@ -121,7 +230,13 @@ alter table public.clientes
 --   b) 9 dígitos empezando en 9 (celular PE)   -> +51 + número
 --   c) 11 dígitos empezando en '51'            -> '+' + número
 --   d) cualquier otra cosa                     -> se deja NULL para revisión
---      manual (ver consulta de abajo)
+--      manual (ver Parte 2)
+--
+-- El índice único de whatsapp_e164 se crea DESPUÉS de este backfill
+-- (más abajo), no antes: si a la consulta 0.1 se le escapó algún
+-- duplicado, tiene que fallar acá, con el error señalando la fila
+-- exacta del UPDATE — no a mitad de un UPDATE masivo sobre una tabla
+-- ya con el índice puesto.
 -- ------------------------------------------------------------
 
 update public.clientes
@@ -150,20 +265,14 @@ set
   end
 where whatsapp_e164 is null;
 
--- Por si dos clientes distintos normalizan al mismo E.164 (duplicado
--- real en `whatsapp`, con o sin prefijo): el índice único de arriba
--- haría fallar el UPDATE. Antes de correr esta migración en Supabase,
--- correr esta consulta para detectarlos y decidir a mano cuál fila
--- es la buena:
---
--- select regexp_replace(whatsapp, '\D', '', 'g') as normalizado, count(*)
--- from public.clientes
--- where whatsapp is not null and btrim(whatsapp) <> ''
--- group by 1
--- having count(*) > 1;
+-- Índice único, DESPUÉS del backfill (bloqueante corregido).
+create unique index if not exists uq_clientes_whatsapp_e164
+  on public.clientes (whatsapp_e164)
+  where whatsapp_e164 is not null;
+
 
 -- ============================================================
--- 3) FICHAS_SALUD — tabla nueva
+-- 4) FICHAS_SALUD — tabla nueva
 --
 -- Separada de clientes/citas a propósito (dato sensible de
 -- categoría especial). Sin FK explícita a citas_reservadas ni a
@@ -179,6 +288,12 @@ where whatsapp_e164 is null;
 -- key), así que esto no cambia nada en SQL — solo importa que la
 -- futura pantalla interna que lea esta tabla no le agregue una
 -- restricción que el negocio no pidió.
+--
+-- Si el cliente marca "Ninguna de las anteriores" en el bloque de
+-- salud, NO se crea fila acá (decisión del dueño, anotada en el
+-- documento): sin fila = sin condiciones declaradas. La aplicación
+-- (app/api/publico/ficha/[token]/route.ts) es la que decide si
+-- inserta o no; esta tabla no fuerza una fila por reserva.
 -- ============================================================
 
 create table if not exists public.fichas_salud (
@@ -201,15 +316,14 @@ create index if not exists idx_fichas_salud_reserva_id
 create index if not exists idx_fichas_salud_cliente_id
   on public.fichas_salud (cliente_id);
 
--- Una ficha de salud por cita (la POST de la sección 6 es de
--- una sola vez por token; si la web reintenta, se hace upsert por
--- reserva_id, no un insert duplicado).
+-- A lo más una ficha de salud por cita (si la web reintenta el POST,
+-- se hace upsert por reserva_id, no un insert duplicado).
 create unique index if not exists uq_fichas_salud_reserva_id
   on public.fichas_salud (reserva_id);
 
 
 -- ============================================================
--- 4) CUPONES_CONVENIOS — columnas nuevas
+-- 5) CUPONES_CONVENIOS — columnas nuevas
 -- ============================================================
 
 alter table public.cupones_convenios
@@ -217,9 +331,10 @@ alter table public.cupones_convenios
   add column if not exists reserva_id text;
 
 -- Sin `vigente_hasta` acá a propósito: esa fecha vive en
--- citas_reservadas.cupon_vigente_hasta (ver arriba), porque el GET
+-- citas_reservadas.cupon_vigente_hasta (ver paso 1), porque el GET
 -- de la sección 6 la necesita antes de que exista esta fila.
 
+alter table public.cupones_convenios drop constraint if exists chk_cupones_estado;
 alter table public.cupones_convenios
   add constraint chk_cupones_estado
     check (estado in ('declarado', 'verificado', 'canjeado'));
@@ -232,22 +347,15 @@ create index if not exists idx_cupones_reserva_id
 
 -- Restricción única real que pide la sección 2: corta el reenvío
 -- del mismo cupón. Dispersa (ignora codigo_cupon vacío/NULL) porque
--- hay filas históricas sin código.
+-- hay filas históricas sin código. Si el pre-chequeo 0.2 encontró
+-- duplicados, resolverlos a mano antes de llegar acá.
 create unique index if not exists uq_cupones_plataforma_codigo
   on public.cupones_convenios (plataforma, codigo_cupon)
   where codigo_cupon is not null and btrim(codigo_cupon) <> '';
 
--- Antes de correr esto en Supabase, revisar duplicados existentes:
---
--- select plataforma, codigo_cupon, count(*)
--- from public.cupones_convenios
--- where codigo_cupon is not null and btrim(codigo_cupon) <> ''
--- group by 1, 2
--- having count(*) > 1;
-
 
 -- ============================================================
--- 5) BENEFICIOS — tabla nueva (se deja creada; se usa recién en
+-- 6) BENEFICIOS — tabla nueva (se deja creada; se usa recién en
 --    la etapa 4, sección 5 del documento)
 -- ============================================================
 
@@ -261,10 +369,12 @@ create table if not exists public.beneficios (
   reserva_id_canje text
 );
 
+alter table public.beneficios drop constraint if exists chk_beneficios_tipo;
 alter table public.beneficios
   add constraint chk_beneficios_tipo
     check (tipo in ('REACT-10', 'REACT-MIN'));
 
+alter table public.beneficios drop constraint if exists chk_beneficios_estado;
 alter table public.beneficios
   add constraint chk_beneficios_estado
     check (estado in ('disponible', 'reservado', 'canjeado'));
@@ -277,13 +387,17 @@ create index if not exists idx_beneficios_estado
 
 
 -- ============================================================
--- 6) SEDES — tabla nueva
+-- 7) SEDES — tabla nueva
 --
 -- No estaba en el plan original de la sección 2 del documento, pero
 -- hoy no hay ningún lugar en el esquema con la dirección o el enlace
 -- de Maps de una sede (config_listas solo guarda el nombre). El GET
 -- de la sección 6 del documento necesita sedeDireccion/sedeMapsUrl,
 -- y la pantalla interna (§3) va a necesitar además el horario real.
+--
+-- ⚠️ Antes de correr este INSERT, confirmar con la consulta 0.3 que
+-- 'San Borja' y 'Miraflores' son exactamente los nombres que usa
+-- citas_reservadas.sede — si no, corregir los valores de abajo.
 --
 -- Se siembran las dos sedes conocidas (alineadas con
 -- config_listas lista='SEDES') pero SIN datos todavía: direccion,
@@ -303,17 +417,14 @@ create table if not exists public.sedes (
 );
 
 insert into public.sedes (sede_id, nombre)
-select * from (values
+values
   ('SEDE-SAN-BORJA', 'San Borja'),
   ('SEDE-MIRAFLORES', 'Miraflores')
-) as v(sede_id, nombre)
-where not exists (
-  select 1 from public.sedes where sedes.nombre = v.nombre
-);
+on conflict (nombre) do nothing;
 
 
 -- ============================================================
--- 7) FICHA_PUBLICA_INTENTOS — límite de intentos por IP
+-- 8) FICHA_PUBLICA_INTENTOS — límite de intentos por IP
 --
 -- Mismo patrón que 012_login_intentos.sql, aplicado al endpoint
 -- público GET/POST /api/publico/ficha/:token (sección 7 del
@@ -339,8 +450,12 @@ create index if not exists idx_ficha_publica_intentos_bloqueado
 
 
 -- ============================================================
--- 8) Validación rápida
+-- PARTE 2 — VALIDACIÓN (correr cada SELECT por separado)
 -- ============================================================
+
+-- ------------------------------------------------------------
+-- 2.1) Conteo rápido por tabla/columna
+-- ------------------------------------------------------------
 
 select 'citas_reservadas.token_ficha' as columna,
   count(*) filter (where token_ficha is not null) as con_valor,
@@ -360,15 +475,33 @@ select 'sedes', count(*), count(*)
 from public.sedes
 union all
 select 'cupones_convenios.estado', count(*) filter (where estado is not null), count(*)
-from public.cupones_convenios;
+from public.cupones_convenios
+union all
+select 'caja_pagos.numero_operacion', count(*) filter (where numero_operacion is not null), count(*)
+from public.caja_pagos;
 
--- Clientes cuyo whatsapp no se pudo normalizar a E.164 (revisar a mano,
--- como pide la sección 2 del documento):
+-- ------------------------------------------------------------
+-- 2.2) Clientes cuyo whatsapp NO se pudo normalizar a E.164
+-- (revisar a mano, como pide la sección 2 del documento)
+-- ------------------------------------------------------------
+
 select cliente_id, cliente, whatsapp
 from public.clientes
 where whatsapp is not null
   and btrim(whatsapp) <> ''
   and whatsapp_e164 is null
+order by cliente_id;
+
+-- ------------------------------------------------------------
+-- 2.3) Clientes que SÍ normalizaron pero quedaron sin país
+-- (venían con '+' de un prefijo que la regla de Perú no reconoce;
+-- nadie los estaba listando hasta ahora)
+-- ------------------------------------------------------------
+
+select cliente_id, cliente, whatsapp, whatsapp_e164
+from public.clientes
+where whatsapp_e164 is not null
+  and pais_telefono is null
 order by cliente_id;
 
 -- ============================================================

@@ -77,6 +77,12 @@ lee una sola fila y no depende de una que puede no existir todavía.
 > Nota: `calendar_event_id` ya existe desde `001_create_tables.sql` — no es una columna nueva de
 > la 013, se lista acá porque el documento original la mencionaba como si faltara.
 
+### `caja_pagos` — una columna nueva (faltaba)
+
+La sección 3 de abajo dice que al registrar el pago se anota monto, método **y número de
+operación**, y que ese número es lo que después deja cuadrar caja sin abrir el chat. La tabla
+`caja_pagos` no tenía dónde guardarlo — se agrega `numero_operacion text`.
+
 ### `clientes`
 
 | Columna | Tipo | Para qué |
@@ -109,6 +115,15 @@ el dueño decidió que los tres roles reales del sistema — `ADMIN_GERALD`, `SO
 (todo pasa por la service role key, sección 6), esto no cambia nada en SQL: solo importa el día que
 se construya la pantalla interna que lea `fichas_salud` (§3), para no filtrar el control de acceso
 ahí por error.
+
+**Decidido: si el cliente marca «Ninguna de las anteriores», NO se crea fila.** Es la lectura
+literal de «si no hay dato sensible que guardar, no hay nada que consentir» (regla de
+consentimientos, sección 6): no hay condición → no hay dato sensible → no hay fila. La alternativa
+(crear la fila igual, con los tres booleanos en `false` y `consent_salud_en` en `null`) se descartó
+porque ese `null` es ambiguo — no distingue «no marcó nada» de «se le olvidó pedir el consentimiento»
+— y porque una fila entera de `false` no aporta nada que la ausencia de fila no diga ya. Para la
+pantalla interna (§3): **sin fila en `fichas_salud` = sin condiciones declaradas**, no «sin ficha
+completada» (eso lo dice `citas_reservadas.estado_ficha`).
 
 ### `cupones_convenios`
 
