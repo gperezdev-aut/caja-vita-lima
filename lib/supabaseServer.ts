@@ -197,3 +197,19 @@ export async function supabaseUpsert<T = Record<string, unknown>>(
     body: JSON.stringify(payload),
   });
 }
+
+export async function supabaseRpc<T = Record<string, unknown>>(
+  functionName: string,
+  payload: Record<string, unknown>
+): Promise<{ data: T | null; error: string | null }> {
+  const result = await supabaseRequest<T>(`rpc/${functionName}`, {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify(payload),
+  });
+
+  return {
+    data: (result.data as unknown as T) ?? null,
+    error: result.error,
+  };
+}

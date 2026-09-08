@@ -9,6 +9,7 @@ import {
   getClientIp,
   limpiarIntentos,
   registrarIntentoFallido,
+  validarEstadoCita,
   type CitaRow,
 } from "../../_lib";
 
@@ -33,6 +34,9 @@ export async function GET(
   { params }: { params: Promise<{ token: string }> }
 ) {
   const { token } = await params;
+  if (!/^[A-Za-z0-9_-]{43}$/.test(token)) {
+    return errorResponse("token_no_existe", "El enlace no es válido.");
+  }
   const ip = getClientIp(request);
 
   const { bloqueado, intentosPrevios } = await checkRateLimit(ip, token);
@@ -57,9 +61,8 @@ export async function GET(
 
   await limpiarIntentos(ip, token);
 
-  if (cita.token_expira && new Date(cita.token_expira).getTime() < Date.now()) {
-    return errorResponse("token_vencido", "El enlace ya venció.");
-  }
+  const estadoError = validarEstadoCita({ ...cita, estado_ficha: "pendiente" });
+  if (estadoError) return estadoError;
 
   if (!cita.fecha_cita || !cita.hora_cita) {
     return errorResponse("validacion", "La cita todavía no tiene fecha u hora.");
@@ -91,6 +94,7 @@ export async function GET(
       "Content-Type": "text/calendar; charset=utf-8",
       "Content-Disposition": 'attachment; filename="cita-vita-lima.ics"',
       "Cache-Control": "no-store",
+      "X-Robots-Tag": "noindex, nofollow, noarchive",
     },
   });
 }

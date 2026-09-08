@@ -4,7 +4,13 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { getServerEnv } from "@/lib/env";
 import { supabaseSelectWhere, supabaseUpsert } from "@/lib/supabaseServer";
-import { fichaErrorBody, fichaErrorStatus, type FichaErrorCode } from "@/lib/fichaCitaPublica";
+import {
+  fichaErrorBody,
+  fichaErrorStatus,
+  verificarSecretoCaja,
+  type FichaErrorCode,
+} from "@/lib/fichaCitaPublica";
+import { evaluarEstadoToken } from "@/lib/fichaCitaDominio";
 
 /**
  * Piezas compartidas entre GET/POST /api/publico/ficha/[token] y
@@ -35,6 +41,10 @@ export type CitaRow = {
   canal: string | null;
   idioma: string | null;
   cupon_vigente_hasta: string | null;
+  servicios_json: Array<{
+    nombre?: string;
+    duracion_min?: number;
+  }> | null;
 };
 
 export type ClienteRow = {
@@ -59,6 +69,20 @@ type IntentoRow = {
 export function errorResponse(code: FichaErrorCode, mensaje: string) {
   return NextResponse.json(fichaErrorBody(code, mensaje), {
     status: fichaErrorStatus(code),
+    headers: {
+      "Cache-Control": "no-store",
+      "X-Robots-Tag": "noindex, nofollow, noarchive",
+    },
+  });
+}
+
+export function jsonNoStore(body: unknown, status = 200) {
+  return NextResponse.json(body, {
+    status,
+    headers: {
+      "Cache-Control": "no-store",
+      "X-Robots-Tag": "noindex, nofollow, noarchive",
+    },
   });
 }
 
@@ -73,10 +97,31 @@ export function getClientIp(request: NextRequest) {
  * sección 6). GET .../ics NO la usa: la abre directo el navegador del
  * cliente, que no tiene el secreto.
  */
-export function verificarSecreto(request: NextRequest) {
+export function autenticarApiPublica(request: NextRequest) {
   const esperado = getServerEnv("CAJA_API_SECRET");
-  const recibido = request.headers.get("x-caja-secret") ?? "";
-  return Boolean(esperado) && recibido === esperado;
+  if (!esperado) {
+    return errorResponse(
+      "configuracion",
+      "Falta la configuración del servidor para la API pública."
+    );
+  }
+
+  if (!verificarSecretoCaja(request.headers, esperado)) {
+    return errorResponse("no_autorizado", "Falta o no coincide X-Caja-Secret.");
+  }
+
+  return null;
+}
+
+export function validarEstadoCita(cita: CitaRow) {
+  const estado = evaluarEstadoToken(cita);
+  if (estado === "token_vencido") {
+    return errorResponse("token_vencido", "El enlace ya venció.");
+  }
+  if (estado === "ficha_ya_completa") {
+    return errorResponse("ficha_ya_completa", "Esta ficha ya fue completada.");
+  }
+  return null;
 }
 
 export async function checkRateLimit(ip: string, token: string) {
@@ -137,7 +182,7 @@ export async function cargarCitaPorToken(token: string) {
   const result = await supabaseSelectWhere<CitaRow>(
     "citas_reservadas",
     [
-      "select=reserva_id,cliente_id,fecha_cita,hora_cita,sede,n_pax,personas,servicio,duracion_min,monto_total,adelanto,saldo_pendiente,estado_ficha,token_expira,canal,idioma,cupon_vigente_hasta",
+      "select=reserva_id,cliente_id,fecha_cita,hora_cita,sede,n_pax,personas,servicio,duracion_min,monto_total,adelanto,saldo_pendiente,estado_ficha,token_expira,canal,idioma,cupon_vigente_hasta,servicios_json",
       `token_ficha=eq.${encodeURIComponent(token)}`,
       "limit=1",
     ].join("&")
@@ -181,6 +226,17 @@ export async function cargarSede(nombre: string | null) {
 }
 
 export function construirCitaResumen(cita: CitaRow, sedeInfo: SedeRow | null) {
+  const servicios = Array.isArray(cita.servicios_json) && cita.servicios_json.length
+    ? cita.servicios_json
+        .filter((item) => item?.nombre)
+        .map((item) => ({
+          nombre: String(item.nombre),
+          duracionMin: Number(item.duracion_min) || null,
+        }))
+    : cita.servicio
+      ? [{ nombre: cita.servicio, duracionMin: cita.duracion_min ?? null }]
+      : [];
+
   return {
     fecha: cita.fecha_cita,
     hora: cita.hora_cita ? String(cita.hora_cita).slice(0, 5) : cita.hora_cita,
@@ -188,9 +244,7 @@ export function construirCitaResumen(cita: CitaRow, sedeInfo: SedeRow | null) {
     sedeDireccion: sedeInfo?.direccion ?? null,
     sedeMapsUrl: sedeInfo?.maps_url ?? null,
     personas: cita.personas ?? cita.n_pax ?? 1,
-    servicios: cita.servicio
-      ? [{ nombre: cita.servicio, duracionMin: cita.duracion_min ?? null }]
-      : [],
+    servicios,
     duracionTotalMin: cita.duracion_min ?? null,
   };
 }

@@ -1,7 +1,8 @@
 import "server-only";
 
-import { randomBytes, timingSafeEqual } from "crypto";
+import { randomBytes } from "crypto";
 import { getServerEnv } from "@/lib/env";
+import { secretoCajaValido } from "@/lib/fichaCitaSeguridad";
 
 /**
  * Helpers compartidos por GET/POST /api/publico/ficha/[token].
@@ -11,10 +12,13 @@ import { getServerEnv } from "@/lib/env";
  * acá sin actualizar ese contrato en los dos repos a la vez.
  */
 
-export const FICHA_CANALES = ["directo", "cuponidad", "bee"] as const;
-export type FichaCanal = (typeof FICHA_CANALES)[number];
+export { CANALES_FICHA as FICHA_CANALES } from "@/lib/fichaCitaDominio";
+export type { CanalFicha as FichaCanal } from "@/lib/fichaCitaDominio";
+export { normalizarTelefonoE164 } from "@/lib/fichaCitaDominio";
+export type { NormalizarTelefonoResultado } from "@/lib/fichaCitaDominio";
 
 export type FichaErrorCode =
+  | "configuracion"
   | "no_autorizado"
   | "token_no_existe"
   | "token_vencido"
@@ -24,6 +28,7 @@ export type FichaErrorCode =
   | "rate_limited";
 
 const ERROR_HTTP_STATUS: Record<FichaErrorCode, number> = {
+  configuracion: 500,
   no_autorizado: 401,
   token_no_existe: 404,
   token_vencido: 410,
@@ -59,15 +64,8 @@ export function generarTokenFicha() {
  * dejar explícito que no importa cómo lo mande el cliente.
  */
 export function verificarSecretoCaja(headers: Headers, secretoEsperado: string) {
-  if (!secretoEsperado) return false;
-
   const recibido = headers.get("x-caja-secret") ?? "";
-  const a = Buffer.from(recibido);
-  const b = Buffer.from(secretoEsperado);
-
-  if (a.length !== b.length) return false;
-
-  return timingSafeEqual(a, b);
+  return secretoCajaValido(recibido, secretoEsperado);
 }
 
 /**
@@ -82,64 +80,6 @@ export function enmascararEmail(email: string | null | undefined) {
 
   const inicial = usuario.slice(0, 1);
   return `${inicial}${"*".repeat(Math.max(usuario.length - 1, 3))}@${dominio}`;
-}
-
-/**
- * Prefijos internacionales cubiertos para normalizar `telefono` a
- * E.164 en la POST. Es un mapa chico a propósito: la clientela real
- * es sobre todo Perú, con algo de turismo de estos países. Un país
- * fuera de esta lista responde 422 (validacion) en vez de adivinar
- * — no hay forma segura de inferir el largo de un número que no se
- * conoce.
- */
-const PREFIJOS_PAIS: Record<string, string> = {
-  PE: "51",
-  US: "1",
-  CA: "1",
-  MX: "52",
-  CO: "57",
-  CL: "56",
-  AR: "54",
-  BR: "55",
-  EC: "593",
-  BO: "591",
-  VE: "58",
-  ES: "34",
-  GB: "44",
-  DE: "49",
-  FR: "33",
-  IT: "39",
-};
-
-export type NormalizarTelefonoResultado =
-  | { ok: true; e164: string; pais: string }
-  | { ok: false };
-
-export function normalizarTelefonoE164(
-  crudo: string,
-  pais: string
-): NormalizarTelefonoResultado {
-  const soloDigitos = crudo.replace(/\D/g, "");
-
-  if (crudo.trim().startsWith("+")) {
-    if (soloDigitos.length >= 8 && soloDigitos.length <= 15) {
-      return { ok: true, e164: `+${soloDigitos}`, pais: pais.toUpperCase() };
-    }
-    return { ok: false };
-  }
-
-  const paisNormalizado = pais.trim().toUpperCase();
-  const prefijo = PREFIJOS_PAIS[paisNormalizado];
-
-  if (!prefijo || soloDigitos.length < 6 || soloDigitos.length > 12) {
-    return { ok: false };
-  }
-
-  return {
-    ok: true,
-    e164: `+${prefijo}${soloDigitos}`,
-    pais: paisNormalizado,
-  };
 }
 
 /**
@@ -339,5 +279,6 @@ export function construirIcs(opts: {
  */
 export function plataformaDesdeCanal(canal: string) {
   if (canal === "cuponidad") return "Cuponidad";
+  if (canal === "bee") return "Bee Beneficios";
   return canal;
 }

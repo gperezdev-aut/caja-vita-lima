@@ -1,5 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
-import { supabaseInsert, supabaseSelectWhere, supabaseUpsert } from "@/lib/supabaseServer";
+import { NextRequest } from "next/server";
+import { supabaseRpc, supabaseSelectWhere } from "@/lib/supabaseServer";
 import {
   enmascararEmail,
   mensajeWhatsappCita,
@@ -15,11 +15,13 @@ import {
   cargarSede,
   checkRateLimit,
   construirCitaResumen,
+  autenticarApiPublica,
   errorResponse,
   getClientIp,
   limpiarIntentos,
   registrarIntentoFallido,
-  verificarSecreto,
+  jsonNoStore,
+  validarEstadoCita,
   type CitaRow,
 } from "../_lib";
 
@@ -38,11 +40,13 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ token: string }> }
 ) {
-  if (!verificarSecreto(request)) {
-    return errorResponse("no_autorizado", "Falta o no coincide X-Caja-Secret.");
-  }
+  const authError = autenticarApiPublica(request);
+  if (authError) return authError;
 
   const { token } = await params;
+  if (!/^[A-Za-z0-9_-]{43}$/.test(token)) {
+    return errorResponse("token_no_existe", "El enlace no es válido.");
+  }
   const ip = getClientIp(request);
 
   const { bloqueado, intentosPrevios } = await checkRateLimit(ip, token);
@@ -67,16 +71,12 @@ export async function GET(
 
   await limpiarIntentos(ip, token);
 
-  if (cita.token_expira && new Date(cita.token_expira).getTime() < Date.now()) {
-    return errorResponse("token_vencido", "El enlace ya venció.");
-  }
-
-  if (cita.estado_ficha === "completa") {
-    return errorResponse("ficha_ya_completa", "Esta ficha ya fue completada.");
-  }
+  const estadoError = validarEstadoCita(cita);
+  if (estadoError) return estadoError;
 
   const canal = (cita.canal ?? "directo") as string;
   const esCuponidad = canal === "cuponidad";
+  const esConvenio = esCuponidad || canal === "bee";
 
   const cliente = await cargarCliente(cita.cliente_id);
 
@@ -87,12 +87,12 @@ export async function GET(
       ? Number(cita.saldo_pendiente)
       : Math.max(montoTotal - adelanto, 0);
 
-  const pago = esCuponidad
+  const pago = esConvenio
     ? {
         moneda: "PEN",
         adelantoRecibido: 0,
         saldo,
-        leyenda: "Pagado en Cuponidad",
+        leyenda: esCuponidad ? "Pagado en Cuponidad" : "Pagado por Bee Beneficios",
       }
     : {
         moneda: "PEN",
@@ -111,9 +111,9 @@ export async function GET(
     cita: construirCitaResumen(cita, sedeInfo),
     pago,
     requiere: {
-      codigoCupon: esCuponidad,
+      codigoCupon: esConvenio,
       correoObligatorio: false,
-      documentoParaBoleta: esCuponidad ? "no" : "opcional",
+      documentoParaBoleta: esConvenio ? "no" : "opcional",
     },
     cliente: {
       conocido: Boolean(cliente?.cliente),
@@ -127,11 +127,11 @@ export async function GET(
   // (decisión del dueño): es una propiedad de la promoción elegida al
   // armar la cita, no de la fila de cupones_convenios, que en este
   // punto todavía no existe (el cliente aún no escribió el código).
-  if (esCuponidad) {
+  if (esConvenio) {
     body.cupon = { vigenteHasta: cita.cupon_vigente_hasta ?? null };
   }
 
-  return NextResponse.json(body);
+  return jsonNoStore(body);
 }
 
 type FichaPostBody = {
@@ -174,11 +174,13 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ token: string }> }
 ) {
-  if (!verificarSecreto(request)) {
-    return errorResponse("no_autorizado", "Falta o no coincide X-Caja-Secret.");
-  }
+  const authError = autenticarApiPublica(request);
+  if (authError) return authError;
 
   const { token } = await params;
+  if (!/^[A-Za-z0-9_-]{43}$/.test(token)) {
+    return errorResponse("token_no_existe", "El enlace no es válido.");
+  }
   const ip = getClientIp(request);
 
   const { bloqueado, intentosPrevios } = await checkRateLimit(ip, token);
@@ -203,13 +205,8 @@ export async function POST(
 
   await limpiarIntentos(ip, token);
 
-  if (cita.token_expira && new Date(cita.token_expira).getTime() < Date.now()) {
-    return errorResponse("token_vencido", "El enlace ya venció.");
-  }
-
-  if (cita.estado_ficha === "completa") {
-    return errorResponse("ficha_ya_completa", "Esta ficha ya fue completada.");
-  }
+  const estadoError = validarEstadoCita(cita);
+  if (estadoError) return estadoError;
 
   let payload: FichaPostBody;
   try {
@@ -217,14 +214,22 @@ export async function POST(
   } catch {
     return errorResponse("validacion", "El cuerpo no es JSON válido.");
   }
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return errorResponse("validacion", "El cuerpo debe ser un objeto JSON.");
+  }
 
   // --- Validación de servidor (sección 6: "toda la validación se
   // repite en el servidor; lo que valida la web es comodidad para el
   // cliente, lo que decide es caja") ---
 
   const nombre = (payload.nombre ?? "").trim();
-  if (!nombre) {
+  if (!nombre || nombre.length > 160) {
     return errorResponse("validacion", "Falta el nombre.");
+  }
+
+  const correo = (payload.correo ?? "").trim();
+  if (correo && (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo) || correo.length > 254)) {
+    return errorResponse("validacion", "El correo no tiene un formato válido.");
   }
 
   const telefonoCrudo = (payload.telefono?.crudo ?? "").trim();
@@ -267,13 +272,31 @@ export async function POST(
     if (!boleta.numero || !boleta.numero.trim()) {
       return errorResponse("validacion", "Falta el número de documento para boleta.");
     }
+    const documento = boleta.numero.trim();
+    if (boleta.tipo === "DNI" && !/^\d{8}$/.test(documento)) {
+      return errorResponse("validacion", "El DNI debe tener 8 dígitos.");
+    }
+    if (boleta.tipo === "RUC" && !/^\d{11}$/.test(documento)) {
+      return errorResponse("validacion", "El RUC debe tener 11 dígitos.");
+    }
+  }
+
+  if (payload.idioma && payload.idioma !== "es" && payload.idioma !== "en") {
+    return errorResponse("validacion", "El idioma es inválido.");
+  }
+  if (payload.cumple) {
+    const { dia, mes } = payload.cumple;
+    if (!Number.isInteger(dia) || !Number.isInteger(mes) || !dia || !mes || dia < 1 || dia > 31 || mes < 1 || mes > 12) {
+      return errorResponse("validacion", "La fecha de cumpleaños es inválida.");
+    }
   }
 
   const canal = cita.canal ?? "directo";
   const esCuponidad = canal === "cuponidad";
+  const esConvenio = esCuponidad || canal === "bee";
   const codigoCupon = (payload.codigoCupon ?? "").trim();
 
-  if (esCuponidad && !codigoCupon) {
+  if (esConvenio && !codigoCupon) {
     return errorResponse("validacion", "Falta el código de cupón.");
   }
 
@@ -301,120 +324,47 @@ export async function POST(
     }
   }
 
-  // --- Persistencia ---
-
-  const ahora = new Date().toISOString();
-  let clienteId = cita.cliente_id ?? "";
-
-  if (!clienteId) {
-    const existenteWa = await supabaseSelectWhere<{ cliente_id: string }>(
-      "clientes",
-      `select=cliente_id&whatsapp_e164=eq.${encodeURIComponent(
-        telefonoNormalizado.e164
-      )}&limit=1`
-    );
-    clienteId =
-      existenteWa.data?.[0]?.cliente_id ??
-      `CLI-FICHA-${Date.now().toString(36).toUpperCase()}`;
-  }
-
+  // --- Persistencia atómica (sql/014) ---
   const cumple = payload.cumple ?? null;
-
-  const clienteUpsert = await supabaseUpsert(
-    "clientes",
-    {
-      cliente_id: clienteId,
-      cliente: nombre,
-      email: payload.correo || null,
-      dni: boleta.requiere && boleta.tipo === "DNI" ? boleta.numero : undefined,
+  const completar = await supabaseRpc<{ ok: boolean }>("completar_ficha_cita", {
+    p_token: token,
+    p_payload: {
+      cliente_id:
+        cita.cliente_id ?? `CLI-FICHA-${Date.now().toString(36).toUpperCase()}`,
+      nombre,
+      correo: correo || null,
+      dni: boleta.requiere && boleta.tipo === "DNI" ? boleta.numero : null,
       whatsapp_e164: telefonoNormalizado.e164,
       pais_telefono: telefonoNormalizado.pais,
       idioma: payload.idioma ?? "es",
       cumple_dia: cumple?.dia ?? null,
       cumple_mes: cumple?.mes ?? null,
-      consent_datos_en: ahora,
-      consent_promos_en: consentimientos.promociones ? ahora : null,
-      updated_at: ahora,
-    },
-    "cliente_id"
-  );
-
-  if (clienteUpsert.error) {
-    return errorResponse("validacion", `No se pudo guardar el cliente: ${clienteUpsert.error}`);
-  }
-
-  // Decisión del dueño (docs/caja-cambios-para-la-ficha-de-cita.md,
-  // sección 2): si el cliente no marcó ninguna condición, no hay dato
-  // sensible que guardar — no se crea fila en fichas_salud. Si se
-  // llegó hasta acá con alguna condición marcada, la validación de
-  // arriba ya garantizó consentimientos.salud === true.
-  if (requiereConsentimientoSalud(salud)) {
-    const fichaSaludUpsert = await supabaseUpsert(
-      "fichas_salud",
-      {
-        ficha_id: idFicha(),
-        reserva_id: cita.reserva_id,
-        cliente_id: clienteId,
+      consent_promos: Boolean(consentimientos.promociones),
+      guardar_salud: requiereConsentimientoSalud(salud),
+      salud: {
         embarazo: Boolean(salud.embarazo),
         presion: Boolean(salud.presion),
         cirugia_reciente: Boolean(salud.cirugiaReciente),
         alergias: salud.alergias || null,
         zonas_evitar: salud.zonasEvitar || null,
         notas: salud.notas || null,
-        consent_salud_en: ahora,
       },
-      "reserva_id"
-    );
+      ficha_id: idFicha(),
+      codigo_cupon: codigoCupon || null,
+      cupon_id: idCupon(),
+    },
+  });
 
-    if (fichaSaludUpsert.error) {
-      return errorResponse(
-        "validacion",
-        `No se pudo guardar la ficha de salud: ${fichaSaludUpsert.error}`
-      );
-    }
-  }
-
-  if (codigoCupon) {
-    const cuponInsert = await supabaseInsert("cupones_convenios", {
-      registro_id: idCupon(),
-      fecha: cita.fecha_cita,
-      sede: cita.sede,
-      plataforma: plataformaDesdeCanal(canal),
-      codigo_cupon: codigoCupon,
-      cliente: nombre,
-      whatsapp: telefonoNormalizado.e164,
-      n_pax: cita.personas ?? cita.n_pax ?? 1,
-      servicio: cita.servicio,
-      estado: "declarado",
-      reserva_id: cita.reserva_id,
-    });
-
-    if (cuponInsert.error) {
+  if (completar.error || !completar.data?.ok) {
+    if (completar.error?.includes("CUPON_YA_USADO")) {
       return errorResponse(
         "cupon_ya_usado",
         "Ese código de cupón ya fue usado. Si es un error, contáctanos por WhatsApp."
       );
     }
-  }
-
-  const citaUpdate = await supabaseUpsert(
-    "citas_reservadas",
-    {
-      reserva_id: cita.reserva_id,
-      cliente_id: clienteId,
-      cliente: nombre,
-      dni: boleta.requiere && boleta.tipo === "DNI" ? boleta.numero : undefined,
-      whatsapp: telefonoNormalizado.e164,
-      estado_ficha: "completa",
-      updated_at: ahora,
-    },
-    "reserva_id"
-  );
-
-  if (citaUpdate.error) {
     return errorResponse(
       "validacion",
-      `No se pudo cerrar la ficha: ${citaUpdate.error}`
+      "No se pudo guardar la ficha de forma completa. No se aplicó ningún cambio parcial."
     );
   }
 
@@ -433,14 +383,14 @@ export async function POST(
 
   const sedeInfo = await cargarSede(cita.sede);
 
-  return NextResponse.json({
+  return jsonNoStore({
     ok: true,
     icsUrl,
     whatsappUrl,
     resumen: {
       ...construirCitaResumen(cita, sedeInfo),
       moneda: "PEN",
-      adelantoRecibido: esCuponidad ? 0 : Number(cita.adelanto ?? 0),
+      adelantoRecibido: esConvenio ? 0 : Number(cita.adelanto ?? 0),
       saldo:
         cita.saldo_pendiente != null
           ? Number(cita.saldo_pendiente)

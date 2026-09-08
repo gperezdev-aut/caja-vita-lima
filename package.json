@@ -6,6 +6,7 @@
     "npm": ">=10 <12"
   },
   "scripts": {
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test tests/*.test.ts",
     "dev": "next dev --webpack",
     "build": "next build --webpack",
     "start": "next start",
