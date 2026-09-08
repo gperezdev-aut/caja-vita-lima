@@ -166,6 +166,15 @@ La web **no toca Supabase**. No tiene credenciales de la base, no conoce el esqu
 precios ni adelantos: caja se los manda ya calculados. Son dos endpoints, servidor contra
 servidor, autenticados con un secreto compartido en cabecera.
 
+> **Este contrato ya está cerrado y en producción del lado de la web** (PR #38 de `vita-lima-web`,
+> rama `feat/ficha-cita`, y su `docs/encargo-web-ficha-cita.md`). Lo de abajo no es una propuesta:
+> es lo que la web ya espera recibir. Cualquier cambio hay que acordarlo en los dos repos a la vez.
+
+### Autenticación
+
+Variable `CAJA_API_SECRET`, mandada en la cabecera `X-Caja-Secret`. **Las cabeceras llegan en
+minúsculas**: comparar contra `x-caja-secret`. Esto ya costó tiempo una vez con el webhook de n8n.
+
 ### `GET /api/publico/ficha/:token`
 
 ```json
@@ -200,22 +209,72 @@ servidor, autenticados con un secreto compartido en cabecera.
 }
 ```
 
-Respuestas: `404` si el token no existe · `410` si expiró o la ficha ya está completa.
+`documentoParaBoleta` tiene **solo dos valores: `"no"` y `"opcional"`**. No existe `"obligatorio"`
+— el DNI es opcional a propósito. En canal cupón siempre viene `"no"`, porque la boleta la emite
+la plataforma.
 
-En canal cupón: `pago.adelantoRecibido = 0`, `pago.leyenda = "Pagado en Cuponidad"`,
+En canal cupón, además: `pago.adelantoRecibido = 0`, `pago.leyenda = "Pagado en Cuponidad"`,
 `requiere.codigoCupon = true`, y un `cupon.vigenteHasta` que la web usa como fecha máxima.
 
 ### `POST /api/publico/ficha/:token`
 
-Manda: teléfono (crudo + país, caja normaliza a E.164), nombre, correo, cumpleaños opcional,
-documento para boleta si lo pidió, el bloque de salud, los tres consentimientos con su marca de
-tiempo, y `codigoCupon` si aplica.
+```json
+{
+  "telefono": { "crudo": "987 654 321", "pais": "PE" },
+  "nombre": "Rosa Quispe",
+  "correo": "rosa@ejemplo.com",
+  "cumple": { "dia": 14, "mes": 3 },
+  "boleta": { "requiere": true, "tipo": "DNI", "numero": "12345678", "razonSocial": null },
+  "salud": {
+    "embarazo": false, "presion": true, "cirugiaReciente": false,
+    "alergias": "", "zonasEvitar": "", "notas": ""
+  },
+  "consentimientos": { "datos": true, "salud": true, "promociones": false },
+  "codigoCupon": null,
+  "idioma": "es"
+}
+```
 
-Devuelve el resumen para la pantalla final y una **`icsUrl`** — el `.ics` lo genera caja, para que
-la lógica de zona horaria viva en un solo sitio.
+- `boleta.tipo` es `"DNI"` o `"RUC"`. `cumple` y `codigoCupon` pueden ser `null`.
+- **Los consentimientos llegan como booleanos, no como fechas.** La marca de tiempo la pone caja
+  con su propio reloj al recibirlos: esa fecha es la prueba legal y no puede depender del reloj
+  del celular del cliente.
+- `idioma` es el que eligió la persona en la página. Guardarlo en `clientes.idioma` para que la
+  próxima ficha abra ya en ese idioma.
+- Caja normaliza `telefono` a E.164 con el país recibido.
 
-Errores: `409` si el código de cupón ya estaba usado (con un mensaje que diga qué hacer, no un
-error genérico) · `422` de validación.
+Respuesta `200`:
+
+```json
+{
+  "ok": true,
+  "icsUrl": "...",
+  "whatsappUrl": "...",
+  "resumen": {
+    "fecha": "2026-09-13", "hora": "16:00",
+    "sede": "San Borja", "sedeDireccion": "...", "sedeMapsUrl": "...",
+    "servicios": [{ "nombre": "Espalda Libre", "duracionMin": 60 }],
+    "moneda": "PEN", "adelantoRecibido": 10.0, "saldo": 65.0
+  }
+}
+```
+
+El `.ics` lo genera caja, con `America/Lima` explícito, para que la lógica de zona horaria viva
+en un solo sitio.
+
+### Errores
+
+Caja manda **solo un código legible por máquina**: `{ "error": "cupon_ya_usado", "mensaje": "..." }`.
+Los textos que ve el cliente son de la web, en español e inglés. **Caja no traduce ni escribe
+copy** — `mensaje` es solo un respaldo por si la web recibe un código que no conoce.
+
+| Código | HTTP | Cuándo |
+|---|---|---|
+| `token_no_existe` | 404 | El token no está en `citas_reservadas` |
+| `token_vencido` | 410 | Pasó `token_expira` |
+| `ficha_ya_completa` | 410 | `estado_ficha = completa` |
+| `cupon_ya_usado` | 409 | Choca con la restricción única de `cupones_convenios` |
+| `validacion` | 422 | Error de campo |
 
 **Toda la validación se repite en el servidor.** Lo que valida la web es comodidad para el
 cliente; lo que decide es caja.
