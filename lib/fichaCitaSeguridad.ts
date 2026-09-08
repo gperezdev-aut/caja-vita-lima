@@ -6,4 +6,3 @@ export function secretoCajaValido(recibido: string, esperado: string) {
   const b = Buffer.from(esperado);
   return a.length === b.length && timingSafeEqual(a, b);
 }
-

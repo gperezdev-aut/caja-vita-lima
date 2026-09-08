@@ -190,11 +190,30 @@ Flujo en dos toques, que es como ocurre de verdad:
    Entonces genera el token y muestra **un solo botón «copiar mensaje»**, con el enlace ya dentro
    del texto. Un botón, no dos bloques: en un celular, copiar dos veces es error seguro.
 
+La implementación vive en `/preparar-cita` y usa la RPC
+`preparar_ficha_cita` de `sql/014_preparar_ficha_cita_transaccional.sql`.
+La función valida nuevamente sede, horario, personas, servicios y adelanto, y
+guarda cliente, movimiento, cita, pago y detalle dentro de una sola transacción.
+El token solo forma parte de la cita si todo lo anterior termina correctamente.
+
+**Cuponidad no es un cupón promocional común.** `canal = 'cuponidad'`
+representa un convenio de pago posterior: adelanto cero y confirmación manual,
+sin importar el país del teléfono. `canal = 'bee'` conserva el enum ya existente
+y se persiste como plataforma `Bee Beneficios`; el modelo histórico
+(`cupones_convenios`, `codigo_cupon`, `monto_reconocido`) confirma el mismo
+tratamiento de convenio. En cambio, un código de `stg_promotions_v1` solo ajusta
+el precio total y mantiene la política normal de adelanto (S/10 para una persona,
+50% para dos), salvo una regla específica futura que deberá modelarse de forma
+explícita.
+
+El teléfono extranjero se acepta y normaliza a E.164, pero por sí solo no cambia
+el adelanto ni activa `requiere_confirmacion`.
+
 Reglas que salen de las decisiones ya tomadas:
 
 - **No se manda el enlace hasta que el pago esté verificado.** El enlace *es* la prueba del pago.
-  Dos excepciones explícitas: canal cupón y teléfono no peruano, que van con adelanto cero y
-  `requiere_confirmacion = true`.
+  Cuponidad y Bee Beneficios son convenios de pago posterior: llevan adelanto cero y
+  `requiere_confirmacion = true`. Un teléfono extranjero no constituye una excepción económica.
 - **El monto viene propuesto pero editable.** La gente yapea de más, redondea, o paga el total
   completo. Un campo fijo obliga a mentir y descuadra el saldo.
 - El **número de operación** es lo que después deja cuadrar caja sin abrir el chat.

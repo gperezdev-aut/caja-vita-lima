@@ -76,4 +76,3 @@ test("producción detecta CAJA_API_URL y CAJA_API_SECRET ausentes", () => {
   const result = validarConfiguracionApiPublica({}, ["CAJA_API_URL", "CAJA_API_SECRET"]);
   assert.deepEqual(result, { ok: false, faltantes: ["CAJA_API_URL", "CAJA_API_SECRET"] });
 });
-

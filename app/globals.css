@@ -71,6 +71,19 @@ textarea.formControl{resize:vertical}
 @media(max-width:760px){.wizardProgress{grid-template-columns:repeat(5,auto);overflow-x:auto;padding-bottom:5px}.wizardStep small{display:none}.reviewGrid{grid-template-columns:1fr 1fr}.reviewWide{grid-column:span 2}}
 @media(max-width:520px){.nuevaAtencionPage{width:min(100% - 20px,1180px);padding-top:18px}.atencionForm{padding:12px}.wizardPanel{padding:16px;min-height:0}.atencionGrid,.reviewGrid,.paymentSummary{grid-template-columns:1fr}.atencionFieldWide,.reviewWide,.catalogCheckbox{grid-column:auto}.wizardActions button,.wizardActions a{min-width:0;flex:1}}
 
+/* Preparar ficha de cita — extensión aislada del lenguaje de nueva atención */
+.fichaPrepararForm{display:grid;gap:16px}
+.fichaPrepararForm .wizardPanel{min-height:0}
+.lookupField{align-content:start}.lookupField>span{min-height:15px}.lookupField .ghostButton{padding:11px 14px}
+.timeChips{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.timeChips button{border:1px solid var(--line);border-radius:999px;background:#fffaf4;color:var(--green);padding:9px 13px;font-weight:850;cursor:pointer}
+.timeChips button.active{background:var(--green);border-color:var(--green);color:white}
+.paymentFields{margin-top:16px}.saveFichaButton{width:100%;margin-top:16px;min-height:52px}
+.saveFichaButton:disabled{opacity:.55;cursor:not-allowed}
+.fichaSuccess{display:grid;gap:16px;text-align:center;justify-items:center;padding:32px}
+.fichaSuccess h2{font-size:32px;margin:0}.fichaSuccess p{max-width:760px;line-height:1.6;margin:0;overflow-wrap:anywhere}
+.copyMessageButton{width:min(100%,360px);min-height:54px}
+
 /* Navegación global móvil y tablet */
 .sidebarMobile{display:none;min-width:0;max-width:100vw;overflow:hidden}
 .mobileMenuDetails{width:100%;max-width:100%;min-width:0;background:rgba(255,250,241,.94);border-bottom:1px solid var(--line);backdrop-filter:blur(12px)}
