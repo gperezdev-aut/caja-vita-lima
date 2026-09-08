@@ -30,11 +30,24 @@ Buena parte del diseño ya tiene casa en el esquema actual:
 | El saldo pendiente | `caja_movimientos.total_pagado` y `.pendiente` |
 | El adelanto | `caja_pagos` → `tipo_pago = adelanto`, `metodo = Yape/Plin/transferencia/efectivo`, `monto` |
 | El canal cupón y su neto | `cupones_convenios` (`plataforma`, `codigo_cupon`, `monto_reconocido`) |
-| Roles y permisos | `usuarios.rol` — ADMIN_GERALD, CAJA, FINANZAS, LECTURA |
+| Roles y permisos | `lib/auth.ts` — **ADMIN_GERALD, SOCIO, VITA_OPERACION** (corregido — ver nota) |
 
 El adelanto de S/10 de una cita entra como una fila de `caja_pagos` con `tipo_pago = adelanto`.
 Eso resuelve, ya, el pendiente que quedó anotado en `adelantos-y-confirmacion-reservas.md`: que
 el adelanto se refleje en caja como pago parcial de la cita y no se anote aparte.
+
+> **Corrección (revisión de código, sept. 2026):** esta fila decía antes `ADMIN_GERALD, CAJA,
+> FINANZAS, LECTURA`. Ese es el rol que trae el *seed* SQL (`sql/002_seed_initial_data.sql`), pero
+> el módulo que de verdad controla accesos, `lib/auth.ts` (`CajaRole`, `PERMISSIONS`), usa otro
+> modelo: **`ADMIN_GERALD`, `SOCIO`, `VITA_OPERACION`**. Son dos cosas desalineadas dentro del
+> propio repo, no solo el doc contra el código. **Deuda técnica anotada, no se corrige en este
+> cambio** — ver §10.
+
+**Decisión del dueño sobre quién ve `fichas_salud`** (reemplaza lo que decía la sección 2 más
+abajo): los **tres roles la ven — `ADMIN_GERALD`, `SOCIO` y `VITA_OPERACION`**. Los socios ven todo
+el negocio, y `VITA_OPERACION` es el rol operativo (la terapista) que necesita saber si la clienta
+está embarazada o tiene la presión alta para atenderla sin riesgo. No es una restricción por rol
+como se pensó originalmente — es visible para cualquiera que tenga sesión.
 
 ## 2. Migración 013 — lo que falta
 
@@ -53,6 +66,16 @@ el adelanto se refleje en caja como pago parcial de la cita y no se anote aparte
 | `duracion_min` | `int` | Duración real del bloque, ya con los +10 min del beneficio si aplica |
 | `terapista_preferida` | `text` | Opcional |
 | `calendar_event_id` | `text` | Para poder actualizar o cancelar el evento después |
+| `cupon_vigente_hasta` | `timestamptz` | Fecha máxima del cupón — ver nota |
+
+**`cupon_vigente_hasta` va en `citas_reservadas`, no en `cupones_convenios`.** El GET de la sección
+6 necesita `cupon.vigenteHasta` **antes** de que el cliente escriba el código del cupón, o sea
+antes de que exista la fila en `cupones_convenios`. Es una propiedad de la promoción que el equipo
+elige al armar la cita (pantalla de §3), no del cupón que el cliente declara después. Así el GET
+lee una sola fila y no depende de una que puede no existir todavía.
+
+> Nota: `calendar_event_id` ya existe desde `001_create_tables.sql` — no es una columna nueva de
+> la 013, se lista acá porque el documento original la mencionaba como si faltara.
 
 ### `clientes`
 
@@ -80,9 +103,12 @@ alergias text, zonas_evitar text, notas text,
 consent_salud_en timestamptz, creado_en timestamptz
 ```
 
-**Restringir por rol: solo CAJA y ADMIN_GERALD.** FINANZAS y LECTURA no tienen ninguna razón
-para ver si una clienta está embarazada. Con los cuatro roles que ya existen esto es una policy,
-no un rediseño.
+**Sin restricción por rol.** Corrige lo que decía antes esta sección (`solo CAJA y ADMIN_GERALD`):
+el dueño decidió que los tres roles reales del sistema — `ADMIN_GERALD`, `SOCIO` y
+`VITA_OPERACION` — ven esta tabla. Ver la nota de la sección 1. Como no hay RLS en este proyecto
+(todo pasa por la service role key, sección 6), esto no cambia nada en SQL: solo importa el día que
+se construya la pantalla interna que lea `fichas_salud` (§3), para no filtrar el control de acceso
+ahí por error.
 
 ### `cupones_convenios`
 
@@ -91,6 +117,8 @@ no un rediseño.
 - `estado`: `declarado` (lo escribió el cliente) → `verificado` (alguien lo cruzó con el panel de
   la plataforma) → `canjeado` (mostró el QR y se atendió).
 - `reserva_id`, para atarlo a la cita.
+- **No lleva `vigente_hasta`** — esa fecha vive en `citas_reservadas.cupon_vigente_hasta` (ver
+  arriba), no acá.
 
 No hay API pública de Cuponidad: el canje real ocurre en el local mostrando el QR. Lo que el
 cliente escribe es una **declaración**. Ninguna pantalla debe decir «cupón validado».
@@ -104,6 +132,26 @@ emitido_en, vence_el, estado, reserva_id_canje
 
 `estado`: `disponible` → `reservado` → `canjeado`, o de vuelta a `disponible` si el cliente
 cancela — **liberar no renueva**: `vence_el` se fija al emitir y no se mueve.
+
+### `sedes` — tabla nueva
+
+No estaba en el plan original, pero se justifica sola: hoy no hay ningún lugar en el esquema con
+la dirección o el enlace de Maps de una sede — `config_listas` solo guarda el nombre
+(`lista='SEDES'`, `valor='San Borja'`). El GET de la sección 6 necesita `sedeDireccion` y
+`sedeMapsUrl`, y la pantalla interna (§3) va a necesitar además el horario real: San Borja abre a
+las 15:00 y hoy no hay dónde leerlo.
+
+```
+sede_id, nombre, direccion, maps_url, hora_apertura, hora_cierre, activo
+```
+
+Se crea con una fila por sede (`San Borja`, `Miraflores`, alineadas con `config_listas`) pero **sin
+datos** — `direccion`, `maps_url`, `hora_apertura` y `hora_cierre` en blanco. Los valores reales los
+pasa el dueño aparte; mientras tanto el GET devuelve `sedeDireccion`/`sedeMapsUrl` en `null`.
+
+`politicaCancelacionUrl`, en cambio, **no** va en esta tabla ni en ninguna: es la misma URL para
+las dos sedes, así que es una variable de entorno (`CAJA_POLITICA_CANCELACION_URL`), no un dato de
+negocio que necesite vivir en Supabase.
 
 ## 3. La pantalla interna del equipo
 
@@ -214,7 +262,9 @@ minúsculas**: comparar contra `x-caja-secret`. Esto ya costó tiempo una vez co
 la plataforma.
 
 En canal cupón, además: `pago.adelantoRecibido = 0`, `pago.leyenda = "Pagado en Cuponidad"`,
-`requiere.codigoCupon = true`, y un `cupon.vigenteHasta` que la web usa como fecha máxima.
+`requiere.codigoCupon = true`, y un `cupon.vigenteHasta` que la web usa como fecha máxima. Ese
+valor sale de `citas_reservadas.cupon_vigente_hasta` (sección 2) — no de una fila de
+`cupones_convenios`, que en este punto todavía no existe (el cliente aún no escribió el código).
 
 ### `POST /api/publico/ficha/:token`
 
@@ -243,6 +293,18 @@ En canal cupón, además: `pago.adelantoRecibido = 0`, `pago.leyenda = "Pagado e
   próxima ficha abra ya en ese idioma.
 - Caja normaliza `telefono` a E.164 con el país recibido.
 
+**Regla de consentimientos (decisión del dueño):**
+
+| Consentimiento | ¿Obligatorio? |
+|---|---|
+| `datos` | **Sí, siempre.** Sin él no hay forma de procesar la reserva → `422 validacion` si viene `false`. |
+| `salud` | **Solo si el cliente marcó alguna condición** en el bloque `salud`. Si eligió «Ninguna de las anteriores», no hay dato sensible que guardar y por lo tanto nada que consentir — condicionar todo el servicio a un consentimiento que puede no hacer falta lo vuelve un consentimiento no libre. |
+| `promociones` | **Nunca obligatorio.** |
+
+Esto implica un cambio chico del lado de la web: la casilla de consentimiento de salud debe
+aparecer solo si el cliente marcó alguna condición en ese bloque. **No es parte de este documento
+ni de este repo** — queda anotado para el PR #38 de `vita-lima-web`.
+
 Respuesta `200`:
 
 ```json
@@ -260,7 +322,17 @@ Respuesta `200`:
 ```
 
 El `.ics` lo genera caja, con `America/Lima` explícito, para que la lógica de zona horaria viva
-en un solo sitio.
+en un solo sitio. `icsUrl` apunta a `GET /api/publico/ficha/:token/ics` — es un endpoint nuevo,
+fuera del par servidor-a-servidor de arriba: lo abre directo el navegador del cliente (el botón
+«agregar a mi calendario»), así que **no** lleva `X-Caja-Secret` — solo el token, con el mismo
+límite de intentos por IP que el resto (§7). El VEVENT declara `TZID=America/Lima` con un
+`VTIMEZONE` embebido de offset fijo `-05:00` (Perú no tiene horario de verano), para que no
+dependa de que el calendario del cliente conozca esa zona.
+
+`whatsappUrl` es un enlace `wa.me` **al número del negocio**, con un mensaje prellenado que
+identifica la cita — del tipo *«Hola, tengo una consulta sobre mi cita del sábado 13 a las 4:00
+p.m. en San Borja»* — para que el cliente pueda pedir un cambio sin tener que explicar cuál es su
+reserva. El número sale de una variable de entorno (`CAJA_WHATSAPP_NEGOCIO`).
 
 ### Errores
 
@@ -306,3 +378,23 @@ Ese token es lo único que protege una ficha de salud, así que:
 
 - Actualizar el `README.md`, que hoy describe un proyecto que ya no existe.
 - Anotar la migración 013 y los dos endpoints en `docs/`.
+
+## 10. Deuda técnica anotada, no resuelta en este cambio
+
+Cosas que aparecieron revisando el código para este documento, que no se arreglan acá porque no
+son parte de la ficha de cita, pero que hay que tener anotadas:
+
+- **Roles desalineados dentro del propio repo.** `sql/002_seed_initial_data.sql` siembra
+  `usuarios.rol` con `ADMIN_GERALD / CAJA / FINANZAS / LECTURA`. `lib/auth.ts`, que es el módulo
+  que de verdad controla accesos, define `ADMIN_GERALD / SOCIO / VITA_OPERACION`. No son solo
+  nombres distintos — son dos modelos de rol distintos conviviendo en el mismo sistema. Alguien
+  tiene que decidir cuál es el real y limpiar el otro.
+- **Generador de ids no criptográfico, duplicado en varios archivos.** `app/nueva-atencion/actions.ts`,
+  `app/registrar-salida/actions.ts` y `app/cierre-caja/actions.ts` tienen cada uno su propia copia
+  idéntica de una función `id(prefix)` que arma `PREFIX-APP-<timestamp36>-<Math.random hex>` para
+  `reserva_id`, `movimiento_id`, `pago_id`, `salida_id`, `cierre_id`, etc. Sirve para identificadores
+  de registro (no protegen nada, solo tienen que no colisionar), así que `Math.random` no es un bug
+  de seguridad ahí — pero sí es código triplicado que podría vivir en un solo helper de `lib/`.
+  `app/api/publico/ficha/[token]/route.ts` (este cambio) sigue el mismo patrón para
+  `ficha_id`/`registro_id` de cupón, por consistencia con el resto del repo — **no** para el
+  `token_ficha`, que sí protege datos de salud y por eso usa `crypto.randomBytes` (§7).
