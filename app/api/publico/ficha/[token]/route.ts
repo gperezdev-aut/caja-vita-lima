@@ -1,20 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerEnv } from "@/lib/env";
-import {
-  supabaseInsert,
-  supabaseSelectWhere,
-  supabaseUpsert,
-} from "@/lib/supabaseServer";
+import { supabaseInsert, supabaseSelectWhere, supabaseUpsert } from "@/lib/supabaseServer";
 import {
   enmascararEmail,
-  fichaErrorBody,
-  fichaErrorStatus,
+  mensajeWhatsappCita,
   normalizarTelefonoE164,
   plataformaDesdeCanal,
-  POLITICA_CANCELACION_URL_DEFAULT,
-  SEDE_INFO,
-  type FichaErrorCode,
+  politicaCancelacionUrl,
+  requiereConsentimientoSalud,
+  whatsappUrlNegocio,
 } from "@/lib/fichaCitaPublica";
+import {
+  cargarCitaPorToken,
+  cargarCliente,
+  cargarSede,
+  checkRateLimit,
+  construirCitaResumen,
+  errorResponse,
+  getClientIp,
+  limpiarIntentos,
+  registrarIntentoFallido,
+  verificarSecreto,
+  type CitaRow,
+} from "../_lib";
 
 /**
  * GET/POST /api/publico/ficha/:token
@@ -26,153 +33,6 @@ import {
  *
  * Requiere sql/013_ficha_cita_publica.sql corrido en Supabase.
  */
-
-const MAX_INTENTOS = 20;
-const BLOQUEO_MINUTOS = 15;
-
-type CitaRow = {
-  reserva_id: string;
-  cliente_id: string | null;
-  fecha_cita: string | null;
-  hora_cita: string | null;
-  sede: string | null;
-  n_pax: number | null;
-  personas: number | null;
-  servicio: string | null;
-  duracion_min: number | null;
-  monto_total: number | null;
-  adelanto: number | null;
-  saldo_pendiente: number | null;
-  estado_ficha: string | null;
-  token_expira: string | null;
-  canal: string | null;
-  idioma: string | null;
-};
-
-type ClienteRow = {
-  cliente_id: string;
-  cliente: string | null;
-  email: string | null;
-  whatsapp: string | null;
-};
-
-type CuponRow = {
-  registro_id: string;
-  vigente_hasta: string | null;
-};
-
-type IntentoRow = {
-  ip: string;
-  token: string;
-  intentos: number | null;
-  bloqueado_hasta: string | null;
-};
-
-function errorResponse(code: FichaErrorCode, mensaje: string) {
-  return NextResponse.json(fichaErrorBody(code, mensaje), {
-    status: fichaErrorStatus(code),
-  });
-}
-
-function getClientIp(request: NextRequest) {
-  const forwarded = request.headers.get("x-forwarded-for");
-  if (forwarded) return forwarded.split(",")[0].trim();
-  return request.headers.get("x-real-ip") ?? "unknown";
-}
-
-function verificarSecreto(request: NextRequest) {
-  const esperado = getServerEnv("CAJA_API_SECRET");
-  const recibido = request.headers.get("x-caja-secret") ?? "";
-  return Boolean(esperado) && recibido === esperado;
-}
-
-async function checkRateLimit(ip: string, token: string) {
-  const previos = await supabaseSelectWhere<IntentoRow>(
-    "ficha_publica_intentos",
-    [
-      "select=ip,token,intentos,bloqueado_hasta",
-      `ip=eq.${encodeURIComponent(ip)}`,
-      `token=eq.${encodeURIComponent(token)}`,
-      "limit=1",
-    ].join("&")
-  );
-
-  const previo = previos.data?.[0];
-  const bloqueadoHasta = previo?.bloqueado_hasta
-    ? new Date(previo.bloqueado_hasta)
-    : null;
-
-  return {
-    bloqueado: Boolean(bloqueadoHasta && bloqueadoHasta.getTime() > Date.now()),
-    intentosPrevios: previo?.intentos ?? 0,
-  };
-}
-
-async function registrarIntentoFallido(
-  ip: string,
-  token: string,
-  intentosPrevios: number
-) {
-  const intentos = intentosPrevios + 1;
-  const bloqueado_hasta =
-    intentos >= MAX_INTENTOS
-      ? new Date(Date.now() + BLOQUEO_MINUTOS * 60 * 1000).toISOString()
-      : null;
-
-  await supabaseUpsert(
-    "ficha_publica_intentos",
-    { ip, token, intentos, bloqueado_hasta, ultimo_intento: new Date().toISOString() },
-    "ip,token"
-  );
-}
-
-async function limpiarIntentos(ip: string, token: string) {
-  await supabaseUpsert(
-    "ficha_publica_intentos",
-    {
-      ip,
-      token,
-      intentos: 0,
-      bloqueado_hasta: null,
-      ultimo_intento: new Date().toISOString(),
-    },
-    "ip,token"
-  );
-}
-
-async function cargarCitaPorToken(token: string) {
-  const result = await supabaseSelectWhere<CitaRow>(
-    "citas_reservadas",
-    [
-      "select=reserva_id,cliente_id,fecha_cita,hora_cita,sede,n_pax,personas,servicio,duracion_min,monto_total,adelanto,saldo_pendiente,estado_ficha,token_expira,canal,idioma",
-      `token_ficha=eq.${encodeURIComponent(token)}`,
-      "limit=1",
-    ].join("&")
-  );
-
-  if (result.error) {
-    throw new Error(result.error);
-  }
-
-  return result.data?.[0] ?? null;
-}
-
-function construirCitaResumen(cita: CitaRow) {
-  const sedeInfo = cita.sede ? SEDE_INFO[cita.sede] : undefined;
-
-  return {
-    fecha: cita.fecha_cita,
-    hora: cita.hora_cita ? String(cita.hora_cita).slice(0, 5) : cita.hora_cita,
-    sede: cita.sede,
-    sedeDireccion: sedeInfo?.direccion ?? null,
-    sedeMapsUrl: sedeInfo?.mapsUrl ?? null,
-    personas: cita.personas ?? cita.n_pax ?? 1,
-    servicios: cita.servicio
-      ? [{ nombre: cita.servicio, duracionMin: cita.duracion_min ?? null }]
-      : [],
-    duracionTotalMin: cita.duracion_min ?? null,
-  };
-}
 
 export async function GET(
   request: NextRequest,
@@ -218,18 +78,7 @@ export async function GET(
   const canal = (cita.canal ?? "directo") as string;
   const esCuponidad = canal === "cuponidad";
 
-  let cliente: ClienteRow | null = null;
-  if (cita.cliente_id) {
-    const clienteResult = await supabaseSelectWhere<ClienteRow>(
-      "clientes",
-      [
-        "select=cliente_id,cliente,email,whatsapp",
-        `cliente_id=eq.${encodeURIComponent(cita.cliente_id)}`,
-        "limit=1",
-      ].join("&")
-    );
-    cliente = clienteResult.data?.[0] ?? null;
-  }
+  const cliente = await cargarCliente(cita.cliente_id);
 
   const montoTotal = Number(cita.monto_total ?? 0);
   const adelanto = Number(cita.adelanto ?? 0);
@@ -252,12 +101,14 @@ export async function GET(
         leyenda: "Adelanto recibido",
       };
 
+  const sedeInfo = await cargarSede(cita.sede);
+
   const body: Record<string, unknown> = {
     token,
     estado: cita.estado_ficha ?? "pendiente",
     idioma: cita.idioma ?? "es",
     canal,
-    cita: construirCitaResumen(cita),
+    cita: construirCitaResumen(cita, sedeInfo),
     pago,
     requiere: {
       codigoCupon: esCuponidad,
@@ -269,21 +120,15 @@ export async function GET(
       nombre: cliente?.cliente ?? null,
       emailEnmascarado: enmascararEmail(cliente?.email),
     },
-    politicaCancelacionUrl: POLITICA_CANCELACION_URL_DEFAULT,
+    politicaCancelacionUrl: politicaCancelacionUrl(),
   };
 
+  // cupon.vigenteHasta sale de citas_reservadas.cupon_vigente_hasta
+  // (decisión del dueño): es una propiedad de la promoción elegida al
+  // armar la cita, no de la fila de cupones_convenios, que en este
+  // punto todavía no existe (el cliente aún no escribió el código).
   if (esCuponidad) {
-    const cuponResult = await supabaseSelectWhere<CuponRow>(
-      "cupones_convenios",
-      [
-        "select=registro_id,vigente_hasta",
-        `reserva_id=eq.${encodeURIComponent(cita.reserva_id)}`,
-        "order=created_at.desc",
-        "limit=1",
-      ].join("&")
-    );
-    const cupon = cuponResult.data?.[0];
-    body.cupon = { vigenteHasta: cupon?.vigente_hasta ?? null };
+    body.cupon = { vigenteHasta: cita.cupon_vigente_hasta ?? null };
   }
 
   return NextResponse.json(body);
@@ -396,11 +241,18 @@ export async function POST(
     );
   }
 
+  const salud = payload.salud ?? {};
   const consentimientos = payload.consentimientos ?? {};
+
+  // Regla del dueño: `datos` siempre obligatorio. `salud` solo si el
+  // cliente marcó alguna condición — si no hay dato sensible, no hay
+  // nada que consentir (condicionar el servicio a un consentimiento
+  // que puede no aplicar lo vuelve no libre). `promociones` nunca
+  // obligatorio (no se valida acá).
   if (!consentimientos.datos) {
     return errorResponse("validacion", "Falta aceptar el consentimiento de datos.");
   }
-  if (!consentimientos.salud) {
+  if (requiereConsentimientoSalud(salud) && !consentimientos.salud) {
     return errorResponse(
       "validacion",
       "Falta aceptar el consentimiento de la ficha de salud."
@@ -466,7 +318,6 @@ export async function POST(
       `CLI-FICHA-${Date.now().toString(36).toUpperCase()}`;
   }
 
-  const salud = payload.salud ?? {};
   const cumple = payload.cumple ?? null;
 
   const clienteUpsert = await supabaseUpsert(
@@ -560,23 +411,27 @@ export async function POST(
     );
   }
 
-  // El .ics real y el mensaje de WhatsApp no son parte de estos dos
-  // endpoints (fuera del alcance pedido): estas URLs son un
-  // placeholder de forma hasta que se construyan esas rutas.
-  // ⚠️ PENDIENTE: implementar GET /api/publico/ficha/[token]/ics y
-  // decidir qué arma exactamente whatsappUrl.
   const baseUrl = new URL(request.url).origin;
   const icsUrl = `${baseUrl}/api/publico/ficha/${token}/ics`;
-  const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(
-    `Cita confirmada: ${cita.servicio ?? ""} el ${cita.fecha_cita} ${cita.hora_cita ?? ""} en ${cita.sede ?? ""}.`
-  )}`;
+  const whatsappUrl =
+    cita.fecha_cita && cita.hora_cita
+      ? whatsappUrlNegocio(
+          mensajeWhatsappCita({
+            fecha: cita.fecha_cita,
+            hora: cita.hora_cita,
+            sede: cita.sede,
+          })
+        )
+      : whatsappUrlNegocio("Hola, tengo una consulta sobre mi cita.");
+
+  const sedeInfo = await cargarSede(cita.sede);
 
   return NextResponse.json({
     ok: true,
     icsUrl,
     whatsappUrl,
     resumen: {
-      ...construirCitaResumen(cita),
+      ...construirCitaResumen(cita, sedeInfo),
       moneda: "PEN",
       adelantoRecibido: esCuponidad ? 0 : Number(cita.adelanto ?? 0),
       saldo:

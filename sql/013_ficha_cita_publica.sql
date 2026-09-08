@@ -42,7 +42,16 @@ alter table public.citas_reservadas
   add column if not exists personas smallint default 1,
   add column if not exists idioma text default 'es',
   add column if not exists duracion_min integer,
-  add column if not exists terapista_preferida text;
+  add column if not exists terapista_preferida text,
+  add column if not exists cupon_vigente_hasta timestamptz;
+
+-- `cupon_vigente_hasta` va acá y NO en cupones_convenios: el GET de
+-- la sección 6 necesita `cupon.vigenteHasta` antes de que el cliente
+-- escriba el código del cupón, o sea antes de que exista la fila en
+-- cupones_convenios. Es una propiedad de la promoción que el equipo
+-- elige al armar la cita, no del cupón que el cliente declara
+-- después. Ver sección 2 del documento (nota agregada tras revisión
+-- del dueño).
 
 -- Único y disperso: muchas citas antiguas no tendrán token nunca
 -- (se crearon antes de este cambio, o son del flujo directo sin
@@ -161,12 +170,15 @@ where whatsapp_e164 is null;
 -- clientes, siguiendo el estilo del resto del esquema; reserva_id y
 -- cliente_id son texto simple.
 --
--- Acceso: no hay RLS en este proyecto (todo el backend usa la
--- service role key), así que "solo CAJA y ADMIN_GERALD pueden ver
--- esto" (sección 2 del documento) es una restricción que debe
--- aplicarse en la capa de aplicación el día que se construya la
--- pantalla interna que lee esta tabla — no en SQL. Ver nota de rol
--- más abajo antes de construir esa pantalla.
+-- Acceso: decisión del dueño (sección 1/2 del documento, revisada) —
+-- sin restricción por rol. La ven ADMIN_GERALD, SOCIO y
+-- VITA_OPERACION (los tres roles reales de lib/auth.ts): los socios
+-- ven todo el negocio, y VITA_OPERACION es quien atiende y necesita
+-- saber si hay embarazo o presión alta antes de tocar a la clienta.
+-- No hay RLS en este proyecto (todo el backend usa la service role
+-- key), así que esto no cambia nada en SQL — solo importa que la
+-- futura pantalla interna que lea esta tabla no le agregue una
+-- restricción que el negocio no pidió.
 -- ============================================================
 
 create table if not exists public.fichas_salud (
@@ -202,15 +214,11 @@ create unique index if not exists uq_fichas_salud_reserva_id
 
 alter table public.cupones_convenios
   add column if not exists estado text default 'declarado',
-  add column if not exists reserva_id text,
-  add column if not exists vigente_hasta timestamptz;
+  add column if not exists reserva_id text;
 
--- `vigente_hasta` no está en la tabla de columnas de la sección 2 del
--- documento, pero la sección 6 exige que el GET devuelva
--- `cupon.vigenteHasta` en canal cupón. Lo agrego para que el
--- contrato cerrado tenga de dónde salir. Si la fecha máxima del
--- cupón debía vivir en otro lado (ej. una tabla de vigencias por
--- plataforma), avísame y lo muevo antes de tocar Supabase.
+-- Sin `vigente_hasta` acá a propósito: esa fecha vive en
+-- citas_reservadas.cupon_vigente_hasta (ver arriba), porque el GET
+-- de la sección 6 la necesita antes de que exista esta fila.
 
 alter table public.cupones_convenios
   add constraint chk_cupones_estado
@@ -269,11 +277,49 @@ create index if not exists idx_beneficios_estado
 
 
 -- ============================================================
--- 6) FICHA_PUBLICA_INTENTOS — límite de intentos por IP
+-- 6) SEDES — tabla nueva
+--
+-- No estaba en el plan original de la sección 2 del documento, pero
+-- hoy no hay ningún lugar en el esquema con la dirección o el enlace
+-- de Maps de una sede (config_listas solo guarda el nombre). El GET
+-- de la sección 6 del documento necesita sedeDireccion/sedeMapsUrl,
+-- y la pantalla interna (§3) va a necesitar además el horario real.
+--
+-- Se siembran las dos sedes conocidas (alineadas con
+-- config_listas lista='SEDES') pero SIN datos todavía: direccion,
+-- maps_url, hora_apertura y hora_cierre quedan en NULL. El dueño
+-- pasa los valores reales aparte; mientras tanto el GET devuelve
+-- sedeDireccion/sedeMapsUrl en null en vez de romper.
+-- ============================================================
+
+create table if not exists public.sedes (
+  sede_id text primary key,
+  nombre text unique not null,
+  direccion text,
+  maps_url text,
+  hora_apertura time,
+  hora_cierre time,
+  activo boolean default true
+);
+
+insert into public.sedes (sede_id, nombre)
+select * from (values
+  ('SEDE-SAN-BORJA', 'San Borja'),
+  ('SEDE-MIRAFLORES', 'Miraflores')
+) as v(sede_id, nombre)
+where not exists (
+  select 1 from public.sedes where sedes.nombre = v.nombre
+);
+
+
+-- ============================================================
+-- 7) FICHA_PUBLICA_INTENTOS — límite de intentos por IP
 --
 -- Mismo patrón que 012_login_intentos.sql, aplicado al endpoint
 -- público GET/POST /api/publico/ficha/:token (sección 7 del
 -- documento: "Límite de intentos por IP en el endpoint público").
+-- También protege GET /api/publico/ficha/:token/ics, que no lleva
+-- X-Caja-Secret (lo abre directo el navegador del cliente).
 -- Clave compuesta ip+token: un token inválido probado desde muchas
 -- IPs no debe poder esquivar el límite, y una IP que prueba muchos
 -- tokens tampoco.
@@ -293,7 +339,7 @@ create index if not exists idx_ficha_publica_intentos_bloqueado
 
 
 -- ============================================================
--- 7) Validación rápida
+-- 8) Validación rápida
 -- ============================================================
 
 select 'citas_reservadas.token_ficha' as columna,
@@ -309,6 +355,9 @@ from public.fichas_salud
 union all
 select 'beneficios', count(*), count(*)
 from public.beneficios
+union all
+select 'sedes', count(*), count(*)
+from public.sedes
 union all
 select 'cupones_convenios.estado', count(*) filter (where estado is not null), count(*)
 from public.cupones_convenios;
