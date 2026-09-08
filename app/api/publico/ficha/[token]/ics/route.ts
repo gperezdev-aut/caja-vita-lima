@@ -84,7 +84,10 @@ export async function GET(
     hora: cita.hora_cita,
     duracionMin: cita.duracion_min ?? 60,
     resumen,
-    ubicacion: sedeInfo?.direccion ?? cita.sede,
+    ubicacion:
+      cita.tipo_atencion === "domicilio"
+        ? [cita.domicilio_distrito, cita.domicilio_direccion].filter(Boolean).join(", ")
+        : sedeInfo?.direccion ?? cita.sede,
     descripcion: cita.servicio,
   });
 

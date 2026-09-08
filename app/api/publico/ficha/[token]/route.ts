@@ -75,6 +75,7 @@ export async function GET(
   if (estadoError) return estadoError;
 
   const canal = (cita.canal ?? "directo") as string;
+  const esDomicilio = cita.tipo_atencion === "domicilio";
   const esCuponidad = canal === "cuponidad";
   const esConvenio = esCuponidad || canal === "bee";
 
@@ -87,7 +88,7 @@ export async function GET(
       ? Number(cita.saldo_pendiente)
       : Math.max(montoTotal - adelanto, 0);
 
-  const pago = esConvenio
+  const pago = esConvenio && !esDomicilio
     ? {
         moneda: "PEN",
         adelantoRecibido: 0,
@@ -375,9 +376,13 @@ export async function POST(
       ? whatsappUrlNegocio(
           mensajeWhatsappCita({
             fecha: cita.fecha_cita,
-            hora: cita.hora_cita,
-            sede: cita.sede,
-          })
+          hora: cita.hora_cita,
+          sede: cita.sede,
+          tipoAtencion: cita.tipo_atencion,
+          distritoDomicilio: cita.domicilio_distrito,
+          direccionDomicilio: cita.domicilio_direccion,
+          referenciaDomicilio: cita.domicilio_referencia,
+        })
         )
       : whatsappUrlNegocio("Hola, tengo una consulta sobre mi cita.");
 

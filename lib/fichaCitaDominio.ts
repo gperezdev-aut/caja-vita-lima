@@ -7,7 +7,83 @@ export type ReglaAdelantoInput = {
   personas: 1 | 2;
   montoTotal: number;
   esGiftCard?: boolean;
+  esDomicilio?: boolean;
 };
+
+export const CODIGOS_DOMICILIO = ["DOM-1H", "DOM-2H"] as const;
+export type CodigoDomicilio = (typeof CODIGOS_DOMICILIO)[number];
+export const COSTO_MOVILIDAD_DOMICILIO = 15;
+
+const SERVICIOS_DOMICILIO: Record<CodigoDomicilio, { precio: number; duracionMin: number }> = {
+  "DOM-1H": { precio: 120, duracionMin: 60 },
+  "DOM-2H": { precio: 230, duracionMin: 120 },
+};
+
+export type ServicioCalculado = { codigo: string; precio: number; duracion_min: number };
+
+export function esCodigoDomicilio(codigo: string): codigo is CodigoDomicilio {
+  return (CODIGOS_DOMICILIO as readonly string[]).includes(codigo);
+}
+
+export function tipoAtencionDesdeServicios(codigos: string[]) {
+  const domicilios = codigos.filter(esCodigoDomicilio).length;
+  if (domicilios === 0) return "sede" as const;
+  if (domicilios === codigos.length) return "domicilio" as const;
+  return "mezclado" as const;
+}
+
+/**
+ * El catálogo es la fuente del servidor; estos valores estables detectan un
+ * catálogo inconsistente antes de registrar una cita a domicilio.
+ */
+export function calcularCitaDomicilio(servicios: ServicioCalculado[]) {
+  if (!servicios.length || servicios.length > 2 || servicios.some((servicio) => !esCodigoDomicilio(servicio.codigo))) {
+    return { ok: false as const, error: "Domicilio requiere uno o dos servicios DOM válidos." };
+  }
+
+  for (const servicio of servicios) {
+    const esperado = SERVICIOS_DOMICILIO[servicio.codigo as CodigoDomicilio];
+    if (redondearDinero(servicio.precio) !== esperado.precio || servicio.duracion_min !== esperado.duracionMin) {
+      return { ok: false as const, error: `El catálogo no coincide con la tarifa de ${servicio.codigo}.` };
+    }
+  }
+
+  const subtotalServicios = redondearDinero(servicios.reduce((total, servicio) => total + servicio.precio, 0));
+  const total = redondearDinero(subtotalServicios + COSTO_MOVILIDAD_DOMICILIO);
+  return {
+    ok: true as const,
+    subtotalServicios,
+    movilidad: COSTO_MOVILIDAD_DOMICILIO,
+    total,
+    adelantoRequerido: redondearDinero(total * 0.5),
+    duracionMin: Math.max(...servicios.map((servicio) => servicio.duracion_min)),
+  };
+}
+
+export function coincideEconomiaDomicilio(
+  calculo: Extract<ReturnType<typeof calcularCitaDomicilio>, { ok: true }>,
+  total: number,
+  movilidad: number
+) {
+  return redondearDinero(total) === calculo.total && redondearDinero(movilidad) === calculo.movilidad;
+}
+
+export function validarDatosDomicilio(
+  datos: { sedeOperativa: string; distrito: string; direccion: string },
+  sedesOperativas: string[]
+) {
+  if (!sedesOperativas.includes(datos.sedeOperativa)) return "La sede operativa no es válida.";
+  if (!datos.distrito.trim()) return "El distrito del domicilio es obligatorio.";
+  if (!datos.direccion.trim()) return "La dirección del domicilio es obligatoria.";
+  return "";
+}
+
+export function describirAtencionDomicilio(datos: { distrito: string; direccion: string; referencia?: string | null }) {
+  const referencia = datos.referencia?.trim();
+  return ["Atención a domicilio", datos.distrito.trim(), datos.direccion.trim(), referencia ? `Referencia: ${referencia}` : ""]
+    .filter(Boolean)
+    .join(" · ");
+}
 
 export type EstadoFichaPublica = {
   estado_ficha: string | null;
@@ -34,17 +110,19 @@ export function calcularAdelantoRequerido({
   personas,
   montoTotal,
   esGiftCard = false,
+  esDomicilio = false,
 }: ReglaAdelantoInput) {
   const total = redondearDinero(Math.max(0, montoTotal));
 
+  if (esDomicilio) return redondearDinero(total * 0.5);
   if (esConvenioPagoPosterior(canal)) return 0;
   if (esGiftCard) return total;
   if (personas === 2) return redondearDinero(total * 0.5);
   return redondearDinero(Math.min(10, total));
 }
 
-export function requiereConfirmacion(canal: CanalFicha) {
-  return esConvenioPagoPosterior(canal);
+export function requiereConfirmacion(canal: CanalFicha, esDomicilio = false) {
+  return esDomicilio || esConvenioPagoPosterior(canal);
 }
 
 export function redondearDinero(value: number) {

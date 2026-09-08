@@ -4,10 +4,14 @@ import { randomUUID } from "crypto";
 import { requireModuleAccess } from "@/lib/auth";
 import {
   calcularAdelantoRequerido,
+  calcularCitaDomicilio,
   CANALES_FICHA,
+  describirAtencionDomicilio,
   horarioDentroDeSede,
   pagoHabilitaToken,
   redondearDinero,
+  tipoAtencionDesdeServicios,
+  validarDatosDomicilio,
   type CanalFicha,
 } from "@/lib/fichaCitaDominio";
 import { generarTokenFicha, normalizarTelefonoE164 } from "@/lib/fichaCitaPublica";
@@ -113,6 +117,9 @@ export async function prepararCitaAction(
   const esGiftCard = text(formData, "es_gift_card") === "1";
   const promoCode = text(formData, "promo_code");
   const montoPagado = number(formData, "monto_pagado");
+  const distritoDomicilio = text(formData, "domicilio_distrito");
+  const direccionDomicilio = text(formData, "domicilio_direccion");
+  const referenciaDomicilio = text(formData, "domicilio_referencia");
 
   if (!fecha || fecha < fechaLima() || !hora || !sede || !cliente) {
     return { ok: false, error: "Completa cliente, sede, fecha y una fecha no pasada." };
@@ -132,16 +139,21 @@ export async function prepararCitaAction(
   if (serviceCodes.some((code) => !code)) {
     return { ok: false, error: "Selecciona un servicio para cada persona." };
   }
+  const tipoAtencion = tipoAtencionDesdeServicios(serviceCodes);
+  if (tipoAtencion === "mezclado") {
+    return { ok: false, error: "No se pueden mezclar servicios presenciales y a domicilio en una misma cita." };
+  }
 
   const [catalogResult, promotionResult, sedeResult] = await Promise.all([
     supabaseSelect<Row>("stg_services_catalog_v5"),
     supabaseSelect<Row>("stg_promotions_v1"),
     supabaseSelectWhere<{
+      nombre: string | null;
       hora_apertura: string | null;
       hora_cierre: string | null;
     }>(
       "sedes",
-      `select=hora_apertura,hora_cierre&nombre=eq.${encodeURIComponent(sede)}&activo=is.true&limit=1`
+      `select=nombre,hora_apertura,hora_cierre&nombre=eq.${encodeURIComponent(sede)}&activo=is.true&limit=1`
     ),
   ]);
 
@@ -164,11 +176,31 @@ export async function prepararCitaAction(
     return { ok: false, error: "Uno de los servicios ya no está activo en el catálogo." };
   }
 
-  let montoTotal = redondearDinero(
-    servicios.reduce((sum, item) => sum + (item?.precio ?? 0), 0)
-  );
+  const serviciosValidos = servicios.filter((item): item is NonNullable<typeof item> => Boolean(item));
+  const esDomicilio = tipoAtencion === "domicilio";
+  if (esDomicilio) {
+    const errorDomicilio = validarDatosDomicilio(
+      { sedeOperativa: sede, distrito: distritoDomicilio, direccion: direccionDomicilio },
+      sedeResult.data.map((item) => String(item.nombre ?? "").trim()).filter(Boolean)
+    );
+    if (errorDomicilio) return { ok: false, error: errorDomicilio };
+    if (promoCode || esGiftCard) {
+      return { ok: false, error: "Las promociones y gift cards no aplican a domicilio sin una regla específica configurada." };
+    }
+  }
 
-  if (promoCode) {
+  let montoTotal = redondearDinero(serviciosValidos.reduce((sum, item) => sum + item.precio, 0));
+  let costoMovilidad = 0;
+  let economiaDomicilio: ReturnType<typeof calcularCitaDomicilio> | null = null;
+
+  if (esDomicilio) {
+    economiaDomicilio = calcularCitaDomicilio(serviciosValidos);
+    if (!economiaDomicilio.ok) return { ok: false, error: economiaDomicilio.error };
+    montoTotal = economiaDomicilio.total;
+    costoMovilidad = economiaDomicilio.movilidad;
+  }
+
+  if (promoCode && !esDomicilio) {
     const hoy = fechaLima();
     const promo = promotionResult.data.find((row) => {
       const inicio = String(row.start_date ?? "").slice(0, 10);
@@ -221,6 +253,7 @@ export async function prepararCitaAction(
     personas,
     montoTotal,
     esGiftCard,
+    esDomicilio,
   });
   if (!pagoHabilitaToken(montoPagado, adelantoRequerido)) {
     return {
@@ -251,6 +284,12 @@ export async function prepararCitaAction(
       fecha,
       hora,
       sede,
+      tipo_atencion: tipoAtencion,
+      sede_operativa: sede,
+      domicilio_distrito: esDomicilio ? distritoDomicilio : null,
+      domicilio_direccion: esDomicilio ? direccionDomicilio : null,
+      domicilio_referencia: esDomicilio ? referenciaDomicilio || null : null,
+      costo_movilidad: costoMovilidad,
       cliente,
       whatsapp_e164: telefono.e164,
       pais_telefono: telefono.pais,
@@ -278,7 +317,10 @@ export async function prepararCitaAction(
   }
 
   const enlace = `https://vitalimaspa.com/cita/${token}`;
-  const mensaje = `Hola ${cliente}, tu cita en Vita Lima quedó registrada para el ${fecha} a las ${hora} en ${sede}. Completa tu ficha aquí: ${enlace}`;
+  const ubicacionCliente = esDomicilio
+    ? describirAtencionDomicilio({ distrito: distritoDomicilio, direccion: direccionDomicilio, referencia: referenciaDomicilio })
+    : `en ${sede}`;
+  const mensaje = `Hola ${cliente}, tu cita en Vita Lima quedó registrada para el ${fecha} a las ${hora}. ${ubicacionCliente}. Completa tu ficha aquí: ${enlace}`;
 
   return { ok: true, mensaje, enlace, reservaId };
 }

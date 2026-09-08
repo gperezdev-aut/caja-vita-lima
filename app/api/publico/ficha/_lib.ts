@@ -10,7 +10,7 @@ import {
   verificarSecretoCaja,
   type FichaErrorCode,
 } from "@/lib/fichaCitaPublica";
-import { evaluarEstadoToken } from "@/lib/fichaCitaDominio";
+import { describirAtencionDomicilio, evaluarEstadoToken } from "@/lib/fichaCitaDominio";
 
 /**
  * Piezas compartidas entre GET/POST /api/publico/ficha/[token] y
@@ -41,6 +41,12 @@ export type CitaRow = {
   canal: string | null;
   idioma: string | null;
   cupon_vigente_hasta: string | null;
+  tipo_atencion: string | null;
+  sede_operativa: string | null;
+  domicilio_distrito: string | null;
+  domicilio_direccion: string | null;
+  domicilio_referencia: string | null;
+  costo_movilidad: number | null;
   servicios_json: Array<{
     nombre?: string;
     duracion_min?: number;
@@ -182,7 +188,7 @@ export async function cargarCitaPorToken(token: string) {
   const result = await supabaseSelectWhere<CitaRow>(
     "citas_reservadas",
     [
-      "select=reserva_id,cliente_id,fecha_cita,hora_cita,sede,n_pax,personas,servicio,duracion_min,monto_total,adelanto,saldo_pendiente,estado_ficha,token_expira,canal,idioma,cupon_vigente_hasta,servicios_json",
+      "select=reserva_id,cliente_id,fecha_cita,hora_cita,sede,n_pax,personas,servicio,duracion_min,monto_total,adelanto,saldo_pendiente,estado_ficha,token_expira,canal,idioma,cupon_vigente_hasta,servicios_json,tipo_atencion,sede_operativa,domicilio_distrito,domicilio_direccion,domicilio_referencia,costo_movilidad",
       `token_ficha=eq.${encodeURIComponent(token)}`,
       "limit=1",
     ].join("&")
@@ -237,14 +243,36 @@ export function construirCitaResumen(cita: CitaRow, sedeInfo: SedeRow | null) {
       ? [{ nombre: cita.servicio, duracionMin: cita.duracion_min ?? null }]
       : [];
 
+  const esDomicilio = cita.tipo_atencion === "domicilio";
+  const direccionDomicilio = [
+    cita.domicilio_distrito,
+    cita.domicilio_direccion,
+    cita.domicilio_referencia ? `Referencia: ${cita.domicilio_referencia}` : null,
+  ].filter((item): item is string => Boolean(item?.trim())).join(" · ");
+  const sedeVisible = esDomicilio
+    ? describirAtencionDomicilio({
+        distrito: cita.domicilio_distrito ?? "",
+        direccion: cita.domicilio_direccion ?? "",
+        referencia: cita.domicilio_referencia,
+      })
+    : cita.sede;
+
   return {
     fecha: cita.fecha_cita,
     hora: cita.hora_cita ? String(cita.hora_cita).slice(0, 5) : cita.hora_cita,
-    sede: cita.sede,
-    sedeDireccion: sedeInfo?.direccion ?? null,
-    sedeMapsUrl: sedeInfo?.maps_url ?? null,
+    sede: sedeVisible,
+    sedeDireccion: esDomicilio ? direccionDomicilio || null : sedeInfo?.direccion ?? null,
+    sedeMapsUrl: esDomicilio ? null : sedeInfo?.maps_url ?? null,
     personas: cita.personas ?? cita.n_pax ?? 1,
     servicios,
     duracionTotalMin: cita.duracion_min ?? null,
+    tipoAtencion: esDomicilio ? "domicilio" : "sede",
+    domicilio: esDomicilio
+      ? {
+          distrito: cita.domicilio_distrito,
+          direccion: cita.domicilio_direccion,
+          referencia: cita.domicilio_referencia,
+        }
+      : null,
   };
 }

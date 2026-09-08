@@ -2,7 +2,10 @@
 
 import { useActionState, useMemo, useState } from "react";
 import {
+  calcularCitaDomicilio,
   calcularAdelantoRequerido,
+  esCodigoDomicilio,
+  requiereConfirmacion,
   type CanalFicha,
 } from "@/lib/fichaCitaDominio";
 import {
@@ -62,23 +65,34 @@ export function PrepararCitaForm({ services, promotions, sedes, metodos, minDate
 
   const eligibleServices = useMemo(() => {
     const onePerson = services.filter((item) => item.paxType === "1p");
-    return onePerson.length ? onePerson : services;
+    const withDomicilio = services.filter((item) => esCodigoDomicilio(item.code));
+    return Array.from(new Map([...onePerson, ...withDomicilio].map((item) => [item.code, item])).values());
   }, [services]);
   const selected = [
     eligibleServices.find((item) => item.code === service1),
     personas === 2 ? eligibleServices.find((item) => item.code === service2) : null,
   ].filter((item): item is Service => Boolean(item));
+  const esDomicilio = selected.length > 0 && selected.every((item) => esCodigoDomicilio(item.code));
+  const opcionesServicio2 = service1
+    ? eligibleServices.filter((item) => esCodigoDomicilio(item.code) === esCodigoDomicilio(service1))
+    : eligibleServices;
   const selectedPromo = promotions.find((item) => item.code === promo);
-  const total = selectedPromo
+  const economiaDomicilio = esDomicilio
+    ? calcularCitaDomicilio(selected.map((item) => ({ codigo: item.code, precio: item.price, duracion_min: item.duration })))
+    : null;
+  const subtotalServicios = selectedPromo && !esDomicilio
     ? personas === 2
       ? selectedPromo.price2
       : selectedPromo.price1
     : selected.reduce((sum, item) => sum + item.price, 0);
+  const movilidad = economiaDomicilio?.ok ? economiaDomicilio.movilidad : 0;
+  const total = economiaDomicilio?.ok ? economiaDomicilio.total : subtotalServicios;
   const required = calcularAdelantoRequerido({
     canal,
     personas,
     montoTotal: total,
     esGiftCard: giftCard,
+    esDomicilio,
   });
   const selectedSede = sedes.find((item) => item.name === sede);
   const duration = Math.max(0, ...selected.map((item) => item.duration));
@@ -125,6 +139,7 @@ export function PrepararCitaForm({ services, promotions, sedes, metodos, minDate
 
   return (
     <form action={formAction} className="atencionForm fichaPrepararForm">
+      <input type="hidden" name="tipo_atencion" value={esDomicilio ? "domicilio" : "sede"} />
       {state.error && <div className="formMessage error" role="alert">{state.error}</div>}
 
       <section className="wizardPanel visible">
@@ -185,7 +200,7 @@ export function PrepararCitaForm({ services, promotions, sedes, metodos, minDate
           </label>
           <label className="atencionField">
             Servicio — persona 1
-            <select name="servicio_1" value={service1} onChange={(event) => { setService1(event.target.value); setHora(""); }} required>
+              <select name="servicio_1" value={service1} onChange={(event) => { setService1(event.target.value); setService2(""); setHora(""); if (esCodigoDomicilio(event.target.value)) { setPromo(""); setGiftCard(false); } }} required>
               <option value="">Selecciona</option>
               {eligibleServices.map((item) => <option key={item.code} value={item.code}>{item.name} · {money(item.price)}</option>)}
             </select>
@@ -193,35 +208,51 @@ export function PrepararCitaForm({ services, promotions, sedes, metodos, minDate
           {personas === 2 && (
             <label className="atencionField">
               Servicio — persona 2
-              <select name="servicio_2" value={service2} onChange={(event) => { setService2(event.target.value); setHora(""); }} required>
+              <select name="servicio_2" value={service2} onChange={(event) => { setService2(event.target.value); setHora(""); if (esCodigoDomicilio(event.target.value)) { setPromo(""); setGiftCard(false); } }} required>
                 <option value="">Selecciona</option>
-                {eligibleServices.map((item) => <option key={item.code} value={item.code}>{item.name} · {money(item.price)}</option>)}
+                {opcionesServicio2.map((item) => <option key={item.code} value={item.code}>{item.name} · {money(item.price)}</option>)}
               </select>
             </label>
           )}
           <label className="atencionField">
             Cupón promocional común
-            <select name="promo_code" value={promo} onChange={(event) => setPromo(event.target.value)} disabled={canal !== "directo"}>
+            <select name="promo_code" value={promo} onChange={(event) => setPromo(event.target.value)} disabled={canal !== "directo" || esDomicilio}>
               <option value="">Sin promoción</option>
               {promotions.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
             </select>
           </label>
           <label className="catalogCheckbox">
-            <input type="checkbox" name="es_gift_card" value="1" checked={giftCard} disabled={canal !== "directo"} onChange={(event) => setGiftCard(event.target.checked)} />
+            <input type="checkbox" name="es_gift_card" value="1" checked={giftCard} disabled={canal !== "directo" || esDomicilio} onChange={(event) => setGiftCard(event.target.checked)} />
             <span>Gift card: requiere pago del 100%</span>
           </label>
         </div>
       </section>
 
       <section className="wizardPanel visible">
-        <h2>3. Sede, fecha y hora</h2>
+        <h2>3. {esDomicilio ? "Domicilio, fecha y hora" : "Sede, fecha y hora"}</h2>
         <div className="atencionGrid">
           <label className="atencionField">
-            Sede
+            {esDomicilio ? "Sede operativa" : "Sede"}
             <select name="sede" value={sede} onChange={(event) => { setSede(event.target.value); setHora(""); }} required>
               {sedes.map((item) => <option key={item.name} value={item.name}>{item.name} · {item.open}–{item.close}</option>)}
             </select>
           </label>
+          {esDomicilio && (
+            <>
+              <label className="atencionField">
+                Distrito
+                <input name="domicilio_distrito" required />
+              </label>
+              <label className="atencionField atencionFieldWide">
+                Dirección
+                <input name="domicilio_direccion" required />
+              </label>
+              <label className="atencionField atencionFieldWide">
+                Referencia (opcional)
+                <input name="domicilio_referencia" />
+              </label>
+            </>
+          )}
           <label className="atencionField">
             Fecha
             <input name="fecha" type="date" min={minDate} value={fecha} onChange={(event) => setFecha(event.target.value)} required />
@@ -242,9 +273,12 @@ export function PrepararCitaForm({ services, promotions, sedes, metodos, minDate
       <section className="wizardPanel visible">
         <h2>4. Pago y envío</h2>
         <div className="paymentSummary">
+          <div><span>Servicios</span><strong>{money(subtotalServicios)}</strong></div>
+          {esDomicilio && <div><span>Movilidad</span><strong>{money(movilidad)}</strong></div>}
           <div><span>Total calculado</span><strong>{money(total)}</strong></div>
           <div><span>Adelanto requerido</span><strong>{money(required)}</strong></div>
-          <div><span>Confirmación manual</span><strong>{canal === "cuponidad" || canal === "bee" ? "Sí" : "No"}</strong></div>
+          <div><span>Saldo pendiente</span><strong>{money(Math.max(total - paid, 0))}</strong></div>
+          <div><span>Confirmación manual</span><strong>{requiereConfirmacion(canal, esDomicilio) ? "Sí" : "No"}</strong></div>
         </div>
         <div className="atencionGrid paymentFields">
           <label className="atencionField">Monto recibido<input name="monto_pagado" type="number" min="0" step="0.01" value={paid} onChange={(event) => setPaid(Number(event.target.value || 0))} required /></label>
@@ -252,7 +286,7 @@ export function PrepararCitaForm({ services, promotions, sedes, metodos, minDate
           <label className="atencionField">Número de operación<input name="numero_operacion" disabled={paid <= 0} /></label>
           <label className="atencionField atencionFieldWide">Observación<textarea name="observacion" rows={2} /></label>
         </div>
-        <button type="submit" className="primaryButton saveFichaButton" disabled={pending || !hora || total <= 0 || paid < required}>
+        <button type="submit" className="primaryButton saveFichaButton" disabled={pending || !hora || total <= 0 || paid < required || (esDomicilio && !economiaDomicilio?.ok)}>
           {pending ? "Guardando transacción…" : "Guardar cita, pago y generar enlace"}
         </button>
       </section>

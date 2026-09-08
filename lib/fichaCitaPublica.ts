@@ -165,11 +165,22 @@ export function mensajeWhatsappCita(cita: {
   fecha: string;
   hora: string;
   sede: string | null;
+  tipoAtencion?: string | null;
+  distritoDomicilio?: string | null;
+  direccionDomicilio?: string | null;
+  referenciaDomicilio?: string | null;
 }) {
   const diaNumero = Number(cita.fecha.split("-")[2]);
   const diaSemana = nombreDiaSemana(cita.fecha);
   const horaFmt = formatHora12h(cita.hora);
-  const sedeTxt = cita.sede ? ` en ${cita.sede}` : "";
+  const domicilio = [
+    cita.distritoDomicilio,
+    cita.direccionDomicilio,
+    cita.referenciaDomicilio ? `Referencia: ${cita.referenciaDomicilio}` : null,
+  ].filter((item): item is string => Boolean(item?.trim())).join(" · ");
+  const sedeTxt = cita.tipoAtencion === "domicilio"
+    ? ` para Atención a domicilio${domicilio ? ` (${domicilio})` : ""}`
+    : cita.sede ? ` en ${cita.sede}` : "";
 
   return `Hola, tengo una consulta sobre mi cita del ${diaSemana} ${diaNumero} a las ${horaFmt}${sedeTxt}.`;
 }
