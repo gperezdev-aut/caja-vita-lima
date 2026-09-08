@@ -160,9 +160,18 @@ las 15:00 y hoy no hay dónde leerlo.
 sede_id, nombre, direccion, maps_url, hora_apertura, hora_cierre, activo
 ```
 
-Se crea con una fila por sede (`San Borja`, `Miraflores`, alineadas con `config_listas`) pero **sin
-datos** — `direccion`, `maps_url`, `hora_apertura` y `hora_cierre` en blanco. Los valores reales los
-pasa el dueño aparte; mientras tanto el GET devuelve `sedeDireccion`/`sedeMapsUrl` en `null`.
+Se crea con una fila por sede (`San Borja`, `Miraflores` — confirmado por el dueño que son las dos
+sedes reales y que coinciden con `citas_reservadas.sede`) y con datos reales, no un placeholder:
+dirección, `maps_url` y horario salen de `content/locations.ts` del repo `vita-lima-web`.
+
+San Borja abre 15:00–20:00, Miraflores 11:00–20:00. `locations.ts` describe el horario de San Borja
+como *«principalmente de 3 a 8 p.m.»* — el «principalmente» no cabe en una columna `time`, así que
+queda `15:00`–`20:00` fijo y se ajusta a mano si en la práctica hay excepciones.
+
+**Estos horarios son los que la pantalla interna (§3) tiene que usar para filtrar las horas que
+ofrece.** Hoy no existe ese filtro — por eso hoy se puede pedir una cita a las 11 a.m. en San Borja
+aunque abra a las 3 p.m. Construir esa pantalla sin leer `sedes.hora_apertura`/`hora_cierre` deja
+el mismo hueco abierto.
 
 `politicaCancelacionUrl`, en cambio, **no** va en esta tabla ni en ninguna: es la misma URL para
 las dos sedes, así que es una variable de entorno (`CAJA_POLITICA_CANCELACION_URL`), no un dato de

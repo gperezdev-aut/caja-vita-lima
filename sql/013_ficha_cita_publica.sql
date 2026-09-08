@@ -395,15 +395,18 @@ create index if not exists idx_beneficios_estado
 -- de la sección 6 del documento necesita sedeDireccion/sedeMapsUrl,
 -- y la pantalla interna (§3) va a necesitar además el horario real.
 --
--- ⚠️ Antes de correr este INSERT, confirmar con la consulta 0.3 que
--- 'San Borja' y 'Miraflores' son exactamente los nombres que usa
--- citas_reservadas.sede — si no, corregir los valores de abajo.
+-- Confirmado por el dueño: 'San Borja' y 'Miraflores' son los nombres
+-- reales que usa citas_reservadas.sede (consulta 0.3). Direcciones,
+-- maps_url y horario vienen de content/locations.ts del repo
+-- vita-lima-web — no son un placeholder.
 --
--- Se siembran las dos sedes conocidas (alineadas con
--- config_listas lista='SEDES') pero SIN datos todavía: direccion,
--- maps_url, hora_apertura y hora_cierre quedan en NULL. El dueño
--- pasa los valores reales aparte; mientras tanto el GET devuelve
--- sedeDireccion/sedeMapsUrl en null en vez de romper.
+-- Nota sobre el horario de San Borja: locations.ts lo describe como
+-- "principalmente de 3 a 8 p.m." — el "principalmente" no cabe en
+-- una columna `time`, así que queda 15:00–20:00 y se ajusta a mano
+-- si en la práctica hay excepciones. Estos horarios son los que la
+-- pantalla interna (§3) tiene que usar para filtrar las horas que
+-- ofrece — hoy no existe ese filtro, por eso hoy se puede pedir una
+-- cita a las 11 a.m. en San Borja aunque abra a las 3 p.m.
 -- ============================================================
 
 create table if not exists public.sedes (
@@ -421,6 +424,20 @@ values
   ('SEDE-SAN-BORJA', 'San Borja'),
   ('SEDE-MIRAFLORES', 'Miraflores')
 on conflict (nombre) do nothing;
+
+update public.sedes set
+  direccion = 'Av. Aviación 3358, oficina 204, San Borja, Lima',
+  maps_url = 'https://maps.app.goo.gl/hsbjqCdx8xJdRRTZ7',
+  hora_apertura = '15:00',
+  hora_cierre = '20:00'
+where sede_id = 'SEDE-SAN-BORJA';
+
+update public.sedes set
+  direccion = 'Av. Larco 812, oficina 306, Miraflores, Lima',
+  maps_url = 'https://maps.app.goo.gl/ABS3bhqTzbP1ZTnP9',
+  hora_apertura = '11:00',
+  hora_cierre = '20:00'
+where sede_id = 'SEDE-MIRAFLORES';
 
 
 -- ============================================================
@@ -471,7 +488,7 @@ union all
 select 'beneficios', count(*), count(*)
 from public.beneficios
 union all
-select 'sedes', count(*), count(*)
+select 'sedes.direccion', count(*) filter (where direccion is not null), count(*)
 from public.sedes
 union all
 select 'cupones_convenios.estado', count(*) filter (where estado is not null), count(*)
