@@ -84,9 +84,10 @@ declare
   v_pago_id text := btrim(coalesce(p_payload->>'pago_id', ''));
   v_item jsonb;
   v_n int := 0;
-  v_solo_domicilio boolean;
   v_hay_domicilio boolean;
-  v_total_servicios_domicilio numeric(12,2);
+  v_subtotal_servicios numeric(12,2);
+  v_servicios_catalogo jsonb;
+  v_catalogo_valido boolean;
 begin
   if v_canal not in ('directo', 'cuponidad', 'bee') then
     raise exception using errcode = '22023', message = 'Canal de origen inválido.';
@@ -127,29 +128,46 @@ begin
     raise exception using errcode = '22023', message = 'La sede operativa no existe o no tiene horario configurado.';
   end if;
 
-  select
-    bool_and(btrim(x->>'codigo') in ('DOM-1H', 'DOM-2H')),
-    bool_or(btrim(x->>'codigo') in ('DOM-1H', 'DOM-2H')),
-    sum(case btrim(x->>'codigo') when 'DOM-1H' then 120 when 'DOM-2H' then 230 else 0 end)
-  into v_solo_domicilio, v_hay_domicilio, v_total_servicios_domicilio
+  select bool_or(btrim(x->>'codigo') in ('DOM-1H', 'DOM-2H'))
+    into v_hay_domicilio
   from jsonb_array_elements(v_servicios) as items(x);
 
   if v_tipo_atencion = 'domicilio' then
     if v_distrito = '' or v_direccion = '' then
       raise exception using errcode = '22023', message = 'Distrito y dirección son obligatorios para domicilio.';
     end if;
-    if v_es_gift or btrim(coalesce(p_payload->>'cupon_promocional', '')) <> '' then
-      raise exception using errcode = '22023', message = 'Gift card y promoción común no aplican a domicilio sin una regla específica.';
+    if v_canal <> 'directo' or v_es_gift or btrim(coalesce(p_payload->>'cupon_promocional', '')) <> '' then
+      raise exception using errcode = '22023', message = 'Las citas a domicilio solo admiten canal directo sin promociones ni gift cards.';
     end if;
-    if not coalesce(v_solo_domicilio, false) then
-      raise exception using errcode = '22023', message = 'Domicilio requiere únicamente servicios DOM-1H o DOM-2H.';
+    select
+      bool_and(c."CodeId" is not null and btrim(x->>'codigo') in ('DOM-1H', 'DOM-2H')),
+      sum(nullif(replace(regexp_replace(c.price_pen::text, '[^0-9,.-]', '', 'g'), ',', '.'), '')::numeric),
+      jsonb_agg(
+        jsonb_build_object(
+          'codigo', btrim(x->>'codigo'),
+          'nombre', btrim(c.option_name::text),
+          'duracion_min', nullif(regexp_replace(c.duration_min::text, '[^0-9]', '', 'g'), '')::int,
+          'precio', nullif(replace(regexp_replace(c.price_pen::text, '[^0-9,.-]', '', 'g'), ',', '.'), '')::numeric
+        ) order by ord
+      )
+    into v_catalogo_valido, v_subtotal_servicios, v_servicios_catalogo
+    from jsonb_array_elements(v_servicios) with ordinality as items(x, ord)
+    left join public.stg_services_catalog_v5 c
+      on btrim(c."CodeId"::text) = btrim(x->>'codigo')
+      and lower(coalesce(c.active::text, '')) in ('true', '1', 'yes', 'si', 'sí');
+    if not coalesce(v_catalogo_valido, false) or v_subtotal_servicios is null
+       or exists (
+         select 1 from jsonb_array_elements(v_servicios_catalogo) as catalogo(x)
+         where coalesce((x->>'precio')::numeric, 0) <= 0
+            or coalesce((x->>'duracion_min')::int, 0) <= 0
+       ) then
+      raise exception using errcode = '22023', message = 'Los servicios de domicilio no coinciden con el catálogo activo.';
     end if;
+    v_servicios := v_servicios_catalogo;
     if v_movilidad <> 15 then
       raise exception using errcode = '22023', message = 'La movilidad de domicilio debe ser S/15 una sola vez por cita.';
     end if;
-    if v_total <> round(v_total_servicios_domicilio + v_movilidad, 2) then
-      raise exception using errcode = '22023', message = 'El total de domicilio no coincide con los servicios y la movilidad.';
-    end if;
+    v_total := round(v_subtotal_servicios + v_movilidad, 2);
   else
     if coalesce(v_hay_domicilio, false) then
       raise exception using errcode = '22023', message = 'No se pueden mezclar servicios presenciales y domicilio.';
@@ -160,6 +178,7 @@ begin
     v_distrito := '';
     v_direccion := '';
     v_referencia := '';
+    v_subtotal_servicios := v_total;
   end if;
 
   select max(coalesce((x->>'duracion_min')::int, 0)),
@@ -210,7 +229,7 @@ begin
     monto_servicio, adelanto_prev, metodo_adelanto_prev, total_cobrar, total_pagado, total_extras, pendiente, responsable, source_type, source_id, observacion
   ) values (
     v_movimiento_id, v_fecha, v_hora, v_sede, 'RESERVA_APP', 'Reservado', v_cliente_id, v_cliente, v_whatsapp, v_personas, v_servicio_resumen,
-    v_duracion || ' min', v_total, v_pagado, nullif(btrim(p_payload->>'metodo_pago'), ''), v_total, v_pagado, 0,
+    v_duracion || ' min', v_subtotal_servicios, v_pagado, nullif(btrim(p_payload->>'metodo_pago'), ''), v_total, v_pagado, v_movilidad,
     greatest(v_total - v_pagado, 0), nullif(btrim(p_payload->>'responsable'), ''), 'APP_CAJA_FICHA', v_reserva_id,
     nullif(btrim(p_payload->>'observacion'), '')
   );

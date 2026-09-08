@@ -115,6 +115,7 @@ export async function GET(
       codigoCupon: esConvenio,
       correoObligatorio: false,
       documentoParaBoleta: esConvenio ? "no" : "opcional",
+      confirmacionManual: Boolean(cita.requiere_confirmacion),
     },
     cliente: {
       conocido: Boolean(cliente?.cliente),

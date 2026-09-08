@@ -12,6 +12,7 @@ import {
   redondearDinero,
   tipoAtencionDesdeServicios,
   validarDatosDomicilio,
+  validarReglasComercialesDomicilio,
   type CanalFicha,
 } from "@/lib/fichaCitaDominio";
 import { generarTokenFicha, normalizarTelefonoE164 } from "@/lib/fichaCitaPublica";
@@ -184,9 +185,8 @@ export async function prepararCitaAction(
       sedeResult.data.map((item) => String(item.nombre ?? "").trim()).filter(Boolean)
     );
     if (errorDomicilio) return { ok: false, error: errorDomicilio };
-    if (promoCode || esGiftCard) {
-      return { ok: false, error: "Las promociones y gift cards no aplican a domicilio sin una regla específica configurada." };
-    }
+    const errorComercial = validarReglasComercialesDomicilio({ canal, esGiftCard, cuponPromocional: promoCode });
+    if (errorComercial) return { ok: false, error: errorComercial };
   }
 
   let montoTotal = redondearDinero(serviciosValidos.reduce((sum, item) => sum + item.precio, 0));

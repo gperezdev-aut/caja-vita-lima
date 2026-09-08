@@ -1,10 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import {
   calcularAdelantoRequerido,
   calcularCitaDomicilio,
   coincideEconomiaDomicilio,
   describirAtencionDomicilio,
+  datosIcsDomicilio,
   evaluarEstadoToken,
   horarioDentroDeSede,
   normalizarTelefonoE164,
@@ -12,6 +14,7 @@ import {
   requiereConfirmacion,
   tipoAtencionDesdeServicios,
   validarDatosDomicilio,
+  validarReglasComercialesDomicilio,
   validarConfiguracionApiPublica,
 } from "../lib/fichaCitaDominio.ts";
 import { secretoCajaValido } from "../lib/fichaCitaSeguridad.ts";
@@ -99,6 +102,52 @@ test("el servidor no acepta movilidad ni total manipulados y presencial conserva
   assert.equal(coincideEconomiaDomicilio(calculo, 120, 0), false);
   assert.equal(tipoAtencionDesdeServicios(["MAS-1H"]), "sede");
   assert.equal(calcularAdelantoRequerido({ canal: "directo", personas: 1, montoTotal: 120 }), 10);
+});
+
+test("el cambio de precio del catálogo se refleja sin constantes económicas duplicadas", () => {
+  const calculo = calcularCitaDomicilio([{ codigo: "DOM-1H", precio: 140, duracion_min: 60 }]);
+  assert.deepEqual(calculo, {
+    ok: true, subtotalServicios: 140, movilidad: 15, total: 155, adelantoRequerido: 77.5, duracionMin: 60,
+  });
+});
+
+test("domicilio rechaza Cuponidad, Bee, promoción y gift card", () => {
+  for (const datos of [
+    { canal: "cuponidad" as const, esGiftCard: false, cuponPromocional: "" },
+    { canal: "bee" as const, esGiftCard: false, cuponPromocional: "" },
+    { canal: "directo" as const, esGiftCard: false, cuponPromocional: "PROMO" },
+    { canal: "directo" as const, esGiftCard: true, cuponPromocional: "" },
+  ]) {
+    assert.equal(validarReglasComercialesDomicilio(datos), "Las citas a domicilio solo admiten canal directo sin promociones ni gift cards.");
+  }
+  assert.equal(validarReglasComercialesDomicilio({ canal: "directo", esGiftCard: false, cuponPromocional: "" }), "");
+});
+
+test("ICS de domicilio no expone sede operativa y usa distrito, dirección y referencia", () => {
+  const ics = datosIcsDomicilio({
+    servicio: "DOM-1H",
+    distrito: "Miraflores",
+    direccion: "Av. Ejemplo 123",
+    referencia: "Portón negro",
+  });
+  assert.deepEqual(ics, {
+    resumen: "Atención a domicilio",
+    ubicacion: "Miraflores, Av. Ejemplo 123",
+    descripcion: "DOM-1H · Referencia: Portón negro",
+  });
+  assert.doesNotMatch(`${ics.resumen} ${ics.ubicacion} ${ics.descripcion}`, /San Borja/);
+});
+
+test("la migración separa servicio, movilidad y total en caja_movimientos", async () => {
+  const migration = await readFile(new URL("../sql/015_citas_domicilio.sql", import.meta.url), "utf8");
+  assert.match(migration, /v_duracion \|\| ' min', v_subtotal_servicios, v_pagado/);
+  assert.match(migration, /v_total, v_pagado, v_movilidad/);
+  assert.match(migration, /v_total := round\(v_subtotal_servicios \+ v_movilidad, 2\)/);
+});
+
+test("GET público expone la confirmación manual de domicilio", async () => {
+  const route = await readFile(new URL("../app/api/publico/ficha/[token]/route.ts", import.meta.url), "utf8");
+  assert.match(route, /confirmacionManual: Boolean\(cita\.requiere_confirmacion\)/);
 });
 
 test("domicilio exige confirmación y el mensaje no expone la sede operativa", () => {

@@ -14,11 +14,6 @@ export const CODIGOS_DOMICILIO = ["DOM-1H", "DOM-2H"] as const;
 export type CodigoDomicilio = (typeof CODIGOS_DOMICILIO)[number];
 export const COSTO_MOVILIDAD_DOMICILIO = 15;
 
-const SERVICIOS_DOMICILIO: Record<CodigoDomicilio, { precio: number; duracionMin: number }> = {
-  "DOM-1H": { precio: 120, duracionMin: 60 },
-  "DOM-2H": { precio: 230, duracionMin: 120 },
-};
-
 export type ServicioCalculado = { codigo: string; precio: number; duracion_min: number };
 
 export function esCodigoDomicilio(codigo: string): codigo is CodigoDomicilio {
@@ -32,19 +27,15 @@ export function tipoAtencionDesdeServicios(codigos: string[]) {
   return "mezclado" as const;
 }
 
-/**
- * El catálogo es la fuente del servidor; estos valores estables detectan un
- * catálogo inconsistente antes de registrar una cita a domicilio.
- */
+/** Los precios y duraciones llegan del catálogo activo validado por el servidor. */
 export function calcularCitaDomicilio(servicios: ServicioCalculado[]) {
   if (!servicios.length || servicios.length > 2 || servicios.some((servicio) => !esCodigoDomicilio(servicio.codigo))) {
     return { ok: false as const, error: "Domicilio requiere uno o dos servicios DOM válidos." };
   }
 
   for (const servicio of servicios) {
-    const esperado = SERVICIOS_DOMICILIO[servicio.codigo as CodigoDomicilio];
-    if (redondearDinero(servicio.precio) !== esperado.precio || servicio.duracion_min !== esperado.duracionMin) {
-      return { ok: false as const, error: `El catálogo no coincide con la tarifa de ${servicio.codigo}.` };
+    if (!Number.isFinite(servicio.precio) || servicio.precio <= 0 || !Number.isInteger(servicio.duracion_min) || servicio.duracion_min <= 0) {
+      return { ok: false as const, error: `El catálogo no tiene precio o duración válidos para ${servicio.codigo}.` };
     }
   }
 
@@ -83,6 +74,23 @@ export function describirAtencionDomicilio(datos: { distrito: string; direccion:
   return ["Atención a domicilio", datos.distrito.trim(), datos.direccion.trim(), referencia ? `Referencia: ${referencia}` : ""]
     .filter(Boolean)
     .join(" · ");
+}
+
+export function validarReglasComercialesDomicilio(datos: { canal: CanalFicha; esGiftCard: boolean; cuponPromocional: string }) {
+  if (datos.canal !== "directo" || datos.esGiftCard || datos.cuponPromocional.trim()) {
+    return "Las citas a domicilio solo admiten canal directo sin promociones ni gift cards.";
+  }
+  return "";
+}
+
+export function datosIcsDomicilio(datos: { servicio: string | null; distrito: string | null; direccion: string | null; referencia: string | null }) {
+  return {
+    resumen: "Atención a domicilio",
+    ubicacion: [datos.distrito, datos.direccion].filter((item): item is string => Boolean(item?.trim())).join(", "),
+    descripcion: [datos.servicio, datos.referencia ? `Referencia: ${datos.referencia}` : null]
+      .filter((item): item is string => Boolean(item?.trim()))
+      .join(" · "),
+  };
 }
 
 export type EstadoFichaPublica = {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { construirIcs } from "@/lib/fichaCitaPublica";
+import { datosIcsDomicilio } from "@/lib/fichaCitaDominio";
 import {
   cargarCitaPorToken,
   cargarCliente,
@@ -73,7 +74,15 @@ export async function GET(
     cargarSede(cita.sede),
   ]);
 
-  const partes = [cliente?.cliente, cita.servicio, cita.sede].filter(
+  const domicilioIcs = cita.tipo_atencion === "domicilio"
+    ? datosIcsDomicilio({
+        servicio: cita.servicio,
+        distrito: cita.domicilio_distrito,
+        direccion: cita.domicilio_direccion,
+        referencia: cita.domicilio_referencia,
+      })
+    : null;
+  const partes = [cliente?.cliente, cita.servicio, domicilioIcs?.resumen ?? cita.sede].filter(
     (parte): parte is string => Boolean(parte && parte.trim())
   );
   const resumen = partes.length ? partes.join(" — ") : "Cita en Vita Lima";
@@ -84,11 +93,8 @@ export async function GET(
     hora: cita.hora_cita,
     duracionMin: cita.duracion_min ?? 60,
     resumen,
-    ubicacion:
-      cita.tipo_atencion === "domicilio"
-        ? [cita.domicilio_distrito, cita.domicilio_direccion].filter(Boolean).join(", ")
-        : sedeInfo?.direccion ?? cita.sede,
-    descripcion: cita.servicio,
+    ubicacion: domicilioIcs?.ubicacion || sedeInfo?.direccion || cita.sede,
+    descripcion: domicilioIcs?.descripcion || cita.servicio,
   });
 
   return new NextResponse(ics, {
