@@ -141,13 +141,25 @@ begin
     end if;
     select
       bool_and(c."CodeId" is not null and btrim(x->>'codigo') in ('DOM-1H', 'DOM-2H')),
-      sum(nullif(replace(regexp_replace(c.price_pen::text, '[^0-9,.-]', '', 'g'), ',', '.'), '')::numeric),
+      sum(
+        case
+          when nullif(btrim(to_jsonb(c)->>'price_pen'), '') is not null then
+            nullif(replace(regexp_replace(to_jsonb(c)->>'price_pen', '[^0-9,.-]', '', 'g'), ',', '.'), '')::numeric
+          else
+            nullif(replace(regexp_replace(to_jsonb(c)->>'price', '[^0-9,.-]', '', 'g'), ',', '.'), '')::numeric
+        end
+      ),
       jsonb_agg(
         jsonb_build_object(
           'codigo', btrim(x->>'codigo'),
           'nombre', btrim(c.option_name::text),
           'duracion_min', nullif(regexp_replace(c.duration_min::text, '[^0-9]', '', 'g'), '')::int,
-          'precio', nullif(replace(regexp_replace(c.price_pen::text, '[^0-9,.-]', '', 'g'), ',', '.'), '')::numeric
+          'precio', case
+            when nullif(btrim(to_jsonb(c)->>'price_pen'), '') is not null then
+              nullif(replace(regexp_replace(to_jsonb(c)->>'price_pen', '[^0-9,.-]', '', 'g'), ',', '.'), '')::numeric
+            else
+              nullif(replace(regexp_replace(to_jsonb(c)->>'price', '[^0-9,.-]', '', 'g'), ',', '.'), '')::numeric
+          end
         ) order by ord
       )
     into v_catalogo_valido, v_subtotal_servicios, v_servicios_catalogo
@@ -208,8 +220,10 @@ begin
      and btrim(coalesce(p_payload->>'numero_operacion', '')) = '' then
     raise exception using errcode = '22023', message = 'Falta el número de operación para el pago no efectivo.';
   end if;
-  if v_token_expira <= (v_fecha + v_hora) at time zone 'America/Lima' then
-    raise exception using errcode = '22023', message = 'La expiración debe ser posterior al inicio de la cita.';
+  -- Puede expirar al finalizar la atención; nunca antes de su duración completa.
+  if v_token_expira is null
+     or v_token_expira < ((v_fecha + v_hora) + make_interval(mins => v_duracion)) at time zone 'America/Lima' then
+    raise exception using errcode = '22023', message = 'La expiración no puede ser anterior al final de la cita.';
   end if;
 
   select c.cliente_id into v_cliente_id from public.clientes c where c.whatsapp_e164 = v_whatsapp limit 1;

@@ -8,11 +8,13 @@ import {
   CANALES_FICHA,
   describirAtencionDomicilio,
   horarioDentroDeSede,
-  pagoHabilitaToken,
+  precioCatalogoActivo,
   redondearDinero,
   tipoAtencionDesdeServicios,
+  calcularExpiracionFicha,
   validarDatosDomicilio,
   validarPreparacionMvp,
+  validarPagoPreparacion,
   validarCatalogoSolicitado,
   type CanalFicha,
 } from "@/lib/fichaCitaDominio";
@@ -72,11 +74,6 @@ function fechaLima() {
 
 function crearId(prefix: string) {
   return `${prefix}-FICHA-${randomUUID().toUpperCase()}`;
-}
-
-function calcularExpiracion(fecha: string, hora: string, duracionMin: number) {
-  const inicio = new Date(`${fecha}T${hora}:00-05:00`);
-  return new Date(inicio.getTime() + duracionMin * 60_000).toISOString();
 }
 
 export async function buscarClienteFichaAction(crudo: string, pais: string) {
@@ -146,7 +143,7 @@ export async function prepararCitaAction(
     return { ok: false, error: "No se pueden mezclar servicios presenciales y a domicilio en una misma cita." };
   }
 
-  const [catalogResult, sedeResult] = await Promise.all([
+  const [catalogResult, sedeResult, metodosResult] = await Promise.all([
     supabaseSelect<Row>("stg_services_catalog_v5"),
     supabaseSelectWhere<{
       nombre: string | null;
@@ -156,16 +153,17 @@ export async function prepararCitaAction(
       "sedes",
       `select=nombre,hora_apertura,hora_cierre&nombre=eq.${encodeURIComponent(sede)}&activo=is.true&limit=1`
     ),
+    supabaseSelect<Row>("config_listas"),
   ]);
 
-  const dataError = catalogResult.error || sedeResult.error;
+  const dataError = catalogResult.error || sedeResult.error || metodosResult.error;
   if (dataError) return { ok: false, error: `No se pudo validar la cita: ${dataError}` };
 
   const catalog = catalogResult.data.filter((row) => truthy(row.active)).map((row) => ({
       codigo: String(row.CodeId ?? "").trim(),
       nombre: String(row.option_name ?? "").trim(),
       duracion_min: Math.round(parseCatalogNumber(row.duration_min)),
-      precio: redondearDinero(parseCatalogNumber(row.price_pen ?? row.price)),
+      precio: precioCatalogoActivo(row.price_pen, row.price),
   }));
   const catalogoValidado = validarCatalogoSolicitado(serviceCodes, catalog);
   if (!catalogoValidado.ok) {
@@ -221,21 +219,21 @@ export async function prepararCitaAction(
     esGiftCard,
     esDomicilio,
   });
-  if (!pagoHabilitaToken(montoPagado, adelantoRequerido)) {
-    return {
-      ok: false,
-      error: `Registra al menos S/${adelantoRequerido.toFixed(2)} antes de generar el enlace.`,
-    };
-  }
-
   const metodoPago = text(formData, "metodo_pago");
   const numeroOperacion = text(formData, "numero_operacion");
-  if (montoPagado > 0 && !metodoPago) {
-    return { ok: false, error: "El método de pago es obligatorio." };
-  }
-  if (montoPagado > 0 && metodoPago.toUpperCase() !== "EFECTIVO" && !numeroOperacion) {
-    return { ok: false, error: "El número de operación es obligatorio para pagos no efectivos." };
-  }
+  const metodosPermitidos = metodosResult.data
+    .filter((row) => row.lista === "METODOS_PAGO" && truthy(row.activo))
+    .map((row) => String(row.valor ?? "").trim())
+    .filter(Boolean);
+  const errorPago = validarPagoPreparacion({
+    montoPagado,
+    adelantoRequerido,
+    total: montoTotal,
+    metodoPago,
+    numeroOperacion,
+    metodosPermitidos,
+  });
+  if (errorPago) return { ok: false, error: errorPago };
 
   const token = generarTokenFicha();
   const reservaId = crearId("RES");
@@ -275,7 +273,7 @@ export async function prepararCitaAction(
       reserva_id: reservaId,
       pago_id: crearId("PAY"),
       token,
-      token_expira: calcularExpiracion(fecha, hora, duracionMin),
+      token_expira: calcularExpiracionFicha(fecha, hora, duracionMin),
     },
   });
 

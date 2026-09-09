@@ -66,6 +66,9 @@ La confirmación operativa mediante botón interno será un módulo posterior. N
 se implementan todavía liberación de horarios ni devoluciones sin una política
 económica aprobada.
 
+El token público vence al terminar la duración completa de la cita o después;
+el instante exacto `inicio + duracion_min` es válido.
+
 ## Próximos módulos
 
 ```text

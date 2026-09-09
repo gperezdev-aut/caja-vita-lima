@@ -30,6 +30,11 @@ create index if not exists idx_solicitudes_comprobante_cliente
 create index if not exists idx_solicitudes_comprobante_estado
   on public.solicitudes_comprobante (estado);
 
+-- Esta tabla contiene documentos tributarios. No se expone por PostgREST ni
+-- al navegador: las rutas de Caja usan service_role exclusivamente en servidor.
+revoke all on table public.solicitudes_comprobante from public, anon, authenticated;
+grant select, insert, update, delete on table public.solicitudes_comprobante to service_role;
+
 do $$
 begin
   if not exists (select 1 from pg_constraint where conname = 'chk_solicitud_tipo_comprobante') then
@@ -87,6 +92,8 @@ declare
   v_movilidad numeric(12,2) := 0;
   v_total numeric(12,2);
   v_pagado numeric(12,2) := coalesce((p_payload->>'monto_pagado')::numeric, 0);
+  v_metodo_pago text := upper(btrim(coalesce(p_payload->>'metodo_pago', '')));
+  v_numero_operacion text := btrim(coalesce(p_payload->>'numero_operacion', ''));
   v_adelanto_requerido numeric(12,2);
   v_requiere_confirmacion boolean;
   v_duracion int;
@@ -152,7 +159,14 @@ begin
       count(c."CodeId") as coincidencias,
       min(nullif(btrim(c.option_name::text), '')) as nombre,
       min(nullif(regexp_replace(c.duration_min::text, '[^0-9]', '', 'g'), '')::int) as duracion,
-      min(nullif(replace(regexp_replace(c.price_pen::text, '[^0-9,.-]', '', 'g'), ',', '.'), '')::numeric) as precio
+      min(
+        case
+          when nullif(btrim(to_jsonb(c)->>'price_pen'), '') is not null then
+            nullif(replace(regexp_replace(to_jsonb(c)->>'price_pen', '[^0-9,.-]', '', 'g'), ',', '.'), '')::numeric
+          else
+            nullif(replace(regexp_replace(to_jsonb(c)->>'price', '[^0-9,.-]', '', 'g'), ',', '.'), '')::numeric
+        end
+      ) as precio
     from solicitados s
     left join public.stg_services_catalog_v5 c
       on btrim(c."CodeId"::text) = s.codigo
@@ -204,17 +218,32 @@ begin
     when v_tipo_atencion = 'domicilio' or v_personas = 2 then round(v_total * 0.50, 2)
     else least(10, v_total)
   end;
+  if v_pagado < 0 then
+    raise exception using errcode = '22023', message = 'MONTO_PAGADO_NEGATIVO';
+  end if;
+  if v_pagado > v_total then
+    raise exception using errcode = '22023', message = 'MONTO_PAGADO_SUPERA_TOTAL';
+  end if;
   if v_pagado < v_adelanto_requerido then
     raise exception using errcode = '22023', message = 'PAGO_INSUFICIENTE';
   end if;
-  if v_pagado > 0 and btrim(coalesce(p_payload->>'metodo_pago', '')) = '' then
+  if v_pagado > 0 and v_metodo_pago = '' then
     raise exception using errcode = '22023', message = 'METODO_PAGO_REQUERIDO';
   end if;
-  if v_pagado > 0 and upper(btrim(coalesce(p_payload->>'metodo_pago', ''))) <> 'EFECTIVO'
-     and btrim(coalesce(p_payload->>'numero_operacion', '')) = '' then
+  if v_pagado > 0 and not exists (
+    select 1 from public.config_listas l
+    where l.lista = 'METODOS_PAGO' and l.activo is true
+      and upper(btrim(l.valor)) = v_metodo_pago
+  ) then
+    raise exception using errcode = '22023', message = 'METODO_PAGO_NO_PERMITIDO';
+  end if;
+  if v_pagado > 0 and v_metodo_pago <> 'EFECTIVO' and v_numero_operacion = '' then
     raise exception using errcode = '22023', message = 'NUMERO_OPERACION_REQUERIDO';
   end if;
-  if v_token !~ '^[A-Za-z0-9_-]{43}$' or v_token_expira <= (v_fecha + v_hora) at time zone 'America/Lima' then
+  -- La acción calcula este instante como inicio + duración. Es válido que
+  -- coincida exactamente con el final; solo se rechaza una expiración previa.
+  if v_token !~ '^[A-Za-z0-9_-]{43}$' or v_token_expira is null
+     or v_token_expira < ((v_fecha + v_hora) + make_interval(mins => v_duracion)) at time zone 'America/Lima' then
     raise exception using errcode = '22023', message = 'TOKEN_O_EXPIRACION_INVALIDOS';
   end if;
   if v_movimiento_id = '' or v_reserva_id = '' or v_pago_id = '' then
@@ -241,7 +270,7 @@ begin
     v_movimiento_id, v_fecha, v_hora, v_sede, 'RESERVA_APP',
     case when v_requiere_confirmacion then 'Pendiente de confirmación' else 'Reservado' end,
     v_cliente_id, v_cliente, v_whatsapp, v_personas, v_servicio_resumen, v_duracion || ' min',
-    v_subtotal, v_pagado, nullif(btrim(p_payload->>'metodo_pago'), ''), v_total, v_pagado,
+    v_subtotal, v_pagado, nullif(v_metodo_pago, ''), v_total, v_pagado,
     v_movilidad, greatest(v_total - v_pagado, 0), nullif(btrim(p_payload->>'responsable'), ''),
     'APP_CAJA_FICHA', v_reserva_id, nullif(btrim(p_payload->>'observacion'), ''), 'No aplica', null
   );
@@ -255,7 +284,7 @@ begin
   ) values (
     v_reserva_id, v_fecha, v_hora, v_sede, v_cliente_id, v_cliente, v_whatsapp, v_personas, v_personas,
     v_servicio_resumen, v_duracion || ' min', v_duracion, v_total, v_pagado,
-    nullif(btrim(p_payload->>'metodo_pago'), ''), greatest(v_total - v_pagado, 0), 'PENDIENTE',
+    nullif(v_metodo_pago, ''), greatest(v_total - v_pagado, 0), 'PENDIENTE',
     'APP_CAJA_FICHA', v_movimiento_id, 'pendiente', 'directo', v_requiere_confirmacion, null,
     coalesce(nullif(btrim(p_payload->>'idioma'), ''), 'es'), v_token, v_token_expira, false, null,
     v_servicios, nullif(btrim(p_payload->>'observacion'), ''), v_tipo_atencion, v_sede,
@@ -265,8 +294,7 @@ begin
 
   insert into public.caja_pagos (pago_id, movimiento_id, fecha, hora, sede, tipo_pago, metodo, metodo_detalle, monto, concepto, numero_operacion)
   values (v_pago_id, v_movimiento_id, v_fecha, v_hora, v_sede, 'ADELANTO_APP',
-    btrim(p_payload->>'metodo_pago'), null, v_pagado, v_servicio_resumen,
-    nullif(btrim(p_payload->>'numero_operacion'), ''));
+    v_metodo_pago, null, v_pagado, v_servicio_resumen, nullif(v_numero_operacion, ''));
 
   for v_item in select value from jsonb_array_elements(v_servicios) loop
     v_n := v_n + 1;
@@ -353,6 +381,9 @@ begin
   if v_cita.canal in ('cuponidad', 'bee') and v_codigo_cupon = '' then
     raise exception using errcode = '22023', message = 'FALTA_CODIGO_CONVENIO';
   end if;
+  if coalesce(v_cita.canal, 'directo') not in ('cuponidad', 'bee') and v_codigo_cupon <> '' then
+    raise exception using errcode = '22023', message = 'CODIGO_CONVENIO_NO_PERMITIDO_DIRECTO';
+  end if;
 
   insert into public.clientes (
     cliente_id, cliente, email, dni, whatsapp, whatsapp_e164, pais_telefono, idioma,
@@ -390,10 +421,10 @@ begin
       zonas_evitar = excluded.zonas_evitar, notas = excluded.notas, consent_salud_en = excluded.consent_salud_en;
   end if;
 
-  if v_codigo_cupon <> '' then
+  if v_codigo_cupon <> '' and v_cita.canal in ('cuponidad', 'bee') then
     insert into public.cupones_convenios (registro_id, fecha, sede, plataforma, codigo_cupon, cliente, whatsapp, n_pax, servicio, estado, reserva_id)
     values (btrim(p_payload->>'cupon_id'), v_cita.fecha_cita, v_cita.sede,
-      case v_cita.canal when 'cuponidad' then 'Cuponidad' when 'bee' then 'Bee Beneficios' else v_cita.canal end,
+      case v_cita.canal when 'cuponidad' then 'Cuponidad' when 'bee' then 'Bee Beneficios' end,
       v_codigo_cupon, v_nombre, v_whatsapp, coalesce(v_cita.personas, v_cita.n_pax, 1), v_cita.servicio, 'declarado', v_cita.reserva_id);
   end if;
 

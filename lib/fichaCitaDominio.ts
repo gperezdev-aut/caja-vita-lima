@@ -155,6 +155,80 @@ export function pagoHabilitaToken(
   );
 }
 
+export function validarPagoPreparacion(input: {
+  montoPagado: number;
+  adelantoRequerido: number;
+  total: number;
+  metodoPago: string;
+  numeroOperacion: string;
+  metodosPermitidos: readonly string[];
+}) {
+  const monto = redondearDinero(input.montoPagado);
+  const adelanto = redondearDinero(input.adelantoRequerido);
+  const total = redondearDinero(input.total);
+  const metodo = input.metodoPago.trim().toUpperCase();
+  const permitidos = new Set(
+    input.metodosPermitidos.map((item) => item.trim().toUpperCase()).filter(Boolean)
+  );
+
+  if (!Number.isFinite(input.montoPagado) || monto < 0) {
+    return "El monto pagado no puede ser negativo.";
+  }
+  if (!Number.isFinite(input.total) || total <= 0 || monto > total) {
+    return "El monto pagado no puede superar el total de la cita.";
+  }
+  if (monto + 0.00001 < adelanto) {
+    return `Registra al menos S/${adelanto.toFixed(2)} antes de generar el enlace.`;
+  }
+  if (monto > 0 && !metodo) {
+    return "El método de pago es obligatorio.";
+  }
+  if (monto > 0 && !permitidos.has(metodo)) {
+    return "El método de pago no está configurado o no está permitido.";
+  }
+  if (monto > 0 && metodo !== "EFECTIVO" && !input.numeroOperacion.trim()) {
+    return "El número de operación es obligatorio para pagos no efectivos.";
+  }
+  return "";
+}
+
+function valorCatalogoPresente(value: unknown) {
+  return value !== null && value !== undefined && String(value).trim() !== "";
+}
+
+/** `price_pen` prevalece; `price` solo es respaldo cuando el primero falta. */
+export function precioCatalogoActivo(pricePen: unknown, price: unknown) {
+  const source = valorCatalogoPresente(pricePen) ? pricePen : price;
+  const normalizado = String(source ?? "")
+    .replace(/S\//gi, "")
+    .replace(/\s/g, "")
+    .replace(",", ".")
+    .replace(/[^\d.-]/g, "");
+  if (!normalizado || normalizado === "." || normalizado === "-") return NaN;
+  const parsed = Number(normalizado);
+  return Number.isFinite(parsed) ? redondearDinero(parsed) : NaN;
+}
+
+/** El token puede vencer exactamente al terminar la atención, nunca antes. */
+export function expiracionTokenFichaValida(input: {
+  fecha: string;
+  hora: string;
+  duracionMin: number;
+  tokenExpira: string;
+}) {
+  const inicio = new Date(`${input.fecha}T${input.hora}:00-05:00`).getTime();
+  const expiracion = new Date(input.tokenExpira).getTime();
+  if (!Number.isFinite(inicio) || !Number.isFinite(expiracion) || !Number.isFinite(input.duracionMin) || input.duracionMin <= 0) {
+    return false;
+  }
+  return expiracion >= inicio + input.duracionMin * 60_000;
+}
+
+export function calcularExpiracionFicha(fecha: string, hora: string, duracionMin: number) {
+  const inicio = new Date(`${fecha}T${hora}:00-05:00`);
+  return new Date(inicio.getTime() + duracionMin * 60_000).toISOString();
+}
+
 export type NormalizarTelefonoResultado =
   | { ok: true; e164: string; pais: string }
   | { ok: false };
@@ -233,6 +307,14 @@ export function validarPreparacionMvp(input: {
   if (input.canal !== "directo" || input.esGiftCard || input.cuponPromocional.trim()) {
     return "En este lanzamiento, /preparar-cita solo admite citas directas sin promociones ni gift cards. Cuponidad, Bee, promociones y gift cards continúan en el proceso actual.";
   }
+  return "";
+}
+
+export function validarCodigoCuponPorCanal(canal: string, codigoCupon: string) {
+  const codigo = codigoCupon.trim();
+  const esConvenio = canal === "cuponidad" || canal === "bee";
+  if (esConvenio && !codigo) return "Falta el código de cupón.";
+  if (!esConvenio && codigo) return "Esta cita directa no admite código de cupón.";
   return "";
 }
 

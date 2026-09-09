@@ -4,6 +4,7 @@ import {
   estadoConfirmacionPublica,
   FICHA_CONTRATO_VERSION,
   pagoVisibleCliente,
+  validarCodigoCuponPorCanal,
   validarSolicitudComprobante,
 } from "@/lib/fichaCitaDominio";
 import {
@@ -275,13 +276,10 @@ export async function POST(
   }
 
   const canal = cita.canal ?? "directo";
-  const esCuponidad = canal === "cuponidad";
-  const esConvenio = esCuponidad || canal === "bee";
   const codigoCupon = (payload.codigoCupon ?? "").trim();
 
-  if (esConvenio && !codigoCupon) {
-    return errorResponse("validacion", "Falta el código de cupón.");
-  }
+  const errorCodigoCupon = validarCodigoCuponPorCanal(canal, codigoCupon);
+  if (errorCodigoCupon) return errorResponse("validacion", errorCodigoCupon);
 
   if (codigoCupon) {
     const plataforma = plataformaDesdeCanal(canal);

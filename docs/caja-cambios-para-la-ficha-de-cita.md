@@ -359,6 +359,9 @@ valor sale de `citas_reservadas.cupon_vigente_hasta` (sección 2) — no de una 
 ```
 
 - `boleta.tipo` es `"DNI"` o `"RUC"`. `cumple` y `codigoCupon` pueden ser `null`.
+- `codigoCupon` es obligatorio únicamente para `canal = "cuponidad"` o `"bee"`. Una cita de
+  canal directo debe enviarlo vacío o `null`; Caja lo rechaza si llega un valor y nunca registra
+  una plataforma `directo` en `cupones_convenios`.
 - **Los consentimientos llegan como booleanos, no como fechas.** La marca de tiempo la pone caja
   con su propio reloj al recibirlos: esa fecha es la prueba legal y no puede depender del reloj
   del celular del cliente.
@@ -447,7 +450,9 @@ Ese token es lo único que protege una ficha de salud, así que:
 - **Largo y aleatorio.** En un plan anterior propuse 6 caracteres legibles, y estaba pensado para
   que alguien lo dictara. Nadie lo dicta: el cliente toca un enlace. Que sea largo no le cuesta
   nada a nadie.
-- **Que expire** con `token_expira`, después de la fecha de la cita.
+- **Que expire** con `token_expira` al terminar la atención o después. Caja calcula el valor como
+  `inicio + duracion_min`; ese instante exacto es válido y solo se rechaza una expiración anterior
+  al final completo de la cita.
 - **Ningún endpoint que liste.** Solo «traer por token». Sin listado, un token filtrado expone una
   cita; con listado, expondría el padrón.
 - **Límite de intentos por IP** en el endpoint público. El patrón ya existe en el repo:

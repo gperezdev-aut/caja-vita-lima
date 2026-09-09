@@ -1,15 +1,21 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import {
   FICHA_CONTRATO_VERSION,
   estadoConfirmacionPublica,
+  calcularExpiracionFicha,
+  expiracionTokenFichaValida,
   identidadSincronizada,
   normalizarTelefonoE164,
   pagoVisibleCliente,
   preservarDatosCliente,
   resolverClientePorTelefono,
   resolverReintentoPreparacion,
+  precioCatalogoActivo,
   validarCatalogoSolicitado,
+  validarCodigoCuponPorCanal,
+  validarPagoPreparacion,
   validarPreparacionMvp,
   validarSolicitudComprobante,
 } from "../lib/fichaCitaDominio.ts";
@@ -97,6 +103,78 @@ test("request_id repetido reutiliza exactamente la reserva y el token", () => {
 test("request_id repetido con contenido diferente produce conflicto", () => {
   const existente = { requestId: "REQ", fingerprint: "ABC", reservaId: "RES-1", token: "TOKEN-1" };
   assert.deepEqual(resolverReintentoPreparacion(existente, "REQ", "OTRO"), { tipo: "conflicto" });
+});
+
+test("el payload de prepararCitaAction acepta un token que expira exactamente al final", () => {
+  const fecha = "2026-09-20";
+  const hora = "16:00";
+  const duracionMin = 120;
+  const payloadGeneradoPorAccion = {
+    fecha,
+    hora,
+    duracion_min: duracionMin,
+    token_expira: calcularExpiracionFicha(fecha, hora, duracionMin),
+  };
+  assert.equal(expiracionTokenFichaValida({
+    fecha: payloadGeneradoPorAccion.fecha,
+    hora: payloadGeneradoPorAccion.hora,
+    duracionMin: payloadGeneradoPorAccion.duracion_min,
+    tokenExpira: payloadGeneradoPorAccion.token_expira,
+  }), true);
+  assert.equal(expiracionTokenFichaValida({
+    fecha, hora, duracionMin,
+    tokenExpira: calcularExpiracionFicha(fecha, hora, duracionMin - 1),
+  }), false);
+});
+
+test("un código de convenio solo se admite en Cuponidad o Bee", () => {
+  assert.equal(validarCodigoCuponPorCanal("cuponidad", ""), "Falta el código de cupón.");
+  assert.equal(validarCodigoCuponPorCanal("bee", "BEE-123"), "");
+  assert.equal(validarCodigoCuponPorCanal("directo", "PROMO-123"), "Esta cita directa no admite código de cupón.");
+  assert.equal(validarCodigoCuponPorCanal("directo", ""), "");
+});
+
+test("el precio usa price_pen y solo usa price como respaldo si falta", () => {
+  assert.equal(precioCatalogoActivo("120", "90"), 120);
+  assert.equal(precioCatalogoActivo(null, "90"), 90);
+  assert.ok(Number.isNaN(precioCatalogoActivo("precio inválido", "90")));
+});
+
+test("pagos inválidos se rechazan antes de invocar la RPC", () => {
+  const base = {
+    adelantoRequerido: 10,
+    total: 100,
+    metodoPago: "EFECTIVO",
+    numeroOperacion: "",
+    metodosPermitidos: ["EFECTIVO", "YAPE"],
+  };
+  assert.equal(validarPagoPreparacion({ ...base, montoPagado: -1 }), "El monto pagado no puede ser negativo.");
+  assert.equal(validarPagoPreparacion({ ...base, montoPagado: 9 }), "Registra al menos S/10.00 antes de generar el enlace.");
+  assert.equal(validarPagoPreparacion({ ...base, montoPagado: 101 }), "El monto pagado no puede superar el total de la cita.");
+  assert.equal(validarPagoPreparacion({ ...base, montoPagado: 10, metodoPago: "" }), "El método de pago es obligatorio.");
+  assert.equal(validarPagoPreparacion({ ...base, montoPagado: 10, metodoPago: "PLIN" }), "El método de pago no está configurado o no está permitido.");
+  assert.equal(validarPagoPreparacion({ ...base, montoPagado: 10, metodoPago: "YAPE" }), "El número de operación es obligatorio para pagos no efectivos.");
+  assert.equal(validarPagoPreparacion({ ...base, montoPagado: 10 }), "");
+});
+
+test("la ruta pública reutiliza la validación de código por canal", async () => {
+  const route = await readFile(new URL("../app/api/publico/ficha/[token]/route.ts", import.meta.url), "utf8");
+  assert.match(route, /validarCodigoCuponPorCanal\(canal, codigoCupon\)/);
+});
+
+test("la migración protege comprobantes y no permite cupón directo", async () => {
+  const migration = await readFile(new URL("../sql/016_ficha_cita_hardening.sql", import.meta.url), "utf8");
+  assert.match(migration, /revoke all on table public\.solicitudes_comprobante from public, anon, authenticated/i);
+  assert.match(migration, /grant select, insert, update, delete on table public\.solicitudes_comprobante to service_role/i);
+  assert.match(migration, /CODIGO_CONVENIO_NO_PERMITIDO_DIRECTO/);
+  assert.match(migration, /v_codigo_cupon <> '' and v_cita\.canal in \('cuponidad', 'bee'\)/);
+});
+
+test("la RPC comparte respaldo de precio y regla de expiración con la aplicación", async () => {
+  const migration = await readFile(new URL("../sql/016_ficha_cita_hardening.sql", import.meta.url), "utf8");
+  assert.match(migration, /to_jsonb\(c\)->>'price_pen'/);
+  assert.match(migration, /to_jsonb\(c\)->>'price'/);
+  assert.match(migration, /v_token_expira < \(\(v_fecha \+ v_hora\) \+ make_interval\(mins => v_duracion\)\)/);
 });
 
 test("motivo de confirmación distingue domicilio, convenio y cita confirmada", () => {

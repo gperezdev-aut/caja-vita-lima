@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { getCountries, getCountryCallingCode } from "libphonenumber-js/max";
 import { CajaSidebar } from "@/components/CajaSidebar";
 import { requireModuleAccess } from "@/lib/auth";
+import { precioCatalogoActivo } from "@/lib/fichaCitaDominio";
 import { supabaseSelect } from "@/lib/supabaseServer";
 import { PrepararCitaForm } from "./PrepararCitaForm";
 
@@ -47,11 +48,11 @@ export default async function PrepararCitaPage() {
       code: String(row.CodeId ?? "").trim(),
       name: String(row.option_name ?? "").trim(),
       duration: Math.round(number(row.duration_min)),
-      price: number(row.price_pen ?? row.price),
+      price: precioCatalogoActivo(row.price_pen, row.price),
       paxType: String(row.pax_type ?? row.category ?? "").trim().toLowerCase(),
       sortOrder: number(row.sort_order),
     }))
-    .filter((row) => row.code && row.name && row.duration > 0)
+    .filter((row) => row.code && row.name && row.duration > 0 && row.price > 0)
     .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
 
   const today = todayInLima();
@@ -72,7 +73,8 @@ export default async function PrepararCitaPage() {
     .filter(Boolean);
 
   const error =
-    catalogResult.error || sedesResult.error || configResult.error;
+    catalogResult.error || sedesResult.error || configResult.error ||
+    (!metodos.length ? "No hay métodos de pago activos configurados." : "");
   const regionNames = new Intl.DisplayNames(["es"], { type: "region" });
   const countries = getCountries()
     .map((code) => ({ code, name: regionNames.of(code) ?? code, callingCode: getCountryCallingCode(code) }))
@@ -104,7 +106,7 @@ export default async function PrepararCitaPage() {
           <PrepararCitaForm
             services={services}
             sedes={sedes}
-            metodos={metodos.length ? metodos : ["YAPE", "PLIN", "TRANSFERENCIA", "EFECTIVO"]}
+            metodos={metodos}
             countries={countries}
             requestId={randomUUID()}
             minDate={today}
