@@ -1,6 +1,12 @@
 import { NextRequest } from "next/server";
 import { supabaseRpc, supabaseSelectWhere } from "@/lib/supabaseServer";
 import {
+  estadoConfirmacionPublica,
+  FICHA_CONTRATO_VERSION,
+  pagoVisibleCliente,
+  validarSolicitudComprobante,
+} from "@/lib/fichaCitaDominio";
+import {
   enmascararEmail,
   mensajeWhatsappCita,
   normalizarTelefonoE164,
@@ -75,36 +81,24 @@ export async function GET(
   if (estadoError) return estadoError;
 
   const canal = (cita.canal ?? "directo") as string;
-  const esDomicilio = cita.tipo_atencion === "domicilio";
   const esCuponidad = canal === "cuponidad";
   const esConvenio = esCuponidad || canal === "bee";
 
   const cliente = await cargarCliente(cita.cliente_id);
 
-  const montoTotal = Number(cita.monto_total ?? 0);
-  const adelanto = Number(cita.adelanto ?? 0);
-  const saldo =
-    cita.saldo_pendiente != null
-      ? Number(cita.saldo_pendiente)
-      : Math.max(montoTotal - adelanto, 0);
-
-  const pago = esConvenio && !esDomicilio
-    ? {
-        moneda: "PEN",
-        adelantoRecibido: 0,
-        saldo,
-        leyenda: esCuponidad ? "Pagado en Cuponidad" : "Pagado por Bee Beneficios",
-      }
-    : {
-        moneda: "PEN",
-        adelantoRecibido: adelanto,
-        saldo,
-        leyenda: "Adelanto recibido",
-      };
+  const pagoVisible = pagoVisibleCliente(canal, Number(cita.monto_total ?? 0), Number(cita.adelanto ?? 0));
+  const pago = { moneda: "PEN", ...pagoVisible };
+  const confirmacion = estadoConfirmacionPublica({
+    requiereConfirmacion: Boolean(cita.requiere_confirmacion),
+    confirmadoEn: cita.confirmado_en,
+    tipoAtencion: cita.tipo_atencion,
+    canal,
+  });
 
   const sedeInfo = await cargarSede(cita.sede);
 
   const body: Record<string, unknown> = {
+    contratoVersion: FICHA_CONTRATO_VERSION,
     token,
     estado: cita.estado_ficha ?? "pendiente",
     idioma: cita.idioma ?? "es",
@@ -115,7 +109,7 @@ export async function GET(
       codigoCupon: esConvenio,
       correoObligatorio: false,
       documentoParaBoleta: esConvenio ? "no" : "opcional",
-      confirmacionManual: Boolean(cita.requiere_confirmacion),
+      ...confirmacion,
     },
     cliente: {
       conocido: Boolean(cliente?.cliente),
@@ -267,21 +261,8 @@ export async function POST(
   }
 
   const boleta = payload.boleta ?? { requiere: false };
-  if (boleta.requiere) {
-    if (boleta.tipo !== "DNI" && boleta.tipo !== "RUC") {
-      return errorResponse("validacion", "Tipo de documento inválido para boleta.");
-    }
-    if (!boleta.numero || !boleta.numero.trim()) {
-      return errorResponse("validacion", "Falta el número de documento para boleta.");
-    }
-    const documento = boleta.numero.trim();
-    if (boleta.tipo === "DNI" && !/^\d{8}$/.test(documento)) {
-      return errorResponse("validacion", "El DNI debe tener 8 dígitos.");
-    }
-    if (boleta.tipo === "RUC" && !/^\d{11}$/.test(documento)) {
-      return errorResponse("validacion", "El RUC debe tener 11 dígitos.");
-    }
-  }
+  const comprobante = validarSolicitudComprobante(boleta);
+  if (comprobante.ok === false) return errorResponse("validacion", comprobante.error);
 
   if (payload.idioma && payload.idioma !== "es" && payload.idioma !== "en") {
     return errorResponse("validacion", "El idioma es inválido.");
@@ -335,7 +316,12 @@ export async function POST(
         cita.cliente_id ?? `CLI-FICHA-${Date.now().toString(36).toUpperCase()}`,
       nombre,
       correo: correo || null,
-      dni: boleta.requiere && boleta.tipo === "DNI" ? boleta.numero : null,
+      dni: comprobante.solicitado && comprobante.tipoDocumento === "DNI" ? comprobante.numeroDocumento : null,
+      solicita_comprobante: comprobante.solicitado,
+      tipo_comprobante: comprobante.solicitado ? comprobante.tipoComprobante : null,
+      tipo_documento: comprobante.solicitado ? comprobante.tipoDocumento : null,
+      numero_documento: comprobante.solicitado ? comprobante.numeroDocumento : null,
+      razon_social: comprobante.solicitado ? comprobante.razonSocial : null,
       whatsapp_e164: telefonoNormalizado.e164,
       pais_telefono: telefonoNormalizado.pais,
       idioma: payload.idioma ?? "es",
@@ -364,6 +350,12 @@ export async function POST(
         "Ese código de cupón ya fue usado. Si es un error, contáctanos por WhatsApp."
       );
     }
+    if (completar.error?.includes("TELEFONO_ASOCIADO_OTRO_CLIENTE")) {
+      return errorResponse(
+        "telefono_asociado_otro_cliente",
+        "Ese WhatsApp ya pertenece a otro cliente. El equipo de Vita Lima debe revisar la ficha."
+      );
+    }
     return errorResponse(
       "validacion",
       "No se pudo guardar la ficha de forma completa. No se aplicó ningún cambio parcial."
@@ -388,6 +380,11 @@ export async function POST(
       : whatsappUrlNegocio("Hola, tengo una consulta sobre mi cita.");
 
   const sedeInfo = await cargarSede(cita.sede);
+  const pagoResumen = pagoVisibleCliente(
+    canal,
+    Number(cita.monto_total ?? 0),
+    Number(cita.adelanto ?? 0)
+  );
 
   return jsonNoStore({
     ok: true,
@@ -396,11 +393,8 @@ export async function POST(
     resumen: {
       ...construirCitaResumen(cita, sedeInfo),
       moneda: "PEN",
-      adelantoRecibido: esConvenio ? 0 : Number(cita.adelanto ?? 0),
-      saldo:
-        cita.saldo_pendiente != null
-          ? Number(cita.saldo_pendiente)
-          : Math.max(Number(cita.monto_total ?? 0) - Number(cita.adelanto ?? 0), 0),
+      adelantoRecibido: pagoResumen.adelantoRecibido,
+      saldo: pagoResumen.saldo,
     },
   });
 }

@@ -147,7 +147,8 @@ test("la migración separa servicio, movilidad y total en caja_movimientos", asy
 
 test("GET público expone la confirmación manual de domicilio", async () => {
   const route = await readFile(new URL("../app/api/publico/ficha/[token]/route.ts", import.meta.url), "utf8");
-  assert.match(route, /confirmacionManual: Boolean\(cita\.requiere_confirmacion\)/);
+  assert.match(route, /estadoConfirmacionPublica/);
+  assert.match(route, /FICHA_CONTRATO_VERSION/);
 });
 
 test("domicilio exige confirmación y el mensaje no expone la sede operativa", () => {

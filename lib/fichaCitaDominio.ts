@@ -1,4 +1,11 @@
+import {
+  getCountries,
+  parsePhoneNumberFromString,
+  type CountryCode,
+} from "libphonenumber-js/max";
+
 export const CANALES_FICHA = ["directo", "cuponidad", "bee"] as const;
+export const FICHA_CONTRATO_VERSION = "ficha-cita-v1" as const;
 
 export type CanalFicha = (typeof CANALES_FICHA)[number];
 
@@ -148,36 +155,163 @@ export function pagoHabilitaToken(
   );
 }
 
-const PREFIJOS_PAIS: Record<string, string> = {
-  PE: "51", US: "1", CA: "1", MX: "52", CO: "57", CL: "56",
-  AR: "54", BR: "55", EC: "593", BO: "591", VE: "58", ES: "34",
-  GB: "44", DE: "49", FR: "33", IT: "39",
-};
-
 export type NormalizarTelefonoResultado =
   | { ok: true; e164: string; pais: string }
   | { ok: false };
+
+export const PAISES_TELEFONO = getCountries();
 
 export function normalizarTelefonoE164(
   crudo: string,
   pais: string
 ): NormalizarTelefonoResultado {
-  const soloDigitos = crudo.replace(/\D/g, "");
   const paisNormalizado = pais.trim().toUpperCase();
+  if (!PAISES_TELEFONO.includes(paisNormalizado as CountryCode)) return { ok: false };
 
-  if (crudo.trim().startsWith("+")) {
-    if (soloDigitos.length >= 8 && soloDigitos.length <= 15) {
-      return { ok: true, e164: `+${soloDigitos}`, pais: paisNormalizado };
+  const country = paisNormalizado as CountryCode;
+  const limpio = crudo.trim();
+  const digitos = limpio.replace(/\D/g, "");
+  if (!digitos) return { ok: false };
+
+  // Si llega un número internacional, el país real debe coincidir con el
+  // seleccionado. También reconoce "51…" sin + antes de tratarlo como local,
+  // evitando guardar +5151… por duplicar el prefijo peruano.
+  const internacional = parsePhoneNumberFromString(
+    limpio.startsWith("+") ? limpio : `+${digitos}`
+  );
+  if (internacional?.isValid()) {
+    if (internacional.country === country) {
+      return { ok: true, e164: internacional.number, pais: country };
     }
-    return { ok: false };
+    if (limpio.startsWith("+")) return { ok: false };
   }
 
-  const prefijo = PREFIJOS_PAIS[paisNormalizado];
-  if (!prefijo || soloDigitos.length < 6 || soloDigitos.length > 12) {
-    return { ok: false };
-  }
+  const nacional = parsePhoneNumberFromString(limpio, country);
+  if (!nacional?.isValid() || nacional.country !== country) return { ok: false };
+  return { ok: true, e164: nacional.number, pais: country };
+}
 
-  return { ok: true, e164: `+${prefijo}${soloDigitos}`, pais: paisNormalizado };
+export type MotivoConfirmacion = "domicilio" | "convenio" | null;
+
+export function estadoConfirmacionPublica(cita: {
+  requiereConfirmacion: boolean;
+  confirmadoEn?: string | null;
+  tipoAtencion?: string | null;
+  canal?: string | null;
+}) {
+  const confirmacionManual = cita.requiereConfirmacion && !cita.confirmadoEn;
+  const motivoConfirmacion: MotivoConfirmacion = !confirmacionManual
+    ? null
+    : cita.tipoAtencion === "domicilio"
+      ? "domicilio"
+      : cita.canal === "cuponidad" || cita.canal === "bee"
+        ? "convenio"
+        : null;
+  return { confirmacionManual, motivoConfirmacion };
+}
+
+export function pagoVisibleCliente(canal: string | null | undefined, montoTotal: number, adelanto: number) {
+  if (canal === "cuponidad" || canal === "bee") {
+    return {
+      adelantoRecibido: 0,
+      saldo: 0,
+      leyenda: canal === "cuponidad" ? "Pago gestionado por Cuponidad" : "Pago gestionado por Bee Beneficios",
+    };
+  }
+  return {
+    adelantoRecibido: redondearDinero(adelanto),
+    saldo: redondearDinero(Math.max(montoTotal - adelanto, 0)),
+    leyenda: "Adelanto recibido",
+  };
+}
+
+export function validarPreparacionMvp(input: {
+  canal: string;
+  esGiftCard: boolean;
+  cuponPromocional: string;
+}) {
+  if (input.canal !== "directo" || input.esGiftCard || input.cuponPromocional.trim()) {
+    return "En este lanzamiento, /preparar-cita solo admite citas directas sin promociones ni gift cards. Cuponidad, Bee, promociones y gift cards continúan en el proceso actual.";
+  }
+  return "";
+}
+
+export type ComprobanteValidado =
+  | { ok: true; solicitado: false }
+  | {
+      ok: true;
+      solicitado: true;
+      tipoComprobante: "BOLETA" | "FACTURA";
+      tipoDocumento: "DNI" | "RUC";
+      numeroDocumento: string;
+      razonSocial: string | null;
+    }
+  | { ok: false; error: string };
+
+export function validarSolicitudComprobante(input: {
+  requiere?: boolean;
+  tipo?: "DNI" | "RUC";
+  numero?: string;
+  razonSocial?: string | null;
+}): ComprobanteValidado {
+  if (!input.requiere) return { ok: true, solicitado: false };
+  const numero = input.numero?.trim() ?? "";
+  if (input.tipo === "DNI" && /^\d{8}$/.test(numero)) {
+    return { ok: true, solicitado: true, tipoComprobante: "BOLETA", tipoDocumento: "DNI", numeroDocumento: numero, razonSocial: null };
+  }
+  if (input.tipo === "RUC" && /^\d{11}$/.test(numero) && input.razonSocial?.trim()) {
+    return { ok: true, solicitado: true, tipoComprobante: "FACTURA", tipoDocumento: "RUC", numeroDocumento: numero, razonSocial: input.razonSocial.trim() };
+  }
+  return { ok: false, error: input.tipo === "RUC" ? "El RUC requiere 11 dígitos y razón social." : "El DNI requiere 8 dígitos." };
+}
+
+export function preservarDatosCliente<T>(anterior: T | null | undefined, nuevo: T | null | undefined) {
+  return nuevo == null || nuevo === "" ? anterior ?? null : nuevo;
+}
+
+export function resolverReintentoPreparacion(
+  existente: { requestId: string; fingerprint: string; reservaId: string; token: string } | null,
+  requestId: string,
+  fingerprint: string
+) {
+  if (!existente) return { tipo: "crear" as const };
+  if (existente.requestId === requestId && existente.fingerprint === fingerprint) {
+    return { tipo: "reutilizar" as const, reservaId: existente.reservaId, token: existente.token };
+  }
+  return { tipo: "conflicto" as const };
+}
+
+export function resolverClientePorTelefono(
+  clienteReservaId: string | null,
+  clienteTelefonoId: string | null,
+  clienteNuevoId: string
+) {
+  if (clienteReservaId && clienteTelefonoId && clienteReservaId !== clienteTelefonoId) {
+    return { ok: false as const, error: "telefono_asociado_otro_cliente" as const };
+  }
+  return { ok: true as const, clienteId: clienteReservaId ?? clienteTelefonoId ?? clienteNuevoId };
+}
+
+export function identidadSincronizada(clienteId: string, nombre: string, whatsapp: string) {
+  const identidad = { clienteId, nombre, whatsapp };
+  return { cliente: identidad, cita: identidad, movimiento: identidad };
+}
+
+export function validarCatalogoSolicitado(
+  codigos: string[],
+  catalogo: Array<ServicioCalculado & { nombre: string }>
+) {
+  const servicios: Array<ServicioCalculado & { nombre: string }> = [];
+  for (const codigo of codigos) {
+    const coincidencias = catalogo.filter((item) => item.codigo === codigo);
+    if (coincidencias.length !== 1) return { ok: false as const };
+    const servicio = coincidencias[0];
+    if (!servicio?.nombre.trim() || !Number.isFinite(servicio.precio) || servicio.precio <= 0 || !Number.isInteger(servicio.duracion_min) || servicio.duracion_min <= 0) {
+      return { ok: false as const };
+    }
+    servicios.push(servicio);
+  }
+  return { ok: true as const, servicios };
 }
 
 function minutos(hora: string) {

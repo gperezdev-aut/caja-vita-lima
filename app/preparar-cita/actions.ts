@@ -12,7 +12,8 @@ import {
   redondearDinero,
   tipoAtencionDesdeServicios,
   validarDatosDomicilio,
-  validarReglasComercialesDomicilio,
+  validarPreparacionMvp,
+  validarCatalogoSolicitado,
   type CanalFicha,
 } from "@/lib/fichaCitaDominio";
 import { generarTokenFicha, normalizarTelefonoE164 } from "@/lib/fichaCitaPublica";
@@ -121,6 +122,7 @@ export async function prepararCitaAction(
   const distritoDomicilio = text(formData, "domicilio_distrito");
   const direccionDomicilio = text(formData, "domicilio_direccion");
   const referenciaDomicilio = text(formData, "domicilio_referencia");
+  const requestId = text(formData, "request_id");
 
   if (!fecha || fecha < fechaLima() || !hora || !sede || !cliente) {
     return { ok: false, error: "Completa cliente, sede, fecha y una fecha no pasada." };
@@ -128,11 +130,10 @@ export async function prepararCitaAction(
   if (!telefono.ok) {
     return { ok: false, error: "No se pudo normalizar el teléfono para el país elegido." };
   }
-  if (canal !== "directo" && (esGiftCard || promoCode)) {
-    return {
-      ok: false,
-      error: "Gift card y cupón promocional común solo se aplican al canal directo.",
-    };
+  const errorMvp = validarPreparacionMvp({ canal, esGiftCard, cuponPromocional: promoCode });
+  if (errorMvp) return { ok: false, error: errorMvp };
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) {
+    return { ok: false, error: "El identificador del intento no es válido. Recarga el formulario." };
   }
 
   const serviceCodes = [text(formData, "servicio_1")];
@@ -145,9 +146,8 @@ export async function prepararCitaAction(
     return { ok: false, error: "No se pueden mezclar servicios presenciales y a domicilio en una misma cita." };
   }
 
-  const [catalogResult, promotionResult, sedeResult] = await Promise.all([
+  const [catalogResult, sedeResult] = await Promise.all([
     supabaseSelect<Row>("stg_services_catalog_v5"),
-    supabaseSelect<Row>("stg_promotions_v1"),
     supabaseSelectWhere<{
       nombre: string | null;
       hora_apertura: string | null;
@@ -158,26 +158,20 @@ export async function prepararCitaAction(
     ),
   ]);
 
-  const dataError = catalogResult.error || promotionResult.error || sedeResult.error;
+  const dataError = catalogResult.error || sedeResult.error;
   if (dataError) return { ok: false, error: `No se pudo validar la cita: ${dataError}` };
 
-  const catalog = catalogResult.data.filter((row) => truthy(row.active));
-  const servicios = serviceCodes.map((code) => {
-    const row = catalog.find((item) => String(item.CodeId ?? "").trim() === code);
-    if (!row) return null;
-    return {
-      codigo: code,
+  const catalog = catalogResult.data.filter((row) => truthy(row.active)).map((row) => ({
+      codigo: String(row.CodeId ?? "").trim(),
       nombre: String(row.option_name ?? "").trim(),
       duracion_min: Math.round(parseCatalogNumber(row.duration_min)),
       precio: redondearDinero(parseCatalogNumber(row.price_pen ?? row.price)),
-    };
-  });
-
-  if (servicios.some((item) => !item?.nombre || !item.duracion_min)) {
-    return { ok: false, error: "Uno de los servicios ya no está activo en el catálogo." };
+  }));
+  const catalogoValidado = validarCatalogoSolicitado(serviceCodes, catalog);
+  if (!catalogoValidado.ok) {
+    return { ok: false, error: "Cada código debe corresponder a un único servicio activo con nombre, precio y duración válidos." };
   }
-
-  const serviciosValidos = servicios.filter((item): item is NonNullable<typeof item> => Boolean(item));
+  const serviciosValidos = catalogoValidado.servicios;
   const esDomicilio = tipoAtencion === "domicilio";
   if (esDomicilio) {
     const errorDomicilio = validarDatosDomicilio(
@@ -185,8 +179,6 @@ export async function prepararCitaAction(
       sedeResult.data.map((item) => String(item.nombre ?? "").trim()).filter(Boolean)
     );
     if (errorDomicilio) return { ok: false, error: errorDomicilio };
-    const errorComercial = validarReglasComercialesDomicilio({ canal, esGiftCard, cuponPromocional: promoCode });
-    if (errorComercial) return { ok: false, error: errorComercial };
   }
 
   let montoTotal = redondearDinero(serviciosValidos.reduce((sum, item) => sum + item.precio, 0));
@@ -200,37 +192,11 @@ export async function prepararCitaAction(
     costoMovilidad = economiaDomicilio.movilidad;
   }
 
-  if (promoCode && !esDomicilio) {
-    const hoy = fechaLima();
-    const promo = promotionResult.data.find((row) => {
-      const inicio = String(row.start_date ?? "").slice(0, 10);
-      const fin = String(row.end_date ?? "").slice(0, 10);
-      return (
-        String(row.promo_code ?? "").trim() === promoCode &&
-        truthy(row.is_active) &&
-        (!inicio || inicio <= hoy) &&
-        (!fin || fin >= hoy)
-      );
-    });
-    if (!promo) return { ok: false, error: "El cupón promocional no está vigente." };
-    montoTotal = redondearDinero(
-      parseCatalogNumber(personas === 2 ? promo.price_2p : promo.price_1p)
-    );
-  }
-
   if (montoTotal <= 0) {
     return { ok: false, error: "El catálogo no tiene un precio válido para esta cita." };
   }
 
-  const serviciosPersistidos = servicios.map((item, index) => ({
-    ...item,
-    precio:
-      promoCode && item
-        ? index === servicios.length - 1
-          ? redondearDinero(montoTotal - (montoTotal / personas) * index)
-          : redondearDinero(montoTotal / personas)
-        : item?.precio,
-  }));
+  const serviciosPersistidos = serviciosValidos;
   const duracionMin = Math.max(
     ...serviciosPersistidos.map((item) => item?.duracion_min ?? 0)
   );
@@ -279,6 +245,7 @@ export async function prepararCitaAction(
     token: string;
   }>("preparar_ficha_cita", {
     p_payload: {
+      request_id: requestId,
       canal,
       personas,
       fecha,
@@ -313,14 +280,21 @@ export async function prepararCitaAction(
   });
 
   if (rpc.error || !rpc.data?.ok) {
-    return { ok: false, error: rpc.error || "La transacción no confirmó la cita." };
+    if (rpc.error?.includes("REQUEST_ID_PAYLOAD_CONFLICTO")) {
+      return { ok: false, error: "Este intento ya fue usado con datos diferentes. Recarga el formulario y vuelve a revisar la cita." };
+    }
+    return { ok: false, error: "La transacción no confirmó la cita. No se guardó ningún cambio parcial." };
   }
 
-  const enlace = `https://vitalimaspa.com/cita/${token}`;
+  const tokenConfirmado = rpc.data.token;
+  const reservaConfirmada = rpc.data.reserva_id;
+  const enlace = `https://vitalimaspa.com/cita/${tokenConfirmado}`;
   const ubicacionCliente = esDomicilio
     ? describirAtencionDomicilio({ distrito: distritoDomicilio, direccion: direccionDomicilio, referencia: referenciaDomicilio })
     : `en ${sede}`;
-  const mensaje = `Hola ${cliente}, tu cita en Vita Lima quedó registrada para el ${fecha} a las ${hora}. ${ubicacionCliente}. Completa tu ficha aquí: ${enlace}`;
+  const mensaje = esDomicilio
+    ? `Hola ${cliente}, tu solicitud de atención a domicilio quedó registrada para el ${fecha} a las ${hora} y está pendiente de confirmación de cobertura y terapistas. ${ubicacionCliente}. Completa tu ficha aquí: ${enlace}`
+    : `Hola ${cliente}, tu cita en Vita Lima quedó registrada para el ${fecha} a las ${hora}. ${ubicacionCliente}. Completa tu ficha aquí: ${enlace}`;
 
-  return { ok: true, mensaje, enlace, reservaId };
+  return { ok: true, mensaje, enlace, reservaId: reservaConfirmada };
 }

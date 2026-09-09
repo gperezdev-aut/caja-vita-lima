@@ -5,8 +5,6 @@ import {
   calcularCitaDomicilio,
   calcularAdelantoRequerido,
   esCodigoDomicilio,
-  requiereConfirmacion,
-  type CanalFicha,
 } from "@/lib/fichaCitaDominio";
 import {
   buscarClienteFichaAction,
@@ -25,9 +23,10 @@ type Service = {
 
 type Props = {
   services: Service[];
-  promotions: { code: string; name: string; price1: number; price2: number }[];
   sedes: { name: string; open: string; close: string }[];
   metodos: string[];
+  countries: { code: string; name: string; callingCode: string }[];
+  requestId: string;
   minDate: string;
 };
 
@@ -46,9 +45,8 @@ function fromMinutes(value: number) {
   return `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`;
 }
 
-export function PrepararCitaForm({ services, promotions, sedes, metodos, minDate }: Props) {
+export function PrepararCitaForm({ services, sedes, metodos, countries, requestId, minDate }: Props) {
   const [state, formAction, pending] = useActionState(prepararCitaAction, initialState);
-  const [canal, setCanal] = useState<CanalFicha>("directo");
   const [personas, setPersonas] = useState<1 | 2>(1);
   const [sede, setSede] = useState(sedes[0]?.name ?? "");
   const [fecha, setFecha] = useState(minDate);
@@ -58,8 +56,6 @@ export function PrepararCitaForm({ services, promotions, sedes, metodos, minDate
   const [cliente, setCliente] = useState("");
   const [service1, setService1] = useState("");
   const [service2, setService2] = useState("");
-  const [promo, setPromo] = useState("");
-  const [giftCard, setGiftCard] = useState(false);
   const [paid, setPaid] = useState(0);
   const [lookupMessage, setLookupMessage] = useState("");
 
@@ -76,22 +72,16 @@ export function PrepararCitaForm({ services, promotions, sedes, metodos, minDate
   const opcionesServicio2 = service1
     ? eligibleServices.filter((item) => esCodigoDomicilio(item.code) === esCodigoDomicilio(service1))
     : eligibleServices;
-  const selectedPromo = promotions.find((item) => item.code === promo);
   const economiaDomicilio = esDomicilio
     ? calcularCitaDomicilio(selected.map((item) => ({ codigo: item.code, precio: item.price, duracion_min: item.duration })))
     : null;
-  const subtotalServicios = selectedPromo && !esDomicilio
-    ? personas === 2
-      ? selectedPromo.price2
-      : selectedPromo.price1
-    : selected.reduce((sum, item) => sum + item.price, 0);
+  const subtotalServicios = selected.reduce((sum, item) => sum + item.price, 0);
   const movilidad = economiaDomicilio?.ok ? economiaDomicilio.movilidad : 0;
   const total = economiaDomicilio?.ok ? economiaDomicilio.total : subtotalServicios;
   const required = calcularAdelantoRequerido({
-    canal,
+    canal: "directo",
     personas,
     montoTotal: total,
-    esGiftCard: giftCard,
     esDomicilio,
   });
   const selectedSede = sedes.find((item) => item.name === sede);
@@ -139,34 +129,25 @@ export function PrepararCitaForm({ services, promotions, sedes, metodos, minDate
 
   return (
     <form action={formAction} className="atencionForm fichaPrepararForm">
+      <input type="hidden" name="request_id" value={requestId} />
+      <input type="hidden" name="canal" value="directo" />
       <input type="hidden" name="tipo_atencion" value={esDomicilio ? "domicilio" : "sede"} />
       {state.error && <div className="formMessage error" role="alert">{state.error}</div>}
 
       <section className="wizardPanel visible">
         <h2>1. Origen y cliente</h2>
         <p className="wizardIntro">
-          Cuponidad y Bee Beneficios son convenios de pago posterior. Un cupón promocional común no cambia el adelanto.
+          Este nuevo flujo admite por ahora citas directas presenciales y a domicilio. Cuponidad, Bee Beneficios,
+          promociones y gift cards continúan registrándose mediante el proceso actual.
         </p>
         <div className="atencionGrid">
-          <label className="atencionField">
-            Canal
-            <select name="canal" value={canal} onChange={(event) => { setCanal(event.target.value as CanalFicha); setPromo(""); setGiftCard(false); }}>
-              <option value="directo">Directo</option>
-              <option value="cuponidad">Cuponidad</option>
-              <option value="bee">Bee Beneficios</option>
-            </select>
-          </label>
+          <div className="atencionField"><span>Canal</span><strong>Directo</strong></div>
           <label className="atencionField">
             País del teléfono
             <select name="pais" value={pais} onChange={(event) => setPais(event.target.value)}>
-              <option value="PE">Perú (+51)</option><option value="US">EE. UU. (+1)</option>
-              <option value="CA">Canadá (+1)</option><option value="MX">México (+52)</option>
-              <option value="CO">Colombia (+57)</option><option value="CL">Chile (+56)</option>
-              <option value="AR">Argentina (+54)</option><option value="BR">Brasil (+55)</option>
-              <option value="EC">Ecuador (+593)</option><option value="BO">Bolivia (+591)</option>
-              <option value="VE">Venezuela (+58)</option><option value="ES">España (+34)</option>
-              <option value="GB">Reino Unido (+44)</option><option value="DE">Alemania (+49)</option>
-              <option value="FR">Francia (+33)</option><option value="IT">Italia (+39)</option>
+              {countries.map((country) => (
+                <option key={country.code} value={country.code}>{country.name} (+{country.callingCode})</option>
+              ))}
             </select>
           </label>
           <label className="atencionField">
@@ -200,7 +181,7 @@ export function PrepararCitaForm({ services, promotions, sedes, metodos, minDate
           </label>
           <label className="atencionField">
             Servicio — persona 1
-              <select name="servicio_1" value={service1} onChange={(event) => { setService1(event.target.value); setService2(""); setHora(""); if (esCodigoDomicilio(event.target.value)) { setPromo(""); setGiftCard(false); } }} required>
+            <select name="servicio_1" value={service1} onChange={(event) => { setService1(event.target.value); setService2(""); setHora(""); }} required>
               <option value="">Selecciona</option>
               {eligibleServices.map((item) => <option key={item.code} value={item.code}>{item.name} · {money(item.price)}</option>)}
             </select>
@@ -208,23 +189,12 @@ export function PrepararCitaForm({ services, promotions, sedes, metodos, minDate
           {personas === 2 && (
             <label className="atencionField">
               Servicio — persona 2
-              <select name="servicio_2" value={service2} onChange={(event) => { setService2(event.target.value); setHora(""); if (esCodigoDomicilio(event.target.value)) { setPromo(""); setGiftCard(false); } }} required>
+              <select name="servicio_2" value={service2} onChange={(event) => { setService2(event.target.value); setHora(""); }} required>
                 <option value="">Selecciona</option>
                 {opcionesServicio2.map((item) => <option key={item.code} value={item.code}>{item.name} · {money(item.price)}</option>)}
               </select>
             </label>
           )}
-          <label className="atencionField">
-            Cupón promocional común
-            <select name="promo_code" value={promo} onChange={(event) => setPromo(event.target.value)} disabled={canal !== "directo" || esDomicilio}>
-              <option value="">Sin promoción</option>
-              {promotions.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
-            </select>
-          </label>
-          <label className="catalogCheckbox">
-            <input type="checkbox" name="es_gift_card" value="1" checked={giftCard} disabled={canal !== "directo" || esDomicilio} onChange={(event) => setGiftCard(event.target.checked)} />
-            <span>Gift card: requiere pago del 100%</span>
-          </label>
         </div>
       </section>
 
@@ -278,7 +248,7 @@ export function PrepararCitaForm({ services, promotions, sedes, metodos, minDate
           <div><span>Total calculado</span><strong>{money(total)}</strong></div>
           <div><span>Adelanto requerido</span><strong>{money(required)}</strong></div>
           <div><span>Saldo pendiente</span><strong>{money(Math.max(total - paid, 0))}</strong></div>
-          <div><span>Confirmación manual</span><strong>{requiereConfirmacion(canal, esDomicilio) ? "Sí" : "No"}</strong></div>
+          <div><span>Confirmación manual</span><strong>{esDomicilio ? "Sí" : "No"}</strong></div>
         </div>
         <div className="atencionGrid paymentFields">
           <label className="atencionField">Monto recibido<input name="monto_pagado" type="number" min="0" step="0.01" value={paid} onChange={(event) => setPaid(Number(event.target.value || 0))} required /></label>

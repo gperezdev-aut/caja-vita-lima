@@ -23,6 +23,7 @@ export type FichaErrorCode =
   | "token_no_existe"
   | "token_vencido"
   | "ficha_ya_completa"
+  | "telefono_asociado_otro_cliente"
   | "cupon_ya_usado"
   | "validacion"
   | "rate_limited";
@@ -33,6 +34,7 @@ const ERROR_HTTP_STATUS: Record<FichaErrorCode, number> = {
   token_no_existe: 404,
   token_vencido: 410,
   ficha_ya_completa: 410,
+  telefono_asociado_otro_cliente: 409,
   cupon_ya_usado: 409,
   validacion: 422,
   rate_limited: 429,
@@ -126,10 +128,6 @@ export function requiereConsentimientoSalud(salud: {
   );
 }
 
-function pad2(n: number) {
-  return String(n).padStart(2, "0");
-}
-
 const DIAS_SEMANA_ES = [
   "domingo",
   "lunes",
@@ -195,98 +193,12 @@ export function whatsappUrlNegocio(mensaje: string) {
   return `${base}?text=${encodeURIComponent(mensaje)}`;
 }
 
-function walltimeToIcs(y: number, mo: number, d: number, h: number, mi: number, s: number) {
-  return `${y}${pad2(mo)}${pad2(d)}T${pad2(h)}${pad2(mi)}${pad2(s)}`;
-}
-
-function escapeIcsText(text: string) {
-  return text
-    .replace(/\\/g, "\\\\")
-    .replace(/;/g, "\\;")
-    .replace(/,/g, "\\,")
-    .replace(/\n/g, "\\n");
-}
-
-/**
- * .ics con TZID=America/Lima explícito y un VTIMEZONE embebido de
- * offset fijo -05:00 (Perú no tiene horario de verano) — decisión
- * del dueño, para no depender de que el calendario del cliente
- * conozca esa zona (GET /api/publico/ficha/[token]/ics).
- *
- * DTSTART/DTEND se arman como aritmética de reloj de pared (misma
- * zona en los dos lados), no como conversión real de zona horaria:
- * no hace falta más que eso porque el offset de Lima nunca cambia.
- */
-export function construirIcs(opts: {
-  uid: string;
-  fecha: string; // YYYY-MM-DD
-  hora: string; // HH:MM o HH:MM:SS
-  duracionMin: number;
-  resumen: string;
-  ubicacion?: string | null;
-  descripcion?: string | null;
-}) {
-  const [y, mo, d] = opts.fecha.split("-").map(Number);
-  const [hStr, mStr, sStr] = opts.hora.split(":");
-  const h = Number(hStr ?? 0);
-  const mi = Number(mStr ?? 0);
-  const s = Number(sStr ?? 0);
-
-  const startUtcMs = Date.UTC(y, mo - 1, d, h, mi, s);
-  const endDate = new Date(startUtcMs + Math.max(opts.duracionMin, 0) * 60000);
-
-  const dtstart = walltimeToIcs(y, mo, d, h, mi, s);
-  const dtend = walltimeToIcs(
-    endDate.getUTCFullYear(),
-    endDate.getUTCMonth() + 1,
-    endDate.getUTCDate(),
-    endDate.getUTCHours(),
-    endDate.getUTCMinutes(),
-    endDate.getUTCSeconds()
-  );
-
-  const now = new Date();
-  const dtstamp = `${now.getUTCFullYear()}${pad2(now.getUTCMonth() + 1)}${pad2(
-    now.getUTCDate()
-  )}T${pad2(now.getUTCHours())}${pad2(now.getUTCMinutes())}${pad2(now.getUTCSeconds())}Z`;
-
-  const lines = [
-    "BEGIN:VCALENDAR",
-    "VERSION:2.0",
-    "PRODID:-//Vita Lima//Ficha de Cita//ES",
-    "CALSCALE:GREGORIAN",
-    "METHOD:PUBLISH",
-    "BEGIN:VTIMEZONE",
-    "TZID:America/Lima",
-    "BEGIN:STANDARD",
-    "DTSTART:19700101T000000",
-    "TZOFFSETFROM:-0500",
-    "TZOFFSETTO:-0500",
-    "TZNAME:-05",
-    "END:STANDARD",
-    "END:VTIMEZONE",
-    "BEGIN:VEVENT",
-    `UID:${opts.uid}`,
-    `DTSTAMP:${dtstamp}`,
-    `DTSTART;TZID=America/Lima:${dtstart}`,
-    `DTEND;TZID=America/Lima:${dtend}`,
-    `SUMMARY:${escapeIcsText(opts.resumen)}`,
-    opts.ubicacion ? `LOCATION:${escapeIcsText(opts.ubicacion)}` : null,
-    opts.descripcion ? `DESCRIPTION:${escapeIcsText(opts.descripcion)}` : null,
-    "END:VEVENT",
-    "END:VCALENDAR",
-  ].filter((line): line is string => Boolean(line));
-
-  return lines.join("\r\n");
-}
-
 /**
  * `plataforma` para cupones_convenios: el POST de la sección 6 solo
  * manda `codigoCupon`, no una plataforma explícita. Se infiere del
- * `canal` de la cita. Si en el futuro `canal = 'bee'` también debe
- * declarar cupón, hay que decidir su valor de plataforma aparte —
- * hoy solo 'cuponidad' pide codigoCupon (requiere.codigoCupon en el
- * GET solo se activa en ese canal).
+ * `canal` de la cita. Tanto Cuponidad como Bee requieren código cuando una
+ * cita histórica de convenio completa su ficha; los valores de plataforma
+ * se conservan separados para la restricción única.
  */
 export function plataformaDesdeCanal(canal: string) {
   if (canal === "cuponidad") return "Cuponidad";

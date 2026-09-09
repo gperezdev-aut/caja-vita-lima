@@ -52,10 +52,19 @@ Ruta interna:
 /preparar-cita
 ```
 
-Requiere ejecutar manualmente, en orden, las migraciones `013` y `014`.
-La `014` crea la RPC transaccional que guarda cliente, movimiento, reserva,
-pago y detalle antes de conservar el token. Ninguna de estas migraciones se
-ejecuta automáticamente durante el despliegue.
+Las migraciones `013` y `014` ya fueron aplicadas y validadas. Para domicilio y
+el hardening integral quedan pendientes de ejecución manual, en orden,
+`015_citas_domicilio.sql` y `016_ficha_cita_hardening.sql`. La `016` conserva
+las firmas de las RPC, agrega idempotencia por `request_id` y separa las
+solicitudes de comprobante. Ninguna migración se ejecuta durante el despliegue.
+
+El MVP de `/preparar-cita` admite únicamente citas directas presenciales o a
+domicilio. Cuponidad, Bee Beneficios, promociones y gift cards siguen usando el
+proceso operativo anterior hasta definir su economía completa.
+
+La confirmación operativa mediante botón interno será un módulo posterior. No
+se implementan todavía liberación de horarios ni devoluciones sin una política
+económica aprobada.
 
 ## Próximos módulos
 

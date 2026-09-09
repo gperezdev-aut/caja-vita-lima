@@ -1,3 +1,5 @@
+import { randomUUID } from "crypto";
+import { getCountries, getCountryCallingCode } from "libphonenumber-js/max";
 import { CajaSidebar } from "@/components/CajaSidebar";
 import { requireModuleAccess } from "@/lib/auth";
 import { supabaseSelect } from "@/lib/supabaseServer";
@@ -32,10 +34,9 @@ function todayInLima() {
 
 export default async function PrepararCitaPage() {
   const session = await requireModuleAccess("preparar-cita");
-  const [catalogResult, promotionsResult, sedesResult, configResult] =
+  const [catalogResult, sedesResult, configResult] =
     await Promise.all([
       supabaseSelect<Row>("stg_services_catalog_v5"),
-      supabaseSelect<Row>("stg_promotions_v1"),
       supabaseSelect<Row>("sedes"),
       supabaseSelect<Row>("config_listas"),
     ]);
@@ -54,19 +55,6 @@ export default async function PrepararCitaPage() {
     .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
 
   const today = todayInLima();
-  const promotions = promotionsResult.data
-    .filter((row) => {
-      const start = String(row.start_date ?? "").slice(0, 10);
-      const end = String(row.end_date ?? "").slice(0, 10);
-      return truthy(row.is_active) && (!start || start <= today) && (!end || end >= today);
-    })
-    .map((row) => ({
-      code: String(row.promo_code ?? "").trim(),
-      name: String(row.promo_name ?? "").trim(),
-      price1: number(row.price_1p),
-      price2: number(row.price_2p),
-    }))
-    .filter((row) => row.code && row.name);
 
   const sedes = sedesResult.data
     .filter((row) => row.activo !== false)
@@ -84,7 +72,11 @@ export default async function PrepararCitaPage() {
     .filter(Boolean);
 
   const error =
-    catalogResult.error || promotionsResult.error || sedesResult.error || configResult.error;
+    catalogResult.error || sedesResult.error || configResult.error;
+  const regionNames = new Intl.DisplayNames(["es"], { type: "region" });
+  const countries = getCountries()
+    .map((code) => ({ code, name: regionNames.of(code) ?? code, callingCode: getCountryCallingCode(code) }))
+    .sort((a, b) => (a.code === "PE" ? -1 : b.code === "PE" ? 1 : a.name.localeCompare(b.name, "es")));
 
   return (
     <main className="appShell">
@@ -111,9 +103,10 @@ export default async function PrepararCitaPage() {
         ) : (
           <PrepararCitaForm
             services={services}
-            promotions={promotions}
             sedes={sedes}
             metodos={metodos.length ? metodos : ["YAPE", "PLIN", "TRANSFERENCIA", "EFECTIVO"]}
+            countries={countries}
+            requestId={randomUUID()}
             minDate={today}
           />
         )}

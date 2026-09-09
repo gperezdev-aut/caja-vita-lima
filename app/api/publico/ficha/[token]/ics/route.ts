@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { construirIcs } from "@/lib/fichaCitaPublica";
-import { datosIcsDomicilio } from "@/lib/fichaCitaDominio";
+import { construirIcs } from "@/lib/fichaCitaIcs";
+import { datosIcsDomicilio, estadoConfirmacionPublica } from "@/lib/fichaCitaDominio";
 import {
   cargarCitaPorToken,
   cargarCliente,
@@ -85,7 +85,16 @@ export async function GET(
   const partes = [cliente?.cliente, cita.servicio, domicilioIcs?.resumen ?? cita.sede].filter(
     (parte): parte is string => Boolean(parte && parte.trim())
   );
-  const resumen = partes.length ? partes.join(" — ") : "Cita en Vita Lima";
+  const confirmacion = estadoConfirmacionPublica({
+    requiereConfirmacion: Boolean(cita.requiere_confirmacion),
+    confirmadoEn: cita.confirmado_en,
+    tipoAtencion: cita.tipo_atencion,
+    canal: cita.canal,
+  });
+  const tituloBase = partes.length ? partes.join(" — ") : "Cita en Vita Lima";
+  const resumen = confirmacion.confirmacionManual
+    ? `Pendiente de confirmación — ${tituloBase}`
+    : tituloBase;
 
   const ics = construirIcs({
     uid: `${cita.reserva_id}@caja-vita-lima`,
@@ -95,6 +104,7 @@ export async function GET(
     resumen,
     ubicacion: domicilioIcs?.ubicacion || sedeInfo?.direccion || cita.sede,
     descripcion: domicilioIcs?.descripcion || cita.servicio,
+    estado: confirmacion.confirmacionManual ? "TENTATIVE" : "CONFIRMED",
   });
 
   return new NextResponse(ics, {

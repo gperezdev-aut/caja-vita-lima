@@ -196,6 +196,18 @@ La función valida nuevamente sede, horario, personas, servicios y adelanto, y
 guarda cliente, movimiento, cita, pago y detalle dentro de una sola transacción.
 El token solo forma parte de la cita si todo lo anterior termina correctamente.
 
+Para el primer lanzamiento, `/preparar-cita` queda restringido en interfaz,
+server action y RPC a canal directo sin promociones ni gift cards. Cuponidad,
+Bee Beneficios, promociones y gift cards continúan en el proceso actual. Sus
+tablas y lógica histórica se conservan, pero no se crean nuevas citas de esos
+tipos hasta cerrar sus reglas económicas.
+
+`sql/016_ficha_cita_hardening.sql` agrega un `request_id` único por intento. Un
+reintento idéntico devuelve la misma reserva y token; el mismo identificador
+con otro contenido devuelve conflicto. También evita borrar email, DNI,
+cumpleaños o consentimiento promocional previo, rechaza un WhatsApp asociado a
+otro cliente y sincroniza la identidad en cliente, cita y movimiento.
+
 **Cuponidad no es un cupón promocional común.** `canal = 'cuponidad'`
 representa un convenio de pago posterior: adelanto cero y confirmación manual,
 sin importar el país del teléfono. `canal = 'bee'` conserva el enum ya existente
@@ -225,8 +237,9 @@ completar con una mano.
 
 ## 4. Tres vistas operativas
 
-- **Por confirmar mañana** — citas con `requiere_confirmacion` y sin `confirmado_en`, con el
-  mensaje listo para copiar y botones «confirmada» / «liberar horario».
+- **Por confirmar mañana** — vista futura para citas con `requiere_confirmacion` y sin
+  `confirmado_en`. El botón de confirmación operativa será el siguiente módulo; liberar horario
+  o devolver dinero no se implementa sin una política económica explícita.
 - **Pagadas sin ficha completa** — `estado_ficha = pendiente` con adelanto registrado. Es plata
   cobrada con una cita a medias: sin correo y sin ficha de salud. Sirve para reenviar el enlace
   antes de que la persona llegue al local.
@@ -235,11 +248,15 @@ completar con una mano.
 
 ## 5. Calendar y WhatsApp
 
-**Google Calendar** — el evento lo crea caja, del lado del servidor, cuando la ficha se completa:
+**Google Calendar** — la Caja genera el archivo ICS del lado del servidor cuando la ficha se completa:
 título `Nombre — Servicio — Sede`, cliente invitado, recordatorios a 24 h y 2 h, y **zona horaria
 `America/Lima` explícita**. Sin la zona explícita, un cliente que todavía no viaja abre el `.ics`
 con el reloj de su país y ve otra hora; eso produce un plantón entero. Guardar el
 `calendar_event_id`.
+
+`estado_ficha = completa` significa únicamente que los datos del cliente fueron recibidos. No
+significa que una cita pendiente tenga cobertura o terapistas confirmados; eso depende de
+`confirmado_en` y se comunica por separado.
 
 Consultar `freeBusy` del calendario de la sede **antes** de ofrecer los +10 minutos del beneficio
 (etapa 4): si no caben, no se ofrecen. Nunca ofrecer algo que después haya que quitar. Esa misma
@@ -270,6 +287,7 @@ minúsculas**: comparar contra `x-caja-secret`. Esto ya costó tiempo una vez co
 
 ```json
 {
+  "contratoVersion": "ficha-cita-v1",
   "token": "…",
   "estado": "pendiente",
   "idioma": "es",
@@ -293,19 +311,31 @@ minúsculas**: comparar contra `x-caja-secret`. Esto ya costó tiempo una vez co
   "requiere": {
     "codigoCupon": false,
     "correoObligatorio": false,
-    "documentoParaBoleta": "opcional"
+    "documentoParaBoleta": "opcional",
+    "confirmacionManual": false,
+    "motivoConfirmacion": null
   },
   "cliente": { "conocido": true, "nombre": "Rosa", "emailEnmascarado": "r***@gmail.com" },
   "politicaCancelacionUrl": "…"
 }
 ```
 
+`confirmacionManual` solo es `true` mientras `requiere_confirmacion=true` y
+`confirmado_en` siga vacío. `motivoConfirmacion` vale `"domicilio"` para una
+atención a domicilio o `"convenio"` para Cuponidad/Bee; una vez confirmada la
+cita ambos vuelven a `false`/`null`. Un teléfono extranjero nunca activa esta
+regla por sí solo.
+
 `documentoParaBoleta` tiene **solo dos valores: `"no"` y `"opcional"`**. No existe `"obligatorio"`
 — el DNI es opcional a propósito. En canal cupón siempre viene `"no"`, porque la boleta la emite
 la plataforma.
 
-En canal cupón, además: `pago.adelantoRecibido = 0`, `pago.leyenda = "Pagado en Cuponidad"`,
-`requiere.codigoCupon = true`, y un `cupon.vigenteHasta` que la web usa como fecha máxima. Ese
+En un convenio histórico, `pago.adelantoRecibido = 0`, `pago.saldo = 0` y la
+leyenda indica que el pago es gestionado por Cuponidad o Bee. Ese saldo es la
+deuda visible del cliente, no una cuenta por cobrar a la plataforma. No se
+inventa `monto_reconocido`: su contabilización queda fuera del MVP.
+
+En canal cupón, además, `requiere.codigoCupon = true` y llega un `cupon.vigenteHasta` que la web usa como fecha máxima. Ese
 valor sale de `citas_reservadas.cupon_vigente_hasta` (sección 2) — no de una fila de
 `cupones_convenios`, que en este punto todavía no existe (el cliente aún no escribió el código).
 
@@ -359,6 +389,8 @@ Respuesta `200`:
     "fecha": "2026-09-13", "hora": "16:00",
     "sede": "San Borja", "sedeDireccion": "...", "sedeMapsUrl": "...",
     "servicios": [{ "nombre": "Espalda Libre", "duracionMin": 60 }],
+    "duracionTotalMin": 60, "tipoAtencion": "sede", "personas": 1,
+    "domicilio": null,
     "moneda": "PEN", "adelantoRecibido": 10.0, "saldo": 65.0
   }
 }
@@ -377,6 +409,19 @@ identifica la cita — del tipo *«Hola, tengo una consulta sobre mi cita del s�
 p.m. en San Borja»* — para que el cliente pueda pedir un cambio sin tener que explicar cuál es su
 reserva. El número sale de una variable de entorno (`CAJA_WHATSAPP_NEGOCIO`).
 
+Un evento pendiente incluye `STATUS:TENTATIVE` y “Pendiente de confirmación”
+en el título; uno confirmado usa `STATUS:CONFIRMED`. Las líneas se pliegan al
+límite de 75 octetos de RFC 5545. En domicilio nunca se expone la sede
+operativa: ubicación y descripción usan distrito, dirección y referencia.
+
+### Solicitudes de comprobante
+
+La migración 016 crea `solicitudes_comprobante`. DNI genera BOLETA y puede
+actualizar `clientes.dni`; RUC genera FACTURA, exige razón social y nunca se
+guarda en `clientes.dni`. Al solicitar comprobante el movimiento queda
+`estado_boleta = "Pendiente"`; al no solicitar, `"No aplica"`. `numero_boleta`
+permanece vacío hasta la emisión real.
+
 ### Errores
 
 Caja manda **solo un código legible por máquina**: `{ "error": "cupon_ya_usado", "mensaje": "..." }`.
@@ -388,6 +433,7 @@ copy** — `mensaje` es solo un respaldo por si la web recibe un código que no 
 | `token_no_existe` | 404 | El token no está en `citas_reservadas` |
 | `token_vencido` | 410 | Pasó `token_expira` |
 | `ficha_ya_completa` | 410 | `estado_ficha = completa` |
+| `telefono_asociado_otro_cliente` | 409 | El WhatsApp pertenece a un `cliente_id` distinto; no se fusiona ni se escribe nada |
 | `cupon_ya_usado` | 409 | Choca con la restricción única de `cupones_convenios` |
 | `validacion` | 422 | Error de campo |
 
