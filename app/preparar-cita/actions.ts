@@ -195,6 +195,9 @@ export async function prepararCitaAction(
 
   const personalizada = esPersonalizada ? calcularAtencionPersonalizada({ personas, modalidad: text(formData,"modalidad") === "consecutiva" ? "consecutiva" : "simultanea", componentes: componentesPersonalizados!, precioFinal: text(formData,"precio_final") ? number(formData,"precio_final") : null, motivoAjuste:text(formData,"motivo_ajuste"), confirmaDisponibilidad }) : null;
   if (personalizada && !personalizada.ok) return { ok:false, error: personalizada.error };
+  if (personalizada?.ok && personalizada.diferencia !== 0 && !session.nombre.trim()) {
+    return { ok: false, error: "No se pudo identificar al responsable del ajuste." };
+  }
   let montoTotal = personalizada?.ok ? personalizada.precioFinal : redondearDinero(serviciosValidos.reduce((sum, item) => sum + item.precio, 0));
   let costoMovilidad = 0;
   let economiaDomicilio: ReturnType<typeof calcularCitaDomicilio> | null = null;

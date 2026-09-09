@@ -47,7 +47,11 @@ begin
     raise exception 'Falló personalizada de una persona';
   end if;
   if (public.preparar_atencion_personalizada(v_payload)->>'reutilizado')::boolean is not true
-     or (select count(*) from public.citas_reservadas where request_id = 'a1700001-0000-4000-8000-000000000001') <> 1 then
+     or (select count(*) from public.citas_reservadas where request_id = 'a1700001-0000-4000-8000-000000000001') <> 1
+     or (select count(*) from public.clientes where cliente_id = 'CLI-QA-017-1') <> 1
+     or (select count(*) from public.caja_movimientos where movimiento_id = 'MOV-QA-017-1') <> 1
+     or (select count(*) from public.caja_pagos where pago_id = 'PAY-QA-017-1') <> 1
+     or (select count(*) from public.caja_atencion_detalle where movimiento_id = 'MOV-QA-017-1') <> 1 then
     raise exception 'Falló idempotencia de personalizada';
   end if;
 
@@ -98,14 +102,23 @@ begin
     'token_expira', (((v_fecha + v_hora) + interval '60 minutes') at time zone 'America/Lima')::text
   );
   perform public.preparar_atencion_personalizada(v_payload);
-  if not exists (select 1 from public.citas_reservadas where reserva_id = 'RES-QA-017-4' and precio_calculado = 100 and precio_final_acordado = 90 and motivo_ajuste = 'Cortesía QA') then
+  if not exists (select 1 from public.citas_reservadas where reserva_id = 'RES-QA-017-4' and precio_calculado = 100 and precio_final_acordado = 90 and motivo_ajuste = 'Cortesía QA' and responsable_ajuste = 'QA rollback' and fecha_ajuste is not null) then
     raise exception 'Falló auditoría de ajuste';
+  end if;
+  if coalesce((select sum(monto_asignado) from public.caja_atencion_detalle where movimiento_id = 'MOV-QA-017-4'), -1) <> 90 then
+    raise exception 'Los detalles no concilian con el precio final ajustado';
   end if;
   begin
     perform public.preparar_atencion_personalizada(v_payload || jsonb_build_object('request_id','a1700001-0000-4000-8000-000000000005','reserva_id','RES-QA-017-5','movimiento_id','MOV-QA-017-5','pago_id','PAY-QA-017-5','token',repeat('T',43),'motivo_ajuste',''));
     raise exception 'Debió rechazar ajuste sin motivo';
   exception when others then
     if sqlerrm not like '%AJUSTE_SIN_MOTIVO%' then raise; end if;
+  end;
+  begin
+    perform public.preparar_atencion_personalizada(v_payload || jsonb_build_object('request_id','a1700001-0000-4000-8000-000000000011','reserva_id','RES-QA-017-11','movimiento_id','MOV-QA-017-11','pago_id','PAY-QA-017-11','token',repeat('U',43),'responsable',''));
+    raise exception 'Debió rechazar ajuste sin responsable';
+  exception when others then
+    if sqlerrm not like '%AJUSTE_SIN_RESPONSABLE%' then raise; end if;
   end;
 
   -- Rechazos del alcance MVP: más de 5, domicilio, convenio, promoción y gift card.
@@ -123,6 +136,51 @@ begin
       if sqlerrm not like '%PERSONALIZADA_SOLO_DIRECTO_PRESENCIAL%' and sqlerrm not like '%PERSONALIZADA_INVALIDA%' then raise; end if;
     end;
   end loop;
+
+  -- Cada persona debe aparecer una vez, en orden, y con componentes.
+  foreach v_resultado in array array[
+    v_payload || jsonb_build_object('request_id','a1700001-0000-4000-8000-000000000012','personas',2,'componentes_por_persona',jsonb_build_array(
+      jsonb_build_object('persona',1,'componentes',jsonb_build_array(jsonb_build_object('tipo','manual','nombre','A','precio',50,'duracion_min',30))),
+      jsonb_build_object('persona',1,'componentes',jsonb_build_array(jsonb_build_object('tipo','manual','nombre','B','precio',50,'duracion_min',30))))),
+    v_payload || jsonb_build_object('request_id','a1700001-0000-4000-8000-000000000013','personas',2,'componentes_por_persona',jsonb_build_array(
+      jsonb_build_object('persona',2,'componentes',jsonb_build_array(jsonb_build_object('tipo','manual','nombre','A','precio',50,'duracion_min',30))),
+      jsonb_build_object('persona',1,'componentes',jsonb_build_array(jsonb_build_object('tipo','manual','nombre','B','precio',50,'duracion_min',30))))),
+    v_payload || jsonb_build_object('request_id','a1700001-0000-4000-8000-000000000014','personas',2,'componentes_por_persona',jsonb_build_array(
+      jsonb_build_object('persona',1,'componentes',jsonb_build_array(jsonb_build_object('tipo','manual','nombre','A','precio',50,'duracion_min',30))),
+      jsonb_build_object('persona',3,'componentes',jsonb_build_array(jsonb_build_object('tipo','manual','nombre','B','precio',50,'duracion_min',30)))))
+  ] loop
+    begin
+      perform public.preparar_atencion_personalizada(v_resultado);
+      raise exception 'Debió rechazar personas repetidas, desordenadas u omitidas';
+    exception when others then
+      if sqlerrm not like '%COMPONENTE_INVALIDO%' then raise; end if;
+    end;
+  end loop;
+
+  -- Campos e identificadores obligatorios no pueden llegar vacíos.
+  foreach v_resultado in array array[
+    v_payload || jsonb_build_object('request_id','','cliente','QA'),
+    v_payload || jsonb_build_object('request_id','a1700001-0000-4000-8000-000000000015','cliente',''),
+    v_payload || jsonb_build_object('request_id','a1700001-0000-4000-8000-000000000016','whatsapp_e164','123'),
+    v_payload || jsonb_build_object('request_id','a1700001-0000-4000-8000-000000000017','movimiento_id',''),
+    v_payload || jsonb_build_object('request_id','a1700001-0000-4000-8000-000000000018','reserva_id',''),
+    v_payload || jsonb_build_object('request_id','a1700001-0000-4000-8000-000000000019','pago_id',''),
+    v_payload || jsonb_build_object('request_id','a1700001-0000-4000-8000-000000000020','token','')
+  ] loop
+    begin
+      perform public.preparar_atencion_personalizada(v_resultado);
+      raise exception 'Debió rechazar campo obligatorio vacío o WhatsApp inválido';
+    exception when others then
+      if sqlerrm not like '%REQUEST_ID_INVALIDO%' and sqlerrm not like '%CLIENTE_REQUERIDO%'
+         and sqlerrm not like '%TELEFONO_E164_INVALIDO%' and sqlerrm not like '%IDENTIFICADORES_PREPARACION_INVALIDOS%' then raise; end if;
+    end;
+  end loop;
+
+  if not has_function_privilege('service_role', 'public.preparar_atencion_personalizada(jsonb)', 'EXECUTE')
+     or has_function_privilege('anon', 'public.preparar_atencion_personalizada(jsonb)', 'EXECUTE')
+     or has_function_privilege('authenticated', 'public.preparar_atencion_personalizada(jsonb)', 'EXECUTE') then
+    raise exception 'Privilegios de preparar_atencion_personalizada incorrectos';
+  end if;
 end;
 $$;
 
@@ -130,9 +188,11 @@ rollback;
 
 do $$
 begin
-  if exists (select 1 from public.citas_reservadas where reserva_id like 'RES-QA-017-%')
+  if exists (select 1 from public.clientes where cliente_id like 'CLI-QA-017-%')
+     or exists (select 1 from public.citas_reservadas where reserva_id like 'RES-QA-017-%')
      or exists (select 1 from public.caja_movimientos where movimiento_id like 'MOV-QA-017-%')
-     or exists (select 1 from public.caja_pagos where pago_id like 'PAY-QA-017-%') then
+     or exists (select 1 from public.caja_pagos where pago_id like 'PAY-QA-017-%')
+     or exists (select 1 from public.caja_atencion_detalle where movimiento_id like 'MOV-QA-017-%') then
     raise exception 'El rollback 017 dejó residuos QA';
   end if;
 end;
