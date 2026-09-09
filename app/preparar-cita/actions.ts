@@ -106,6 +106,7 @@ export async function prepararCitaAction(
   const canal = canalRaw as CanalFicha;
   const personas = Number.parseInt(text(formData, "personas"), 10);
   const esPersonalizada = text(formData, "atencion_personalizada") === "1";
+  const confirmaDisponibilidad = truthy(formData.get("confirmar_disponibilidad"));
   if ((!esPersonalizada && personas !== 1 && personas !== 2) || (esPersonalizada && (personas < 1 || personas > 5))) return { ok: false, error: esPersonalizada ? "La cantidad de personas debe ser 1 a 5." : "La cantidad de personas debe ser 1 o 2." };
 
   const fecha = text(formData, "fecha");
@@ -192,7 +193,7 @@ export async function prepararCitaAction(
     if (errorDomicilio) return { ok: false, error: errorDomicilio };
   }
 
-  const personalizada = esPersonalizada ? calcularAtencionPersonalizada({ personas, modalidad: text(formData,"modalidad") === "consecutiva" ? "consecutiva" : "simultanea", componentes: componentesPersonalizados!, precioFinal: text(formData,"precio_final") ? number(formData,"precio_final") : null, motivoAjuste:text(formData,"motivo_ajuste"), confirmaDisponibilidad:truthy(formData.get("confirmar_disponibilidad")) }) : null;
+  const personalizada = esPersonalizada ? calcularAtencionPersonalizada({ personas, modalidad: text(formData,"modalidad") === "consecutiva" ? "consecutiva" : "simultanea", componentes: componentesPersonalizados!, precioFinal: text(formData,"precio_final") ? number(formData,"precio_final") : null, motivoAjuste:text(formData,"motivo_ajuste"), confirmaDisponibilidad }) : null;
   if (personalizada && !personalizada.ok) return { ok:false, error: personalizada.error };
   let montoTotal = personalizada?.ok ? personalizada.precioFinal : redondearDinero(serviciosValidos.reduce((sum, item) => sum + item.precio, 0));
   let costoMovilidad = 0;
@@ -281,7 +282,7 @@ export async function prepararCitaAction(
       precio_final_acordado: montoTotal,
       diferencia_precio: personalizada?.ok ? personalizada.diferencia : 0,
       motivo_ajuste: personalizada?.ok && personalizada.diferencia !== 0 ? text(formData,"motivo_ajuste") : null,
-      confirmar_disponibilidad: esPersonalizada,
+      confirmar_disponibilidad: confirmaDisponibilidad,
       monto_total: montoTotal,
       monto_pagado: montoPagado,
       metodo_pago: metodoPago,

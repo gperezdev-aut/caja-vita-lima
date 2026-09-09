@@ -12,6 +12,7 @@ import {
   prepararCitaAction,
   type PrepararCitaState,
 } from "./actions";
+import type { PersonaPersonalizada } from "@/lib/fichaCitaDominio";
 
 type Service = {
   code: string;
@@ -51,7 +52,9 @@ export function PrepararCitaForm({ services, sedes, metodos, countries, requestI
   const [personas, setPersonas] = useState(1);
   const [personalizada, setPersonalizada] = useState(false);
   const [modalidad, setModalidad] = useState<"simultanea" | "consecutiva">("simultanea");
-  const [componentes, setComponentes] = useState<any[]>([{ persona: 1, componentes: [] }]);
+  const [componentes, setComponentes] = useState<PersonaPersonalizada[]>([
+    { persona: 1, componentes: [] },
+  ]);
   const [precioFinal, setPrecioFinal] = useState("");
   const [sede, setSede] = useState(sedes[0]?.name ?? "");
   const [fecha, setFecha] = useState(minDate);
@@ -188,8 +191,8 @@ export function PrepararCitaForm({ services, sedes, metodos, countries, requestI
               {[1,2,3,4,5].filter((n)=>personalizada || n<=2).map((n)=><option key={n} value={n}>{n} persona{n>1?"s":""}</option>)}
             </select>
           </label>
-          {personalizada && <><label className="atencionField">Modalidad<select value={modalidad} onChange={(e)=>{setModalidad(e.target.value as any);setHora("");}}><option value="simultanea">Simultánea</option><option value="consecutiva">Consecutiva</option></select></label>
-          {componentes.map((p:any, index:number)=><div className="atencionField atencionFieldWide" key={p.persona}><strong>Persona {p.persona}</strong>{p.componentes.map((c:any, ci:number)=><div key={ci} className="atencionGrid"><select value={c.tipo==="catalogo"?c.codigo:"manual"} onChange={(e)=>{const code=e.target.value;const next=structuredClone(componentes);next[index].componentes[ci]=code==="manual"?{tipo:"manual",nombre:"",duracion_min:0,precio:0}:{tipo:"catalogo",codigo:code,nombre:"",duracion_min:0,precio:0};setComponentes(next);}}><option value="manual">Manual</option>{services.filter(s=>!esCodigoDomicilio(s.code)).map(s=><option key={s.code} value={s.code}>{s.name}</option>)}</select>{c.tipo==="manual"&&<><input placeholder="Nombre" onChange={(e)=>{const n=structuredClone(componentes);n[index].componentes[ci].nombre=e.target.value;setComponentes(n);}}/><input type="number" placeholder="Minutos" onChange={(e)=>{const n=structuredClone(componentes);n[index].componentes[ci].duracion_min=Number(e.target.value);setComponentes(n);}}/><input type="number" placeholder="Precio" onChange={(e)=>{const n=structuredClone(componentes);n[index].componentes[ci].precio=Number(e.target.value);setComponentes(n);}}/></>}</div>)}<button type="button" onClick={()=>{const n=structuredClone(componentes);n[index].componentes.push({tipo:"catalogo",codigo:"",nombre:"",precio:0,duracion_min:0});setComponentes(n);}}>Añadir componente</button></div>)}</>}
+          {personalizada && <><label className="atencionField">Modalidad<select value={modalidad} onChange={(e)=>{const valor=e.target.value; if (valor === "simultanea" || valor === "consecutiva") setModalidad(valor); setHora("");}}><option value="simultanea">Simultánea</option><option value="consecutiva">Consecutiva</option></select></label>
+          {componentes.map((p, index)=><div className="atencionField atencionFieldWide" key={p.persona}><strong>Persona {p.persona}</strong>{p.componentes.map((c, ci)=><div key={ci} className="atencionGrid"><select value={c.tipo==="catalogo"?c.codigo:"manual"} onChange={(e)=>{const code=e.target.value;const next=structuredClone(componentes);next[index].componentes[ci]=code==="manual"?{tipo:"manual",nombre:"",duracion_min:0,precio:0}:{tipo:"catalogo",codigo:code,nombre:"",duracion_min:0,precio:0};setComponentes(next);}}><option value="manual">Manual</option>{services.filter(s=>!esCodigoDomicilio(s.code)).map(s=><option key={s.code} value={s.code}>{s.name}</option>)}</select>{c.tipo==="manual"&&<><input placeholder="Nombre" onChange={(e)=>{const n=structuredClone(componentes);n[index].componentes[ci].nombre=e.target.value;setComponentes(n);}}/><input type="number" placeholder="Minutos" onChange={(e)=>{const n=structuredClone(componentes);n[index].componentes[ci].duracion_min=Number(e.target.value);setComponentes(n);}}/><input type="number" placeholder="Precio" onChange={(e)=>{const n=structuredClone(componentes);n[index].componentes[ci].precio=Number(e.target.value);setComponentes(n);}}/></>}</div>)}<button type="button" onClick={()=>{const n=structuredClone(componentes);n[index].componentes.push({tipo:"catalogo",codigo:"",nombre:"",precio:0,duracion_min:0});setComponentes(n);}}>Añadir componente</button></div>)}</>}
           {!personalizada && <>
           <label className="atencionField">
             Servicio — persona 1
