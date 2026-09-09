@@ -12,11 +12,13 @@ import {
   redondearDinero,
   tipoAtencionDesdeServicios,
   calcularExpiracionFicha,
+  calcularAtencionPersonalizada,
   validarDatosDomicilio,
   validarPreparacionMvp,
   validarPagoPreparacion,
   validarCatalogoSolicitado,
   type CanalFicha,
+  type PersonaPersonalizada,
 } from "@/lib/fichaCitaDominio";
 import { generarTokenFicha, normalizarTelefonoE164 } from "@/lib/fichaCitaPublica";
 import {
@@ -103,9 +105,8 @@ export async function prepararCitaAction(
   }
   const canal = canalRaw as CanalFicha;
   const personas = Number.parseInt(text(formData, "personas"), 10);
-  if (personas !== 1 && personas !== 2) {
-    return { ok: false, error: "La cantidad de personas debe ser 1 o 2." };
-  }
+  const esPersonalizada = text(formData, "atencion_personalizada") === "1";
+  if ((!esPersonalizada && personas !== 1 && personas !== 2) || (esPersonalizada && (personas < 1 || personas > 5))) return { ok: false, error: esPersonalizada ? "La cantidad de personas debe ser 1 a 5." : "La cantidad de personas debe ser 1 o 2." };
 
   const fecha = text(formData, "fecha");
   const hora = text(formData, "hora");
@@ -129,16 +130,22 @@ export async function prepararCitaAction(
   }
   const errorMvp = validarPreparacionMvp({ canal, esGiftCard, cuponPromocional: promoCode });
   if (errorMvp) return { ok: false, error: errorMvp };
+  if (esPersonalizada && (canal !== "directo" || text(formData, "tipo_atencion") !== "sede")) return { ok: false, error: "La atención personalizada solo admite canal directo y atención presencial." };
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) {
     return { ok: false, error: "El identificador del intento no es válido. Recarga el formulario." };
   }
 
-  const serviceCodes = [text(formData, "servicio_1")];
-  if (personas === 2) serviceCodes.push(text(formData, "servicio_2"));
-  if (serviceCodes.some((code) => !code)) {
+  let componentesPersonalizados: PersonaPersonalizada[] | null = null;
+  if (esPersonalizada) {
+    try { componentesPersonalizados = JSON.parse(text(formData, "componentes")); } catch { return { ok: false, error: "Los componentes personalizados no son válidos." }; }
+    if (!Array.isArray(componentesPersonalizados)) return { ok: false, error: "Los componentes personalizados no son válidos." };
+  }
+  const serviceCodes = esPersonalizada ? componentesPersonalizados!.flatMap((p) => p.componentes.filter((c) => c.tipo === "catalogo").map((c) => c.codigo ?? "")) : [text(formData, "servicio_1")];
+  if (!esPersonalizada && personas === 2) serviceCodes.push(text(formData, "servicio_2"));
+  if (!esPersonalizada && serviceCodes.some((code) => !code)) {
     return { ok: false, error: "Selecciona un servicio para cada persona." };
   }
-  const tipoAtencion = tipoAtencionDesdeServicios(serviceCodes);
+  const tipoAtencion = esPersonalizada ? "sede" : tipoAtencionDesdeServicios(serviceCodes);
   if (tipoAtencion === "mezclado") {
     return { ok: false, error: "No se pueden mezclar servicios presenciales y a domicilio en una misma cita." };
   }
@@ -166,10 +173,16 @@ export async function prepararCitaAction(
       precio: precioCatalogoActivo(row.price_pen, row.price),
   }));
   const catalogoValidado = validarCatalogoSolicitado(serviceCodes, catalog);
-  if (!catalogoValidado.ok) {
+  if (!catalogoValidado.ok && serviceCodes.length) {
     return { ok: false, error: "Cada código debe corresponder a un único servicio activo con nombre, precio y duración válidos." };
   }
-  const serviciosValidos = catalogoValidado.servicios;
+  const serviciosValidos = catalogoValidado.ok ? catalogoValidado.servicios : [];
+  if (esPersonalizada) {
+    const porCodigo = new Map(serviciosValidos.map((s) => [s.codigo, s]));
+    for (const persona of componentesPersonalizados!) for (const componente of persona.componentes) {
+      if (componente.tipo === "catalogo") { const servicio = porCodigo.get(componente.codigo ?? ""); if (!servicio) return { ok:false, error:"Un servicio de catálogo no es válido." }; componente.nombre=servicio.nombre; componente.precio=servicio.precio; componente.duracion_min=servicio.duracion_min; }
+    }
+  }
   const esDomicilio = tipoAtencion === "domicilio";
   if (esDomicilio) {
     const errorDomicilio = validarDatosDomicilio(
@@ -179,7 +192,9 @@ export async function prepararCitaAction(
     if (errorDomicilio) return { ok: false, error: errorDomicilio };
   }
 
-  let montoTotal = redondearDinero(serviciosValidos.reduce((sum, item) => sum + item.precio, 0));
+  const personalizada = esPersonalizada ? calcularAtencionPersonalizada({ personas, modalidad: text(formData,"modalidad") === "consecutiva" ? "consecutiva" : "simultanea", componentes: componentesPersonalizados!, precioFinal: text(formData,"precio_final") ? number(formData,"precio_final") : null, motivoAjuste:text(formData,"motivo_ajuste"), confirmaDisponibilidad:truthy(formData.get("confirmar_disponibilidad")) }) : null;
+  if (personalizada && !personalizada.ok) return { ok:false, error: personalizada.error };
+  let montoTotal = personalizada?.ok ? personalizada.precioFinal : redondearDinero(serviciosValidos.reduce((sum, item) => sum + item.precio, 0));
   let costoMovilidad = 0;
   let economiaDomicilio: ReturnType<typeof calcularCitaDomicilio> | null = null;
 
@@ -194,8 +209,8 @@ export async function prepararCitaAction(
     return { ok: false, error: "El catálogo no tiene un precio válido para esta cita." };
   }
 
-  const serviciosPersistidos = serviciosValidos;
-  const duracionMin = Math.max(
+  const serviciosPersistidos = personalizada?.ok ? personalizada.componentes.flatMap((p) => p.componentes.map((c) => ({...c, persona:p.persona}))) : serviciosValidos;
+  const duracionMin = personalizada?.ok ? personalizada.duracionMin : Math.max(
     ...serviciosPersistidos.map((item) => item?.duracion_min ?? 0)
   );
   const sedeHorario = sedeResult.data[0];
@@ -212,7 +227,7 @@ export async function prepararCitaAction(
     return { ok: false, error: "La cita terminaría fuera del horario de la sede." };
   }
 
-  const adelantoRequerido = calcularAdelantoRequerido({
+  const adelantoRequerido = personalizada?.ok ? personalizada.adelantoRequerido : calcularAdelantoRequerido({
     canal,
     personas,
     montoTotal,
@@ -241,7 +256,7 @@ export async function prepararCitaAction(
     ok: boolean;
     reserva_id: string;
     token: string;
-  }>("preparar_ficha_cita", {
+  }>(esPersonalizada ? "preparar_atencion_personalizada" : "preparar_ficha_cita", {
     p_payload: {
       request_id: requestId,
       canal,
@@ -259,6 +274,14 @@ export async function prepararCitaAction(
       whatsapp_e164: telefono.e164,
       pais_telefono: telefono.pais,
       servicios: serviciosPersistidos,
+      atencion_personalizada: esPersonalizada,
+      modalidad_ejecucion: esPersonalizada ? text(formData,"modalidad") : null,
+      componentes_por_persona: esPersonalizada ? componentesPersonalizados : null,
+      precio_calculado: personalizada?.ok ? personalizada.precioCalculado : montoTotal,
+      precio_final_acordado: montoTotal,
+      diferencia_precio: personalizada?.ok ? personalizada.diferencia : 0,
+      motivo_ajuste: personalizada?.ok && personalizada.diferencia !== 0 ? text(formData,"motivo_ajuste") : null,
+      confirmar_disponibilidad: esPersonalizada,
       monto_total: montoTotal,
       monto_pagado: montoPagado,
       metodo_pago: metodoPago,

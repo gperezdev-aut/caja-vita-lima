@@ -4,6 +4,14 @@ Repo: `github.com/gperezdev-aut/caja-vita-lima` (Next.js + Supabase + Vercel)
 Documento hermano, para la web pública: `encargo-web-ficha-cita.md`
 Razonamiento completo: doc `claude/ficha-cita-formulario-propio.md` del proyecto vita-web.
 
+## Atención personalizada (v2; integración pendiente en vita-lima-web PR #38)
+
+Las reservas estándar conservan `ficha-cita-v1`. Una reserva personalizada responde
+`contratoVersion: "ficha-cita-v2"` y añade en `cita` `modalidad` (`simultanea` o
+`consecutiva`), `componentesPorPersona`, `nombreFinal` y `precioTotal`. La web debe validar v2
+antes de mostrarlo y no permitir editar personas, componentes, modalidad o precios. Nunca recibe
+precio calculado, diferencia, motivo del ajuste ni identidad del responsable.
+
 **Este trabajo va después del de la web**, pero el contrato de la sección 6 hay que fijarlo antes
 de que cualquiera de los dos empiece: es lo que permite que avancen en paralelo.
 

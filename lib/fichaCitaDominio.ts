@@ -23,7 +23,7 @@ export type CanalFicha = (typeof CANALES_FICHA)[number];
 
 export type ReglaAdelantoInput = {
   canal: CanalFicha;
-  personas: 1 | 2;
+  personas: number;
   montoTotal: number;
   esGiftCard?: boolean;
   esDomicilio?: boolean;
@@ -144,8 +144,40 @@ export function calcularAdelantoRequerido({
   if (esDomicilio) return redondearDinero(total * 0.5);
   if (esConvenioPagoPosterior(canal)) return 0;
   if (esGiftCard) return total;
-  if (personas === 2) return redondearDinero(total * 0.5);
+  if (personas >= 2) return redondearDinero(total * 0.5);
   return redondearDinero(Math.min(10, total));
+}
+
+export type ComponentePersonalizado = {
+  tipo: "catalogo" | "manual";
+  codigo?: string;
+  nombre: string;
+  precio: number;
+  duracion_min: number;
+};
+export type PersonaPersonalizada = { persona: number; componentes: ComponentePersonalizado[] };
+
+/** Economía y duración de una atención presencial no catalogada como paquete. */
+export function calcularAtencionPersonalizada(input: {
+  personas: number;
+  modalidad: "simultanea" | "consecutiva";
+  componentes: PersonaPersonalizada[];
+  precioFinal?: number | null;
+  motivoAjuste?: string | null;
+  confirmaDisponibilidad: boolean;
+}) {
+  if (!Number.isInteger(input.personas) || input.personas < 1 || input.personas > 5) return { ok: false as const, error: "La atención personalizada admite entre 1 y 5 personas." };
+  if (!input.confirmaDisponibilidad) return { ok: false as const, error: "Confirma disponibilidad de cabinas y terapistas." };
+  if (input.componentes.length !== input.personas || input.componentes.some((p, i) => p.persona !== i + 1 || !p.componentes.length)) return { ok: false as const, error: "Cada persona requiere al menos un componente." };
+  const duraciones = input.componentes.map((p) => p.componentes.reduce((sum, c) => sum + c.duracion_min, 0));
+  if (input.componentes.some((p) => p.componentes.some((c) => !c.nombre.trim() || !Number.isInteger(c.duracion_min) || c.duracion_min <= 0 || !Number.isFinite(c.precio) || c.precio <= 0))) return { ok: false as const, error: "Cada componente requiere nombre, duración y precio válidos." };
+  const calculado = redondearDinero(input.componentes.flatMap((p) => p.componentes).reduce((sum, c) => sum + c.precio, 0));
+  const final = redondearDinero(input.precioFinal ?? calculado);
+  if (!Number.isFinite(final) || final <= 0) return { ok: false as const, error: "El precio final acordado debe ser válido." };
+  const diferencia = redondearDinero(final - calculado);
+  if (diferencia !== 0 && !input.motivoAjuste?.trim()) return { ok: false as const, error: "El ajuste de precio requiere un motivo." };
+  const duracionMin = input.modalidad === "simultanea" ? Math.max(...duraciones) : duraciones.reduce((a, b) => a + b, 0);
+  return { ok: true as const, precioCalculado: calculado, precioFinal: final, diferencia, duracionMin, adelantoRequerido: calcularAdelantoRequerido({ canal: "directo", personas: input.personas, montoTotal: final }), componentes: input.componentes };
 }
 
 export function requiereConfirmacion(canal: CanalFicha, esDomicilio = false) {

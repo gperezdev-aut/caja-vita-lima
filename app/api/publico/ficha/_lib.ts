@@ -55,6 +55,9 @@ export type CitaRow = {
   domicilio_direccion: string | null;
   domicilio_referencia: string | null;
   costo_movilidad: number | null;
+  atencion_personalizada: boolean | null;
+  modalidad_ejecucion: string | null;
+  componentes_por_persona: unknown[] | null;
   servicios_json: Array<{
     nombre?: string;
     duracion_min?: number;
@@ -196,7 +199,7 @@ export async function cargarCitaPorToken(token: string) {
   const result = await supabaseSelectWhere<CitaRow>(
     "citas_reservadas",
     [
-      "select=reserva_id,cliente_id,fecha_cita,hora_cita,sede,n_pax,personas,servicio,duracion_min,monto_total,adelanto,saldo_pendiente,estado_ficha,token_expira,canal,requiere_confirmacion,confirmado_en,idioma,cupon_vigente_hasta,servicios_json,tipo_atencion,sede_operativa,domicilio_distrito,domicilio_direccion,domicilio_referencia,costo_movilidad",
+      "select=reserva_id,cliente_id,fecha_cita,hora_cita,sede,n_pax,personas,servicio,duracion_min,monto_total,adelanto,saldo_pendiente,estado_ficha,token_expira,canal,requiere_confirmacion,confirmado_en,idioma,cupon_vigente_hasta,servicios_json,tipo_atencion,sede_operativa,domicilio_distrito,domicilio_direccion,domicilio_referencia,costo_movilidad,atencion_personalizada,modalidad_ejecucion,componentes_por_persona",
       `token_ficha=eq.${encodeURIComponent(token)}`,
       "limit=1",
     ].join("&")

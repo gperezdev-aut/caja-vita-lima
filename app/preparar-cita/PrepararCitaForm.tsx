@@ -4,6 +4,7 @@ import { useActionState, useMemo, useState } from "react";
 import {
   calcularCitaDomicilio,
   calcularAdelantoRequerido,
+  calcularAtencionPersonalizada,
   esCodigoDomicilio,
 } from "@/lib/fichaCitaDominio";
 import {
@@ -47,7 +48,11 @@ function fromMinutes(value: number) {
 
 export function PrepararCitaForm({ services, sedes, metodos, countries, requestId, minDate }: Props) {
   const [state, formAction, pending] = useActionState(prepararCitaAction, initialState);
-  const [personas, setPersonas] = useState<1 | 2>(1);
+  const [personas, setPersonas] = useState(1);
+  const [personalizada, setPersonalizada] = useState(false);
+  const [modalidad, setModalidad] = useState<"simultanea" | "consecutiva">("simultanea");
+  const [componentes, setComponentes] = useState<any[]>([{ persona: 1, componentes: [] }]);
+  const [precioFinal, setPrecioFinal] = useState("");
   const [sede, setSede] = useState(sedes[0]?.name ?? "");
   const [fecha, setFecha] = useState(minDate);
   const [hora, setHora] = useState("");
@@ -68,16 +73,17 @@ export function PrepararCitaForm({ services, sedes, metodos, countries, requestI
     eligibleServices.find((item) => item.code === service1),
     personas === 2 ? eligibleServices.find((item) => item.code === service2) : null,
   ].filter((item): item is Service => Boolean(item));
-  const esDomicilio = selected.length > 0 && selected.every((item) => esCodigoDomicilio(item.code));
+  const esDomicilio = !personalizada && selected.length > 0 && selected.every((item) => esCodigoDomicilio(item.code));
+  const personalizadaCalculada = personalizada ? calcularAtencionPersonalizada({ personas, modalidad, componentes, precioFinal: precioFinal ? Number(precioFinal) : null, motivoAjuste: "UI exige campo", confirmaDisponibilidad: true }) : null;
   const opcionesServicio2 = service1
     ? eligibleServices.filter((item) => esCodigoDomicilio(item.code) === esCodigoDomicilio(service1))
     : eligibleServices;
   const economiaDomicilio = esDomicilio
     ? calcularCitaDomicilio(selected.map((item) => ({ codigo: item.code, precio: item.price, duracion_min: item.duration })))
     : null;
-  const subtotalServicios = selected.reduce((sum, item) => sum + item.price, 0);
+  const subtotalServicios = personalizadaCalculada?.ok ? personalizadaCalculada.precioCalculado : selected.reduce((sum, item) => sum + item.price, 0);
   const movilidad = economiaDomicilio?.ok ? economiaDomicilio.movilidad : 0;
-  const total = economiaDomicilio?.ok ? economiaDomicilio.total : subtotalServicios;
+  const total = personalizadaCalculada?.ok ? personalizadaCalculada.precioFinal : economiaDomicilio?.ok ? economiaDomicilio.total : subtotalServicios;
   const required = calcularAdelantoRequerido({
     canal: "directo",
     personas,
@@ -85,8 +91,8 @@ export function PrepararCitaForm({ services, sedes, metodos, countries, requestI
     esDomicilio,
   });
   const selectedSede = sedes.find((item) => item.name === sede);
-  const duration = Math.max(0, ...selected.map((item) => item.duration));
-  const hours = useMemo(() => {
+  const duration = personalizadaCalculada?.ok ? personalizadaCalculada.duracionMin : Math.max(0, ...selected.map((item) => item.duration));
+  const hours = (() => {
     if (!selectedSede || duration <= 0) return [];
     const result: string[] = [];
     for (
@@ -97,7 +103,7 @@ export function PrepararCitaForm({ services, sedes, metodos, countries, requestI
       result.push(fromMinutes(minute));
     }
     return result;
-  }, [selectedSede, duration]);
+  })();
 
   async function lookupClient() {
     setLookupMessage("Buscando…");
@@ -132,6 +138,8 @@ export function PrepararCitaForm({ services, sedes, metodos, countries, requestI
       <input type="hidden" name="request_id" value={requestId} />
       <input type="hidden" name="canal" value="directo" />
       <input type="hidden" name="tipo_atencion" value={esDomicilio ? "domicilio" : "sede"} />
+      <input type="hidden" name="atencion_personalizada" value={personalizada ? "1" : "0"} />
+      {personalizada && <><input type="hidden" name="componentes" value={JSON.stringify(componentes)} /><input type="hidden" name="modalidad" value={modalidad} /></>}
       {state.error && <div className="formMessage error" role="alert">{state.error}</div>}
 
       <section className="wizardPanel visible">
@@ -172,13 +180,17 @@ export function PrepararCitaForm({ services, sedes, metodos, countries, requestI
 
       <section className="wizardPanel visible">
         <h2>2. Servicios</h2>
+        <label className="fichaConsent"><input type="checkbox" checked={personalizada} onChange={(e) => { setPersonalizada(e.target.checked); setHora(""); }} /> Atención personalizada</label>
         <div className="atencionGrid">
           <label className="atencionField">
             Personas
-            <select name="personas" value={personas} onChange={(event) => { setPersonas(Number(event.target.value) as 1 | 2); setHora(""); }}>
-              <option value="1">1 persona</option><option value="2">2 personas</option>
+            <select name="personas" value={personas} onChange={(event) => { const n=Number(event.target.value); setPersonas(n); setComponentes(Array.from({length:n},(_,i)=>componentes[i] ?? {persona:i+1,componentes:[]})); setHora(""); }}>
+              {[1,2,3,4,5].filter((n)=>personalizada || n<=2).map((n)=><option key={n} value={n}>{n} persona{n>1?"s":""}</option>)}
             </select>
           </label>
+          {personalizada && <><label className="atencionField">Modalidad<select value={modalidad} onChange={(e)=>{setModalidad(e.target.value as any);setHora("");}}><option value="simultanea">Simultánea</option><option value="consecutiva">Consecutiva</option></select></label>
+          {componentes.map((p:any, index:number)=><div className="atencionField atencionFieldWide" key={p.persona}><strong>Persona {p.persona}</strong>{p.componentes.map((c:any, ci:number)=><div key={ci} className="atencionGrid"><select value={c.tipo==="catalogo"?c.codigo:"manual"} onChange={(e)=>{const code=e.target.value;const next=structuredClone(componentes);next[index].componentes[ci]=code==="manual"?{tipo:"manual",nombre:"",duracion_min:0,precio:0}:{tipo:"catalogo",codigo:code,nombre:"",duracion_min:0,precio:0};setComponentes(next);}}><option value="manual">Manual</option>{services.filter(s=>!esCodigoDomicilio(s.code)).map(s=><option key={s.code} value={s.code}>{s.name}</option>)}</select>{c.tipo==="manual"&&<><input placeholder="Nombre" onChange={(e)=>{const n=structuredClone(componentes);n[index].componentes[ci].nombre=e.target.value;setComponentes(n);}}/><input type="number" placeholder="Minutos" onChange={(e)=>{const n=structuredClone(componentes);n[index].componentes[ci].duracion_min=Number(e.target.value);setComponentes(n);}}/><input type="number" placeholder="Precio" onChange={(e)=>{const n=structuredClone(componentes);n[index].componentes[ci].precio=Number(e.target.value);setComponentes(n);}}/></>}</div>)}<button type="button" onClick={()=>{const n=structuredClone(componentes);n[index].componentes.push({tipo:"catalogo",codigo:"",nombre:"",precio:0,duracion_min:0});setComponentes(n);}}>Añadir componente</button></div>)}</>}
+          {!personalizada && <>
           <label className="atencionField">
             Servicio — persona 1
             <select name="servicio_1" value={service1} onChange={(event) => { setService1(event.target.value); setService2(""); setHora(""); }} required>
@@ -195,6 +207,7 @@ export function PrepararCitaForm({ services, sedes, metodos, countries, requestI
               </select>
             </label>
           )}
+          </>}
         </div>
       </section>
 
@@ -251,6 +264,7 @@ export function PrepararCitaForm({ services, sedes, metodos, countries, requestI
           <div><span>Confirmación manual</span><strong>{esDomicilio ? "Sí" : "No"}</strong></div>
         </div>
         <div className="atencionGrid paymentFields">
+          {personalizada && <><label className="atencionField">Precio final acordado<input name="precio_final" type="number" step="0.01" value={precioFinal} onChange={e=>setPrecioFinal(e.target.value)} placeholder={String(subtotalServicios)} /></label>{precioFinal && Number(precioFinal)!==subtotalServicios && <label className="atencionField atencionFieldWide">Motivo del ajuste<input name="motivo_ajuste" required /></label>}<label className="fichaConsent atencionFieldWide"><input name="confirmar_disponibilidad" value="1" type="checkbox" required /> Confirmo disponibilidad de cabinas y terapistas</label></>}
           <label className="atencionField">Monto recibido<input name="monto_pagado" type="number" min="0" step="0.01" value={paid} onChange={(event) => setPaid(Number(event.target.value || 0))} required /></label>
           <label className="atencionField">Método<select name="metodo_pago" disabled={paid <= 0} defaultValue=""><option value="">{paid > 0 ? "Selecciona" : "Convenio / sin adelanto"}</option>{metodos.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
           <label className="atencionField">Número de operación<input name="numero_operacion" disabled={paid <= 0} /></label>

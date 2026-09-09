@@ -95,8 +95,9 @@ export async function GET(
 
   const sedeInfo = await cargarSede(cita.sede);
 
+  const esPersonalizada = Boolean(cita.atencion_personalizada);
   const body: Record<string, unknown> = {
-    contratoVersion: FICHA_CONTRATO_VERSION,
+    contratoVersion: esPersonalizada ? "ficha-cita-v2" : FICHA_CONTRATO_VERSION,
     token,
     estado: cita.estado_ficha ?? "pendiente",
     idioma: cita.idioma ?? "es",
@@ -112,6 +113,9 @@ export async function GET(
     cliente: clientePublicoInicial(cita.cliente_id),
     politicaCancelacionUrl: politicaCancelacionUrl(),
   };
+  if (esPersonalizada) {
+    body.cita = { ...construirCitaResumen(cita, sedeInfo), modalidad: cita.modalidad_ejecucion, componentesPorPersona: cita.componentes_por_persona, nombreFinal: cita.servicio, precioTotal: Number(cita.monto_total ?? 0) };
+  }
 
   // cupon.vigenteHasta sale de citas_reservadas.cupon_vigente_hasta
   // (decisión del dueño): es una propiedad de la promoción elegida al
