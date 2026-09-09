@@ -11,6 +11,10 @@ declare
   v_operacion text := null;
   v_resultado jsonb;
   v_payload jsonb;
+  v_payload_base jsonb;
+  v_casos jsonb[];
+  v_esperados text[];
+  v_indice int;
 begin
   select nombre, hora_apertura, upper(btrim(valor))
   into v_sede, v_hora, v_metodo
@@ -43,6 +47,7 @@ begin
     'metodo_pago', v_metodo, 'numero_operacion', v_operacion, 'responsable', 'QA rollback'
   );
   v_resultado := public.preparar_atencion_personalizada(v_payload);
+  v_payload_base := v_payload;
   if v_resultado->>'reserva_id' <> 'RES-QA-017-1' or (v_resultado->>'adelanto_requerido')::numeric <> 10 then
     raise exception 'Falló personalizada de una persona';
   end if;
@@ -108,37 +113,16 @@ begin
   if coalesce((select sum(monto_asignado) from public.caja_atencion_detalle where movimiento_id = 'MOV-QA-017-4'), -1) <> 90 then
     raise exception 'Los detalles no concilian con el precio final ajustado';
   end if;
-  begin
-    perform public.preparar_atencion_personalizada(v_payload || jsonb_build_object('request_id','a1700001-0000-4000-8000-000000000005','reserva_id','RES-QA-017-5','movimiento_id','MOV-QA-017-5','pago_id','PAY-QA-017-5','token',repeat('T',43),'motivo_ajuste',''));
-    raise exception 'Debió rechazar ajuste sin motivo';
-  exception when others then
-    if sqlerrm not like '%AJUSTE_SIN_MOTIVO%' then raise; end if;
-  end;
-  begin
-    perform public.preparar_atencion_personalizada(v_payload || jsonb_build_object('request_id','a1700001-0000-4000-8000-000000000011','reserva_id','RES-QA-017-11','movimiento_id','MOV-QA-017-11','pago_id','PAY-QA-017-11','token',repeat('U',43),'responsable',''));
-    raise exception 'Debió rechazar ajuste sin responsable';
-  exception when others then
-    if sqlerrm not like '%AJUSTE_SIN_RESPONSABLE%' then raise; end if;
-  end;
-
-  -- Rechazos del alcance MVP: más de 5, domicilio, convenio, promoción y gift card.
-  foreach v_resultado in array array[
-    v_payload || jsonb_build_object('request_id','a1700001-0000-4000-8000-000000000006','personas',6),
-    v_payload || jsonb_build_object('request_id','a1700001-0000-4000-8000-000000000007','tipo_atencion','domicilio'),
-    v_payload || jsonb_build_object('request_id','a1700001-0000-4000-8000-000000000008','canal','cuponidad'),
-    v_payload || jsonb_build_object('request_id','a1700001-0000-4000-8000-000000000009','cupon_promocional','PROMO'),
-    v_payload || jsonb_build_object('request_id','a1700001-0000-4000-8000-000000000010','es_gift_card',true)
-  ] loop
-    begin
-      perform public.preparar_atencion_personalizada(v_resultado);
-      raise exception 'Debió rechazar combinación fuera del MVP';
-    exception when others then
-      if sqlerrm not like '%PERSONALIZADA_SOLO_DIRECTO_PRESENCIAL%' and sqlerrm not like '%PERSONALIZADA_INVALIDA%' then raise; end if;
-    end;
-  end loop;
-
-  -- Cada persona debe aparecer una vez, en orden, y con componentes.
-  foreach v_resultado in array array[
+  -- Cada payload negativo declara un único error esperado. Así una ruta
+  -- distinta no puede ocultarse detrás de una lista amplia de errores válidos.
+  v_casos := array[
+    v_payload || jsonb_build_object('request_id','a1700001-0000-4000-8000-000000000005','reserva_id','RES-QA-017-5','movimiento_id','MOV-QA-017-5','pago_id','PAY-QA-017-5','token',repeat('T',43),'motivo_ajuste',''),
+    v_payload || jsonb_build_object('request_id','a1700001-0000-4000-8000-000000000006','reserva_id','RES-QA-017-6','movimiento_id','MOV-QA-017-6','pago_id','PAY-QA-017-6','token',repeat('U',43),'responsable',''),
+    v_payload || jsonb_build_object('request_id','a1700001-0000-4000-8000-000000000007','personas',6),
+    v_payload || jsonb_build_object('request_id','a1700001-0000-4000-8000-000000000008','tipo_atencion','domicilio'),
+    v_payload || jsonb_build_object('request_id','a1700001-0000-4000-8000-000000000009','canal','cuponidad'),
+    v_payload || jsonb_build_object('request_id','a1700001-0000-4000-8000-000000000010','cupon_promocional','PROMO'),
+    v_payload || jsonb_build_object('request_id','a1700001-0000-4000-8000-000000000011','es_gift_card',true),
     v_payload || jsonb_build_object('request_id','a1700001-0000-4000-8000-000000000012','personas',2,'componentes_por_persona',jsonb_build_array(
       jsonb_build_object('persona',1,'componentes',jsonb_build_array(jsonb_build_object('tipo','manual','nombre','A','precio',50,'duracion_min',30))),
       jsonb_build_object('persona',1,'componentes',jsonb_build_array(jsonb_build_object('tipo','manual','nombre','B','precio',50,'duracion_min',30))))),
@@ -147,32 +131,42 @@ begin
       jsonb_build_object('persona',1,'componentes',jsonb_build_array(jsonb_build_object('tipo','manual','nombre','B','precio',50,'duracion_min',30))))),
     v_payload || jsonb_build_object('request_id','a1700001-0000-4000-8000-000000000014','personas',2,'componentes_por_persona',jsonb_build_array(
       jsonb_build_object('persona',1,'componentes',jsonb_build_array(jsonb_build_object('tipo','manual','nombre','A','precio',50,'duracion_min',30))),
-      jsonb_build_object('persona',3,'componentes',jsonb_build_array(jsonb_build_object('tipo','manual','nombre','B','precio',50,'duracion_min',30)))))
-  ] loop
-    begin
-      perform public.preparar_atencion_personalizada(v_resultado);
-      raise exception 'Debió rechazar personas repetidas, desordenadas u omitidas';
-    exception when others then
-      if sqlerrm not like '%COMPONENTE_INVALIDO%' then raise; end if;
-    end;
-  end loop;
-
-  -- Campos e identificadores obligatorios no pueden llegar vacíos.
-  foreach v_resultado in array array[
+      jsonb_build_object('persona',3,'componentes',jsonb_build_array(jsonb_build_object('tipo','manual','nombre','B','precio',50,'duracion_min',30))))),
     v_payload || jsonb_build_object('request_id','','cliente','QA'),
     v_payload || jsonb_build_object('request_id','a1700001-0000-4000-8000-000000000015','cliente',''),
     v_payload || jsonb_build_object('request_id','a1700001-0000-4000-8000-000000000016','whatsapp_e164','123'),
     v_payload || jsonb_build_object('request_id','a1700001-0000-4000-8000-000000000017','movimiento_id',''),
     v_payload || jsonb_build_object('request_id','a1700001-0000-4000-8000-000000000018','reserva_id',''),
     v_payload || jsonb_build_object('request_id','a1700001-0000-4000-8000-000000000019','pago_id',''),
-    v_payload || jsonb_build_object('request_id','a1700001-0000-4000-8000-000000000020','token','')
-  ] loop
+    v_payload || jsonb_build_object('request_id','a1700001-0000-4000-8000-000000000020','token',''),
+    v_payload || jsonb_build_object('request_id','a1700001-0000-4000-8000-000000000021','token_expira',((v_fecha + v_hora) at time zone 'America/Lima')::text),
+    v_payload || jsonb_build_object('request_id','a1700001-0000-4000-8000-000000000022','monto_pagado',-1),
+    v_payload || jsonb_build_object('request_id','a1700001-0000-4000-8000-000000000023','monto_pagado',9),
+    v_payload || jsonb_build_object('request_id','a1700001-0000-4000-8000-000000000024','monto_pagado',91),
+    v_payload || jsonb_build_object('request_id','a1700001-0000-4000-8000-000000000025','metodo_pago',''),
+    v_payload || jsonb_build_object('request_id','a1700001-0000-4000-8000-000000000026','metodo_pago','NO_CONFIGURADO'),
+    v_payload_base || jsonb_build_object('cliente','Cliente QA alterado')
+  ];
+  v_esperados := array[
+    'AJUSTE_SIN_MOTIVO','AJUSTE_SIN_RESPONSABLE','PERSONALIZADA_INVALIDA',
+    'PERSONALIZADA_SOLO_DIRECTO_PRESENCIAL','PERSONALIZADA_SOLO_DIRECTO_PRESENCIAL',
+    'PERSONALIZADA_SOLO_DIRECTO_PRESENCIAL','PERSONALIZADA_SOLO_DIRECTO_PRESENCIAL',
+    'COMPONENTE_INVALIDO','COMPONENTE_INVALIDO','COMPONENTE_INVALIDO',
+    'REQUEST_ID_INVALIDO','CLIENTE_REQUERIDO','TELEFONO_E164_INVALIDO',
+    'IDENTIFICADORES_PREPARACION_INVALIDOS','IDENTIFICADORES_PREPARACION_INVALIDOS','IDENTIFICADORES_PREPARACION_INVALIDOS',
+    'TOKEN_O_EXPIRACION_INVALIDOS','TOKEN_O_EXPIRACION_INVALIDOS',
+    'MONTO_PAGADO_NEGATIVO','PAGO_INSUFICIENTE','MONTO_PAGADO_SUPERA_TOTAL',
+    'METODO_PAGO_REQUERIDO','METODO_PAGO_NO_PERMITIDO','REQUEST_ID_PAYLOAD_CONFLICTO'
+  ];
+  if cardinality(v_casos) <> cardinality(v_esperados) then raise exception 'Casos QA y errores esperados desalineados'; end if;
+  for v_indice in 1..cardinality(v_casos) loop
     begin
-      perform public.preparar_atencion_personalizada(v_resultado);
-      raise exception 'Debió rechazar campo obligatorio vacío o WhatsApp inválido';
+      perform public.preparar_atencion_personalizada(v_casos[v_indice]);
+      raise exception using message='QA_NEGATIVO_NO_RECHAZADO';
     exception when others then
-      if sqlerrm not like '%REQUEST_ID_INVALIDO%' and sqlerrm not like '%CLIENTE_REQUERIDO%'
-         and sqlerrm not like '%TELEFONO_E164_INVALIDO%' and sqlerrm not like '%IDENTIFICADORES_PREPARACION_INVALIDOS%' then raise; end if;
+      if sqlerrm <> v_esperados[v_indice] then
+        raise exception 'Caso QA % esperaba %, obtuvo %', v_indice, v_esperados[v_indice], sqlerrm;
+      end if;
     end;
   end loop;
 
