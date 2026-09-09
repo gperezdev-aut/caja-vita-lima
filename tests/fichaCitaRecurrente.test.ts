@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { evaluarEstadoToken, FICHA_CONTRATO_VERSION } from "../lib/fichaCitaDominio.ts";
+import {
+  clientePublicoInicial,
+  evaluarEstadoToken,
+  FICHA_CONTRATO_VERSION,
+} from "../lib/fichaCitaDominio.ts";
 import {
   FICHA_RECURRENTE_CONTRATO_VERSION,
   claveIntentosIdentificacion,
@@ -195,6 +199,24 @@ test("el contrato de identificación está versionado en runtime", () => {
 
 test("el contrato existente ficha-cita-v1 no cambia", () => {
   assert.equal(FICHA_CONTRATO_VERSION, "ficha-cita-v1");
+});
+
+test("GET inicial conserva cliente compatible sin nombre ni correo", () => {
+  const inicial = clientePublicoInicial("CLI-1");
+  assert.deepEqual(inicial, {
+    conocido: true,
+    nombre: null,
+    emailEnmascarado: null,
+  });
+  assert.doesNotMatch(JSON.stringify(inicial), /rosa|@|gmail|outlook/i);
+});
+
+test("GET inicial no consulta ni serializa datos personales del cliente", async () => {
+  const route = await readFile(new URL("../app/api/publico/ficha/[token]/route.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(route, /cargarCliente\(/);
+  assert.doesNotMatch(route, /enmascararEmail/);
+  assert.match(route, /cliente: clientePublicoInicial\(cita\.cliente_id\)/);
+  assert.doesNotMatch(route, /cliente\?\.cliente|cliente\?\.email/);
 });
 
 test("el endpoint exige secreto, aplica límite y devuelve cabeceras privadas", async () => {

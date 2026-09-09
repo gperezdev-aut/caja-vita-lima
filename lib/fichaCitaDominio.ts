@@ -7,6 +7,18 @@ import {
 export const CANALES_FICHA = ["directo", "cuponidad", "bee"] as const;
 export const FICHA_CONTRATO_VERSION = "ficha-cita-v1" as const;
 
+/**
+ * Mantiene ficha-cita-v1 compatible sin serializar PII antes de que el
+ * endpoint /identificar confirme el WhatsApp asociado a la reserva.
+ */
+export function clientePublicoInicial(clienteId: string | null) {
+  return {
+    conocido: Boolean(clienteId),
+    nombre: null,
+    emailEnmascarado: null,
+  };
+}
+
 export type CanalFicha = (typeof CANALES_FICHA)[number];
 
 export type ReglaAdelantoInput = {

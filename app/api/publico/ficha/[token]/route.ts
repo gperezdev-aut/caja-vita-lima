@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { supabaseRpc, supabaseSelectWhere } from "@/lib/supabaseServer";
 import {
+  clientePublicoInicial,
   estadoConfirmacionPublica,
   FICHA_CONTRATO_VERSION,
   pagoVisibleCliente,
@@ -8,7 +9,6 @@ import {
   validarSolicitudComprobante,
 } from "@/lib/fichaCitaDominio";
 import {
-  enmascararEmail,
   mensajeWhatsappCita,
   normalizarTelefonoE164,
   plataformaDesdeCanal,
@@ -18,7 +18,6 @@ import {
 } from "@/lib/fichaCitaPublica";
 import {
   cargarCitaPorToken,
-  cargarCliente,
   cargarSede,
   checkRateLimit,
   construirCitaResumen,
@@ -85,8 +84,6 @@ export async function GET(
   const esCuponidad = canal === "cuponidad";
   const esConvenio = esCuponidad || canal === "bee";
 
-  const cliente = await cargarCliente(cita.cliente_id);
-
   const pagoVisible = pagoVisibleCliente(canal, Number(cita.monto_total ?? 0), Number(cita.adelanto ?? 0));
   const pago = { moneda: "PEN", ...pagoVisible };
   const confirmacion = estadoConfirmacionPublica({
@@ -112,11 +109,7 @@ export async function GET(
       documentoParaBoleta: esConvenio ? "no" : "opcional",
       ...confirmacion,
     },
-    cliente: {
-      conocido: Boolean(cliente?.cliente),
-      nombre: cliente?.cliente ?? null,
-      emailEnmascarado: enmascararEmail(cliente?.email),
-    },
+    cliente: clientePublicoInicial(cita.cliente_id),
     politicaCancelacionUrl: politicaCancelacionUrl(),
   };
 

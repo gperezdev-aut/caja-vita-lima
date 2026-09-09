@@ -315,7 +315,7 @@ minúsculas**: comparar contra `x-caja-secret`. Esto ya costó tiempo una vez co
     "confirmacionManual": false,
     "motivoConfirmacion": null
   },
-  "cliente": { "conocido": true, "nombre": "Rosa", "emailEnmascarado": "r***@gmail.com" },
+  "cliente": { "conocido": true, "nombre": null, "emailEnmascarado": null },
   "politicaCancelacionUrl": "…"
 }
 ```
@@ -325,6 +325,13 @@ minúsculas**: comparar contra `x-caja-secret`. Esto ya costó tiempo una vez co
 atención a domicilio o `"convenio"` para Cuponidad/Bee; una vez confirmada la
 cita ambos vuelven a `false`/`null`. Un teléfono extranjero nunca activa esta
 regla por sí solo.
+
+El GET inicial mantiene las tres propiedades de `cliente` por compatibilidad,
+pero **nunca** consulta ni expone nombre o correo — incluso enmascarado. Solo
+`conocido` indica que la reserva tiene un `cliente_id` asociado. Nombre, correo,
+cumpleaños, salud y comprobante se obtienen exclusivamente mediante
+`POST /api/publico/ficha/:token/identificar` después de validar el WhatsApp en
+E.164; así tampoco quedan serializados en el HTML inicial de la web.
 
 `documentoParaBoleta` tiene **solo dos valores: `"no"` y `"opcional"`**. No existe `"obligatorio"`
 — el DNI es opcional a propósito. En canal cupón siempre viene `"no"`, porque la boleta la emite
