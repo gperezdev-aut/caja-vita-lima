@@ -436,12 +436,91 @@ copy** — `mensaje` es solo un respaldo por si la web recibe un código que no 
 | `token_no_existe` | 404 | El token no está en `citas_reservadas` |
 | `token_vencido` | 410 | Pasó `token_expira` |
 | `ficha_ya_completa` | 410 | `estado_ficha = completa` |
+| `identificacion_no_valida` | 403 | El WhatsApp no coincide o no puede normalizarse; el mensaje no revela datos de terceros |
+| `error_interno` | 500 | No fue posible leer de forma segura el historial recurrente |
 | `telefono_asociado_otro_cliente` | 409 | El WhatsApp pertenece a un `cliente_id` distinto; no se fusiona ni se escribe nada |
 | `cupon_ya_usado` | 409 | Choca con la restricción única de `cupones_convenios` |
 | `validacion` | 422 | Error de campo |
 
 **Toda la validación se repite en el servidor.** Lo que valida la web es comodidad para el
 cliente; lo que decide es caja.
+
+### Identificación segura de cliente recurrente
+
+`POST /api/publico/ficha/:token/identificar` agrega un contrato independiente y no modifica
+`ficha-cita-v1`. Requiere `X-Caja-Secret` y acepta solamente:
+
+```json
+{
+  "telefono": {
+    "crudo": "987654321",
+    "pais": "PE"
+  }
+}
+```
+
+Caja valida primero el token (existencia, vigencia y ficha pendiente), normaliza el número con
+`libphonenumber-js` y lo compara únicamente con `clientes.whatsapp_e164` del `cliente_id`
+asociado a la reserva. Antes de coincidir solo consulta `cliente_id` y `whatsapp_e164`. No busca
+clientes por número ni devuelve datos ante un fallo. La respuesta exitosa exacta es:
+
+```json
+{
+  "contratoVersion": "ficha-recurrente-v1",
+  "clienteRecurrente": true,
+  "cliente": {
+    "nombre": "Rosa Quispe",
+    "correo": "rosa@example.com",
+    "cumple": { "dia": 14, "mes": 3 },
+    "promociones": {
+      "autorizoAnteriormente": true,
+      "requiereNuevaAceptacion": true
+    }
+  },
+  "saludAnterior": {
+    "disponible": true,
+    "sinCondicionesDeclaradas": false,
+    "embarazo": false,
+    "presion": true,
+    "cirugiaReciente": false,
+    "alergias": "Látex",
+    "zonasEvitar": "Rodilla izquierda",
+    "notas": null
+  },
+  "comprobanteAnterior": {
+    "tipoComprobante": "FACTURA",
+    "tipoDocumento": "RUC",
+    "numeroDocumento": "20123456789",
+    "razonSocial": "Rosa Servicios SAC",
+    "solicitarEnNuevaCita": false
+  }
+}
+```
+
+`clienteRecurrente` es verdadero cuando existe una cita anterior con ficha completa para el mismo
+`cliente_id`, una ficha de salud anterior o un comprobante anterior. La fila más reciente de
+`fichas_salud`, excluyendo la reserva actual, se devuelve como fotografía editable. Si no existe
+ninguna pero sí una cita anterior completa, se devuelve `sinCondicionesDeclaradas=true`, de
+acuerdo con la semántica histórica; sin historial, `saludAnterior` es `null`. El comprobante es el
+más reciente del mismo cliente, excluyendo la reserva actual. Nunca se devuelve el teléfono.
+
+Los campos anulables conservan `null`. `comprobanteAnterior.solicitarEnNuevaCita` siempre es
+`false` y `cliente.promociones.requiereNuevaAceptacion` siempre es `true`: la web puede ofrecer
+reutilizar datos, pero no marcar esas decisiones automáticamente. Si el cliente confirma que todo
+sigue igual, la web debe reenviar esos valores al `POST ficha-cita-v1`; esa RPC crea o actualiza
+solamente la declaración de la reserva actual y no toca fichas históricas. Una observación nueva va
+en `salud.notas`, junto con la fotografía reenviada y el consentimiento de salud aplicable.
+
+Errores del endpoint: `no_autorizado` (401), `token_no_existe` (404), `token_vencido` o
+`ficha_ya_completa` (410), `identificacion_no_valida` (403), `rate_limited` (429) y
+`error_interno` (500). Todos incluyen `Cache-Control: no-store` y
+`X-Robots-Tag: noindex, nofollow, noarchive`. Los intentos de identificación usan una clave
+separada por IP y token durante 15 minutos; la única escritura de este endpoint es ese control de
+seguridad. No modifica `clientes`, `citas_reservadas`, `fichas_salud` ni
+`solicitudes_comprobante`.
+
+No se requiere migración 017: las tablas aplicadas hasta 016 contienen todas las referencias y
+campos necesarios.
 
 ## 7. Seguridad del token
 

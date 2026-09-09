@@ -23,6 +23,8 @@ export type FichaErrorCode =
   | "token_no_existe"
   | "token_vencido"
   | "ficha_ya_completa"
+  | "identificacion_no_valida"
+  | "error_interno"
   | "telefono_asociado_otro_cliente"
   | "cupon_ya_usado"
   | "validacion"
@@ -34,6 +36,8 @@ const ERROR_HTTP_STATUS: Record<FichaErrorCode, number> = {
   token_no_existe: 404,
   token_vencido: 410,
   ficha_ya_completa: 410,
+  identificacion_no_valida: 403,
+  error_interno: 500,
   telefono_asociado_otro_cliente: 409,
   cupon_ya_usado: 409,
   validacion: 422,

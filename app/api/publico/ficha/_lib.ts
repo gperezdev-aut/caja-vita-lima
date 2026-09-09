@@ -4,6 +4,12 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { getServerEnv } from "@/lib/env";
 import { supabaseSelectWhere, supabaseUpsert } from "@/lib/supabaseServer";
+import type {
+  CitaAnteriorRow,
+  ComprobanteAnteriorRow,
+  FichaSaludAnteriorRow,
+  ClienteIdentificacionRow,
+} from "@/lib/fichaCitaRecurrente";
 import {
   fichaErrorBody,
   fichaErrorStatus,
@@ -277,4 +283,91 @@ export function construirCitaResumen(cita: CitaRow, sedeInfo: SedeRow | null) {
         }
       : null,
   };
+}
+
+export async function cargarClienteParaIdentificar(clienteId: string | null) {
+  if (!clienteId) return null;
+
+  const result = await supabaseSelectWhere<ClienteIdentificacionRow>(
+    "clientes",
+    [
+      "select=cliente_id,cliente,email,whatsapp_e164,cumple_dia,cumple_mes,consent_promos_en",
+      `cliente_id=eq.${encodeURIComponent(clienteId)}`,
+      "limit=1",
+    ].join("&")
+  );
+  if (result.error) throw new Error("No se pudo cargar el cliente asociado.");
+  return result.data?.[0] ?? null;
+}
+
+export async function cargarTelefonoClienteAsociado(clienteId: string | null) {
+  if (!clienteId) return null;
+
+  const result = await supabaseSelectWhere<
+    Pick<ClienteIdentificacionRow, "cliente_id" | "whatsapp_e164">
+  >(
+    "clientes",
+    [
+      "select=cliente_id,whatsapp_e164",
+      `cliente_id=eq.${encodeURIComponent(clienteId)}`,
+      "limit=1",
+    ].join("&")
+  );
+  if (result.error) throw new Error("No se pudo verificar el cliente asociado.");
+  return result.data?.[0] ?? null;
+}
+
+export async function cargarUltimaCitaCompletada(
+  clienteId: string,
+  reservaActualId: string
+) {
+  const result = await supabaseSelectWhere<CitaAnteriorRow>(
+    "citas_reservadas",
+    [
+      "select=reserva_id,updated_at",
+      `cliente_id=eq.${encodeURIComponent(clienteId)}`,
+      `reserva_id=neq.${encodeURIComponent(reservaActualId)}`,
+      "estado_ficha=eq.completa",
+      "order=updated_at.desc.nullslast",
+      "limit=1",
+    ].join("&")
+  );
+  if (result.error) throw new Error("No se pudo cargar la cita anterior.");
+  return result.data?.[0] ?? null;
+}
+
+export async function cargarUltimaSaludCliente(
+  clienteId: string,
+  reservaActualId: string
+) {
+  const result = await supabaseSelectWhere<FichaSaludAnteriorRow>(
+    "fichas_salud",
+    [
+      "select=reserva_id,cliente_id,embarazo,presion,cirugia_reciente,alergias,zonas_evitar,notas",
+      `cliente_id=eq.${encodeURIComponent(clienteId)}`,
+      `reserva_id=neq.${encodeURIComponent(reservaActualId)}`,
+      "order=creado_en.desc",
+      "limit=1",
+    ].join("&")
+  );
+  if (result.error) throw new Error("No se pudo cargar la ficha anterior.");
+  return result.data?.[0] ?? null;
+}
+
+export async function cargarUltimoComprobante(
+  clienteId: string,
+  reservaActualId: string
+) {
+  const result = await supabaseSelectWhere<ComprobanteAnteriorRow>(
+    "solicitudes_comprobante",
+    [
+      "select=reserva_id,cliente_id,tipo_comprobante,tipo_documento,numero_documento,razon_social",
+      `cliente_id=eq.${encodeURIComponent(clienteId)}`,
+      `reserva_id=neq.${encodeURIComponent(reservaActualId)}`,
+      "order=creado_en.desc",
+      "limit=1",
+    ].join("&")
+  );
+  if (result.error) throw new Error("No se pudo cargar el comprobante anterior.");
+  return result.data?.[0] ?? null;
 }
