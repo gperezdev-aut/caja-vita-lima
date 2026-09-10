@@ -24,15 +24,11 @@ git checkout main
 git pull --ff-only origin main
 git log -1 --oneline
 
-umask 077
 DEPLOY_ID="$(date +%Y%m%d-%H%M%S)-$(git rev-parse --short HEAD)"
 BACKUP_DIR="/opt/backups/caja-vita-lima"
 install -d -m 700 "$BACKUP_DIR"
 
 ENV_BACKUP="$BACKUP_DIR/.env.production.backup-$DEPLOY_ID"
-cp .env.production "$ENV_BACKUP"
-chmod 600 "$ENV_BACKUP"
-
 PREVIOUS_CONTAINER_NAME="$(docker inspect --format '{{.Name}}' caja-vita-lima | sed 's#^/##')"
 ROLLBACK_CONTAINER_NAME="${PREVIOUS_CONTAINER_NAME}-rollback-$DEPLOY_ID"
 ROLLBACK_TAG="caja-vita-lima:rollback-$DEPLOY_ID"
@@ -40,13 +36,20 @@ docker image inspect caja-vita-lima:local >/dev/null
 docker tag caja-vita-lima:local "$ROLLBACK_TAG"
 
 STATE_FILE="$BACKUP_DIR/deploy-$DEPLOY_ID.env"
-{
-  printf 'PREVIOUS_CONTAINER_NAME=%q\n' "$PREVIOUS_CONTAINER_NAME"
-  printf 'ROLLBACK_CONTAINER_NAME=%q\n' "$ROLLBACK_CONTAINER_NAME"
-  printf 'ROLLBACK_TAG=%q\n' "$ROLLBACK_TAG"
-  printf 'ENV_BACKUP=%q\n' "$ENV_BACKUP"
-} > "$STATE_FILE"
-chmod 600 "$STATE_FILE"
+# El umask restrictivo se limita a los dos archivos privados. No debe quedar
+# activo para el checkout de Git ni para el build posterior de Docker.
+(
+  umask 077
+  cp .env.production "$ENV_BACKUP"
+  chmod 600 "$ENV_BACKUP"
+  {
+    printf 'PREVIOUS_CONTAINER_NAME=%q\n' "$PREVIOUS_CONTAINER_NAME"
+    printf 'ROLLBACK_CONTAINER_NAME=%q\n' "$ROLLBACK_CONTAINER_NAME"
+    printf 'ROLLBACK_TAG=%q\n' "$ROLLBACK_TAG"
+    printf 'ENV_BACKUP=%q\n' "$ENV_BACKUP"
+  } > "$STATE_FILE"
+  chmod 600 "$STATE_FILE"
+)
 printf 'Rollback state: %s\n' "$STATE_FILE"
 ```
 
@@ -55,7 +58,11 @@ a Git. El archivo de estado queda fuera del repositorio y persiste el nombre
 del contenedor manual, su nombre de rollback, la etiqueta de imagen y la ruta
 del respaldo para que el rollback no dependa de la sesión SSH. Antes de
 continuar, verificar solo los nombres obligatorios, sin cargar sus valores en
-la sesión de shell:
+la sesión de shell. El `umask 077` del bloque anterior ya terminó: no dejarlo
+activo evita que futuros checkouts de Git o artefactos de build hereden permisos
+restrictivos.
+
+Verificar solo los nombres obligatorios, sin cargar sus valores en la sesión:
 
 ```bash
 for key in \
