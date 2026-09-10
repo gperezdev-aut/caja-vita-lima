@@ -13,6 +13,7 @@ export type CajaModule =
   | "dashboard"
   | "clientes"
   | "citas-hoy"
+  | "preparar-cita"
   | "nueva-atencion"
   | "registrar-salida"
   | "comprobantes"
@@ -36,6 +37,7 @@ const NAV_ITEMS: CajaNavItem[] = [
   { key: "dashboard", label: "Dashboard", href: "/" },
   { key: "clientes", label: "Clientes", href: "/clientes" },
   { key: "citas-hoy", label: "Citas de hoy", href: "/citas-hoy" },
+  { key: "preparar-cita", label: "Preparar cita", href: "/preparar-cita" },
   { key: "nueva-atencion", label: "Nueva atención", href: "/nueva-atencion" },
   { key: "registrar-salida", label: "Registrar salida", href: "/registrar-salida" },
   { key: "comprobantes", label: "Comprobantes", href: "/comprobantes" },
@@ -48,6 +50,7 @@ const PERMISSIONS: Record<CajaRole, CajaModule[]> = {
     "dashboard",
     "clientes",
     "citas-hoy",
+    "preparar-cita",
     "nueva-atencion",
     "registrar-salida",
     "comprobantes",
@@ -58,6 +61,7 @@ const PERMISSIONS: Record<CajaRole, CajaModule[]> = {
     "dashboard",
     "clientes",
     "citas-hoy",
+    "preparar-cita",
     "nueva-atencion",
     "registrar-salida",
     "comprobantes",
@@ -66,6 +70,7 @@ const PERMISSIONS: Record<CajaRole, CajaModule[]> = {
   ],
   VITA_OPERACION: [
     "citas-hoy",
+    "preparar-cita",
     "nueva-atencion",
     "registrar-salida",
     "cierre-caja",
