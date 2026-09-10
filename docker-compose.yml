@@ -1,0 +1,39 @@
+services:
+  caja-vita-lima:
+    container_name: caja-vita-lima
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: caja-vita-lima:local
+    restart: unless-stopped
+    expose:
+      - "3000"
+    environment:
+      NODE_ENV: production
+      NEXT_TELEMETRY_DISABLED: "1"
+      SUPABASE_URL: ${SUPABASE_URL:?SUPABASE_URL is required}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?SUPABASE_SERVICE_ROLE_KEY is required}
+      CAJA_APP_PASSWORD: ${CAJA_APP_PASSWORD:?CAJA_APP_PASSWORD is required}
+      CAJA_SESSION_SECRET: ${CAJA_SESSION_SECRET:?CAJA_SESSION_SECRET is required}
+      CAJA_API_SECRET: ${CAJA_API_SECRET:?CAJA_API_SECRET is required}
+      CAJA_POLITICA_CANCELACION_URL: ${CAJA_POLITICA_CANCELACION_URL:?CAJA_POLITICA_CANCELACION_URL is required}
+      CAJA_WHATSAPP_NEGOCIO: ${CAJA_WHATSAPP_NEGOCIO:?CAJA_WHATSAPP_NEGOCIO is required}
+    networks:
+      nginx_proxy:
+        aliases:
+          - caja-vita-lima
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/login').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 45s
+
+networks:
+  nginx_proxy:
+    name: n8n_default
+    external: true
