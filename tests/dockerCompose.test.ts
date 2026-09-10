@@ -42,6 +42,8 @@ test("la guía transiciona el contenedor manual y conserva rollback persistente"
   assert.match(gitignore, /^\.env\.production\.backup-\*$/m);
   assert.match(guide, /BACKUP_DIR="\/opt\/backups\/caja-vita-lima"/);
   assert.match(guide, /install -d -m 700 "\$BACKUP_DIR"/);
+  assert.match(guide, /\(\n  umask 077\n  cp \.env\.production "\$ENV_BACKUP"/);
+  assert.doesNotMatch(guide, /^umask 077$/m);
   assert.match(guide, /ENV_BACKUP="\$BACKUP_DIR\/\.env\.production\.backup-\$DEPLOY_ID"/);
   assert.match(guide, /chmod 600 "\$ENV_BACKUP"/);
   assert.match(guide, /STATE_FILE="\$BACKUP_DIR\/deploy-\$DEPLOY_ID\.env"/);
