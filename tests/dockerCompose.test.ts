@@ -32,3 +32,35 @@ test("Docker Compose mantiene Caja aislada, protegida y verificable", async () =
     assert.match(compose, new RegExp(`\\$\\{${variable}:\\?${variable} is required\\}`));
   }
 });
+
+test("la guía transiciona el contenedor manual y conserva rollback persistente", async () => {
+  const [guide, gitignore] = await Promise.all([
+    readFile(new URL("../docs/despliegue-contabo.md", import.meta.url), "utf8"),
+    readFile(new URL("../.gitignore", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(gitignore, /^\.env\.production\.backup-\*$/m);
+  assert.match(guide, /BACKUP_DIR="\/opt\/backups\/caja-vita-lima"/);
+  assert.match(guide, /install -d -m 700 "\$BACKUP_DIR"/);
+  assert.match(guide, /ENV_BACKUP="\$BACKUP_DIR\/\.env\.production\.backup-\$DEPLOY_ID"/);
+  assert.match(guide, /chmod 600 "\$ENV_BACKUP"/);
+  assert.match(guide, /STATE_FILE="\$BACKUP_DIR\/deploy-\$DEPLOY_ID\.env"/);
+  assert.match(guide, /PREVIOUS_CONTAINER_NAME=%q/);
+  assert.match(guide, /ROLLBACK_CONTAINER_NAME=%q/);
+  assert.match(guide, /ROLLBACK_TAG=%q/);
+  assert.match(guide, /ENV_BACKUP=%q/);
+  assert.match(guide, /chmod 600 "\$STATE_FILE"/);
+  assert.match(guide, /docker tag caja-vita-lima:local "\$ROLLBACK_TAG"/);
+  assert.match(guide, /docker compose --env-file \.env\.production build/);
+  assert.match(guide, /docker compose --env-file \.env\.production up -d --no-build/);
+  assert.doesNotMatch(guide, /up -d --build/);
+  assert.match(guide, /docker stop "\$PREVIOUS_CONTAINER_NAME"/);
+  assert.match(guide, /docker rename "\$PREVIOUS_CONTAINER_NAME" "\$ROLLBACK_CONTAINER_NAME"/);
+  assert.match(guide, /docker compose --env-file \.env\.production stop caja-vita-lima \|\| true/);
+  assert.match(guide, /docker compose --env-file \.env\.production rm -f caja-vita-lima \|\| true/);
+  assert.match(guide, /install -m 600 "\$ENV_BACKUP" \.env\.production/);
+  assert.match(guide, /docker rename "\$ROLLBACK_CONTAINER_NAME" "\$PREVIOUS_CONTAINER_NAME"/);
+  assert.match(guide, /docker start "\$PREVIOUS_CONTAINER_NAME"/);
+  assert.match(guide, /https:\/\/caja\.vitalimaspa\.com\/login/);
+  assert.match(guide, /No eliminar el contenedor manual renombrado ni la etiqueta de rollback/);
+});

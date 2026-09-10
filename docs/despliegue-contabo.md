@@ -13,7 +13,7 @@ Supabase, n8n, Contabo ni las migraciones desde el contenedor.
 - Las migraciones 013–017 ya están aplicadas: **no ejecutar SQL ni
   migraciones** durante este procedimiento.
 
-## Checkpoint y respaldo
+## Checkpoint, respaldo y estado de rollback
 
 Ejecutar en Contabo, dentro de `/opt/caja-vita-lima`:
 
@@ -25,19 +25,37 @@ git pull --ff-only origin main
 git log -1 --oneline
 
 umask 077
-BACKUP_ENV=".env.production.backup-$(date +%Y%m%d-%H%M%S)"
-cp .env.production "$BACKUP_ENV"
-chmod 600 "$BACKUP_ENV"
+DEPLOY_ID="$(date +%Y%m%d-%H%M%S)-$(git rev-parse --short HEAD)"
+BACKUP_DIR="/opt/backups/caja-vita-lima"
+install -d -m 700 "$BACKUP_DIR"
 
-ROLLBACK_TAG="caja-vita-lima:rollback-$(date +%Y%m%d-%H%M%S)"
+ENV_BACKUP="$BACKUP_DIR/.env.production.backup-$DEPLOY_ID"
+cp .env.production "$ENV_BACKUP"
+chmod 600 "$ENV_BACKUP"
+
+PREVIOUS_CONTAINER_NAME="$(docker inspect --format '{{.Name}}' caja-vita-lima | sed 's#^/##')"
+ROLLBACK_CONTAINER_NAME="${PREVIOUS_CONTAINER_NAME}-rollback-$DEPLOY_ID"
+ROLLBACK_TAG="caja-vita-lima:rollback-$DEPLOY_ID"
 docker image inspect caja-vita-lima:local >/dev/null
 docker tag caja-vita-lima:local "$ROLLBACK_TAG"
-printf 'Rollback image: %s\n' "$ROLLBACK_TAG"
+
+STATE_FILE="$BACKUP_DIR/deploy-$DEPLOY_ID.env"
+{
+  printf 'PREVIOUS_CONTAINER_NAME=%q\n' "$PREVIOUS_CONTAINER_NAME"
+  printf 'ROLLBACK_CONTAINER_NAME=%q\n' "$ROLLBACK_CONTAINER_NAME"
+  printf 'ROLLBACK_TAG=%q\n' "$ROLLBACK_TAG"
+  printf 'ENV_BACKUP=%q\n' "$ENV_BACKUP"
+} > "$STATE_FILE"
+chmod 600 "$STATE_FILE"
+printf 'Rollback state: %s\n' "$STATE_FILE"
 ```
 
 El respaldo de `.env.production` es privado: no abrirlo, imprimirlo ni subirlo
-a Git. Antes de continuar, verificar solo los nombres obligatorios, sin cargar
-sus valores en la sesión de shell:
+a Git. El archivo de estado queda fuera del repositorio y persiste el nombre
+del contenedor manual, su nombre de rollback, la etiqueta de imagen y la ruta
+del respaldo para que el rollback no dependa de la sesión SSH. Antes de
+continuar, verificar solo los nombres obligatorios, sin cargar sus valores en
+la sesión de shell:
 
 ```bash
 for key in \
@@ -51,12 +69,20 @@ done
 La validación Compose del siguiente paso confirma que ninguna de esas variables
 esté vacía; sus valores no se imprimen.
 
-## Validar y levantar
+## Validar, construir y transición inicial
+
+El contenedor actual fue creado manualmente y usa el nombre
+`caja-vita-lima`. Docker Compose no puede crear otro contenedor con ese mismo
+nombre: no ejecutar `up` antes de detenerlo y renombrarlo. La imagen se
+construye una sola vez.
 
 ```bash
 docker compose --env-file .env.production config --quiet
 docker compose --env-file .env.production build
-docker compose --env-file .env.production up -d --build
+
+docker stop "$PREVIOUS_CONTAINER_NAME"
+docker rename "$PREVIOUS_CONTAINER_NAME" "$ROLLBACK_CONTAINER_NAME"
+docker compose --env-file .env.production up -d --no-build
 ```
 
 Esperar el healthcheck sin mostrar variables ni contenidos de configuración:
@@ -78,14 +104,23 @@ Revisar los logs visualmente sin copiar ni publicar secretos. No ejecutar
 
 ## Rollback exacto
 
-Si falla la validación, reutilizar la imagen que se etiquetó antes del build:
+Si falla la validación, usar el estado persistido incluso si se cerró la sesión
+SSH. Sustituir la ruta solo por la que imprimió el checkpoint; el archivo no
+contiene secretos.
 
 ```bash
-docker tag "$ROLLBACK_TAG" caja-vita-lima:local
-docker compose --env-file .env.production up -d --no-build
-docker inspect --format '{{.State.Health.Status}}' caja-vita-lima
+STATE_FILE="/opt/backups/caja-vita-lima/deploy-<DEPLOY_ID>.env"
+. "$STATE_FILE"
+
+docker compose --env-file .env.production stop caja-vita-lima || true
+docker compose --env-file .env.production rm -f caja-vita-lima || true
+install -m 600 "$ENV_BACKUP" .env.production
+docker rename "$ROLLBACK_CONTAINER_NAME" "$PREVIOUS_CONTAINER_NAME"
+docker start "$PREVIOUS_CONTAINER_NAME"
 docker exec caja-vita-lima node -e "fetch('http://127.0.0.1:3000/login').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+curl --fail --silent --show-error --output /dev/null https://caja.vitalimaspa.com/login
 ```
 
-No eliminar la etiqueta de rollback hasta que la revisión operativa haya sido
-aceptada. El rollback no ejecuta SQL ni revierte las migraciones 013–017.
+No eliminar el contenedor manual renombrado ni la etiqueta de rollback hasta
+que la revisión operativa haya sido aceptada. El rollback no ejecuta SQL ni
+revierte las migraciones 013–017.

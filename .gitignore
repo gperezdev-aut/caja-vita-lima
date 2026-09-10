@@ -18,3 +18,4 @@ build
 .DS_Store
 *.log
 .env.production
+.env.production.backup-*
