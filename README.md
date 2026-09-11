@@ -2,6 +2,9 @@
 
 Sistema privado de caja, reservas, pagos y reportes para operación de Vita Lima Spa.
 
+Integración en preparación: [catálogo canónico, Fase 3A](docs/catalogo-canonico-fase-3a.md)
+(conexión secundaria server-side y diagnóstico administrativo; bandera apagada).
+
 ---
 
 ## Objetivo
