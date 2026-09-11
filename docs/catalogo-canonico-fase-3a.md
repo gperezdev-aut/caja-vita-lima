@@ -72,7 +72,7 @@ su uso como componentes mediante este adaptador.
 Los campos textuales de reglas se preservan sin inventar enumeraciones que no
 fueron suministradas. `name_en` y `commercial_group` admiten texto o null;
 `component_eligible` admite booleano o null y se conserva sin reinterpretar;
-`previous_price_pen` admite número positivo o null; `price_version` admite texto
+`previous_price_pen` admite número positivo o null; `price_version` es texto
 no vacío o entero positivo. Todos los campos deben estar presentes. Las fechas
 admiten ISO date o timestamp con zona; `valid_to` puede ser null y, si existe,
 debe ser posterior a `valid_from`. El diagnóstico muestra todos los intervalos

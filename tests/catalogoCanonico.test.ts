@@ -41,7 +41,7 @@ function fixture(): CanonicalService[] {
         people_max: category === "PACKAGE_TWO" || number === 8 || number === 9 ? 2 : 1,
         selection_rule: "TEST_SELECTION", reservation_behavior: "TEST_RESERVATION",
         component_eligible: null, component_eligibility_status: "PENDING_REVIEW",
-        active: true, price_pen: 100, previous_price_pen: null, price_version: 1,
+        active: true, price_pen: 100, previous_price_pen: null, price_version: "catalog-v1-web-4104385",
         valid_from: "2026-09-01T00:00:00+00:00", valid_to: null,
         release_id: CATALOG_RELEASE_ID, source_web_sha: "4104385",
       };

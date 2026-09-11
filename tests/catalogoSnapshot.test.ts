@@ -25,7 +25,7 @@ function services(): CanonicalService[] {
   let n = 0;
   return Object.entries(CATALOG_CATEGORY_COUNTS).flatMap(([category, count]) => Array.from({ length: count }, () => {
     n += 1;
-    return { service_code: `SVC_${String(n).padStart(3, "0")}` as `SVC_${string}`, slug: `s-${n}`, name_es: `Servicio ${n}`, name_en: null, included_es: null, included_en: null, category: category as CanonicalService["category"], commercial_group: null, modality: "QA", duration_min: 60, people_rule_status: "CONFIRMED", people_min: category === "PACKAGE_TWO" ? 2 : 1, people_max: category === "PACKAGE_TWO" || n === 8 || n === 9 ? 2 : 1, selection_rule: n === 8 || n === 9 ? "HOME_FLOW" : "QA", reservation_behavior: n === 8 || n === 9 ? "HOME_APPOINTMENT" : "QA", component_eligible: null, component_eligibility_status: "PENDING_REVIEW", active: true, price_pen: n === 8 ? 230 : n === 9 ? 120 : 100, previous_price_pen: null, price_version: 1, valid_from: "2026-09-01T00:00:00+00:00", valid_to: null, release_id: "catalog-v1-web-4104385", source_web_sha: "4104385" };
+    return { service_code: `SVC_${String(n).padStart(3, "0")}` as `SVC_${string}`, slug: `s-${n}`, name_es: `Servicio ${n}`, name_en: null, included_es: null, included_en: null, category: category as CanonicalService["category"], commercial_group: null, modality: "QA", duration_min: 60, people_rule_status: "CONFIRMED", people_min: category === "PACKAGE_TWO" ? 2 : 1, people_max: category === "PACKAGE_TWO" || n === 8 || n === 9 ? 2 : 1, selection_rule: n === 8 || n === 9 ? "HOME_FLOW" : "QA", reservation_behavior: n === 8 || n === 9 ? "HOME_APPOINTMENT" : "QA", component_eligible: null, component_eligibility_status: "PENDING_REVIEW", active: true, price_pen: n === 8 ? 230 : n === 9 ? 120 : 100, previous_price_pen: null, price_version: "catalog-v1-web-4104385", valid_from: "2026-09-01T00:00:00+00:00", valid_to: null, release_id: "catalog-v1-web-4104385", source_web_sha: "4104385" };
   }));
 }
 const rules = [
@@ -109,6 +109,32 @@ test("acción y diagnóstico son solo ADMIN_GERALD y nunca devuelven credenciale
 test("migración y harness 018 son privados, inmutables y transaccionales", async () => {
   const [sql, harness, route] = await Promise.all([readFile(new URL("../sql/018_catalogo_canonico_snapshot_local.sql", import.meta.url), "utf8"), readFile(new URL("../sql/tests/018_catalogo_canonico_snapshot_local_rollback.sql", import.meta.url), "utf8"), readFile(new URL("../app/api/admin/catalogo/snapshot/route.ts", import.meta.url), "utf8")]);
   for (const token of ["caja_catalog_releases", "caja_catalog_services", "caja_catalog_home_policy", "caja_import_catalog_snapshot_v1", "security definer", "CAJA_CATALOG_SNAPSHOT_IMMUTABLE", "CAJA_CATALOG_CONTENT_CONFLICT", "PENDING_REVIEW", "SVC_008", "SVC_009", "MIRAFLORES", "SAN_BORJA", "SAN_ISIDRO", "MANUAL_CONFIRMATION", "source_web_sha ~ '^[0-9a-f]{40}$'", "revoke all on table", "grant execute"]) assert.match(sql, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
+  assert.match(harness, /price_version/i); assert.match(harness, /valid_from/i); assert.match(harness, /valid_to/i);
+  assert.doesNotMatch(harness, /effective_from|effective_to/i);
   for (const token of ["begin;", "rollback;", "idempotente", "district_code", "district_name", "district_normalized", "requires_confirmation", "CAJA_CATALOG_SERVICE_COUNT_INVALID", "CAJA_CATALOG_HOME_RULES_INVALID", "CAJA_CATALOG_CONTENT_CONFLICT"]) assert.match(harness, new RegExp(token, "i"));
   assert.match(route, /syncCatalogSnapshotForAdmin/); assert.match(route, /diagnoseCatalogSnapshot/);
+});
+
+test("019 alinea la RPC local con vigencia y versión de precio canónicas", async () => {
+  const [migration, runner, workflow] = await Promise.all([
+    readFile(new URL("../sql/019_catalog_snapshot_contract_alignment.sql", import.meta.url), "utf8"),
+    readFile(new URL("./run-catalog-snapshot-postgres-validation.ps1", import.meta.url), "utf8"),
+    readFile(new URL("../.github/workflows/catalog-contract-sql.yml", import.meta.url), "utf8"),
+  ]);
+  for (const token of ["rename column effective_from to valid_from", "rename column effective_to to valid_to", "add column price_version text not null", "price_version text", "valid_from timestamptz", "valid_to timestamptz", "CAJA_CATALOG_CONTRACT_ALIGNMENT_REQUIRES_EMPTY_SNAPSHOT"]) assert.match(migration, new RegExp(token, "i"));
+  const importFunction = migration.slice(
+    migration.indexOf("create or replace function public.caja_import_catalog_snapshot_v1"),
+  );
+  assert.doesNotMatch(importFunction, /effective_from|effective_to/i);
+  assert.match(
+    importFunction,
+    /insert into public\.caja_catalog_services\([^)]*previous_price_pen,valid_from,valid_to,price_version\)/i,
+  );
+  assert.match(runner, /018_catalogo_canonico_snapshot_local\.sql/i);
+  assert.match(runner, /019_catalog_snapshot_contract_alignment\.sql/i);
+  assert.match(runner, /018_catalogo_canonico_snapshot_local_rollback\.sql/i);
+  assert.match(runner, /CATALOG_SNAPSHOT_POSTGRES_CONTRACT=PASS/);
+  assert.match(runner, /DATABASE_URL/i);
+  assert.match(runner, /Get-Command docker/i);
+  for (const token of ["pull_request:", "workflow_dispatch:", "postgres:16-alpine", "DATABASE_URL", "npm run test:sql"]) assert.match(workflow, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
 });

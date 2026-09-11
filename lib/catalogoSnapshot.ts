@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import {
-  CATALOG_RELEASE_ID, CATALOG_SERVICE_COUNT, CatalogError,
+  CATALOG_COLUMNS, CATALOG_RELEASE_ID, CATALOG_SERVICE_COUNT, CatalogError,
   type CanonicalService,
 } from "./catalogoCanonico.ts";
 
@@ -26,6 +26,14 @@ export type CatalogReleaseMetadata = {
   expected_service_count: number;
 };
 
+/** El payload local conserva el contrato del servicio canónico, sin aliases effective_*. */
+export type CatalogSnapshotService = CanonicalService;
+export const CATALOG_SNAPSHOT_SERVICE_COLUMNS = CATALOG_COLUMNS;
+
+export function toCatalogSnapshotService(service: CanonicalService): CatalogSnapshotService {
+  return Object.fromEntries(CATALOG_SNAPSHOT_SERVICE_COLUMNS.map((key) => [key, service[key]])) as CatalogSnapshotService;
+}
+
 export class CatalogSnapshotError extends Error {
   readonly code: "CONFIGURATION" | "REMOTE" | "HOME" | "LOCAL" | "DISABLED";
 
@@ -34,6 +42,21 @@ export class CatalogSnapshotError extends Error {
     this.name = "CatalogSnapshotError";
     this.code = code;
   }
+}
+
+export function metadataFromRpc(payload: unknown): { metadata: CatalogReleaseMetadata; manifest: Record<string, unknown> } {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new CatalogSnapshotError("REMOTE");
+  const row = payload as Record<string, unknown>;
+  if (row.release_id !== CATALOG_RELEASE_ID || row.status !== "PUBLISHED" ||
+      typeof row.source_web_sha !== "string" || !/^[0-9a-f]{40}$/.test(row.source_web_sha) ||
+      typeof row.source_path !== "string" || !row.source_path.trim() ||
+      typeof row.snapshot_sha256 !== "string" || !/^[0-9a-f]{64}$/.test(row.snapshot_sha256) ||
+      row.expected_service_count !== 50 || row.policy_id !== HOME_POLICY_ID ||
+      row.policy_sha256 !== HOME_POLICY_SHA256 || row.charge_scope !== HOME_CHARGE_SCOPE) throw new CatalogSnapshotError("REMOTE");
+  return {
+    metadata: { release_id: CATALOG_RELEASE_ID, source_web_sha: row.source_web_sha, source_path: row.source_path, source_snapshot_sha256: row.snapshot_sha256, expected_service_count: 50 },
+    manifest: { release_id: CATALOG_RELEASE_ID, policy_id: row.policy_id, policy_sha256: row.policy_sha256, charge_scope: row.charge_scope, active: true },
+  };
 }
 
 const ruleOrder = ["MIRAFLORES", "SAN BORJA", "SURCO", "SAN ISIDRO", "BARRANCO", "DEFAULT"];
@@ -95,7 +118,7 @@ export function buildCatalogSnapshotPayload(metadata: CatalogReleaseMetadata, se
   }
   return {
     release: metadata,
-    services,
+    services: services.map(toCatalogSnapshotService),
     home_manifest: { release_id: metadata.release_id, policy_id: HOME_POLICY_ID, policy_sha256: HOME_POLICY_SHA256, charge_scope: HOME_CHARGE_SCOPE, active: true },
     home_rules: rules,
   };
