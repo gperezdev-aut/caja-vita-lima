@@ -35,7 +35,7 @@ function fixture(): CanonicalService[] {
       return {
         service_code: `SVC_${String(number).padStart(3, "0")}` as CanonicalService["service_code"],
         slug: `servicio-sintetico-${number}`, name_es: `Servicio de prueba ${number}`,
-        name_en: null, category: category as CanonicalService["category"],
+        name_en: null, included_es: null, included_en: null, category: category as CanonicalService["category"],
         commercial_group: null, modality: "TEST_MODALITY", duration_min: 60,
         people_rule_status: "TEST_RULE", people_min: category === "PACKAGE_TWO" ? 2 : 1,
         people_max: category === "PACKAGE_TWO" || number === 8 || number === 9 ? 2 : 1,
