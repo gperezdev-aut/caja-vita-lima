@@ -16,6 +16,8 @@ export type CanonicalService = {
   slug: string;
   name_es: string;
   name_en: string | null;
+  included_es: string | null;
+  included_en: string | null;
   category: CatalogCategory;
   commercial_group: string | null;
   modality: string;
@@ -38,7 +40,7 @@ export type CanonicalService = {
 };
 
 export const CATALOG_COLUMNS = [
-  "service_code", "slug", "name_es", "name_en", "category", "commercial_group",
+  "service_code", "slug", "name_es", "name_en", "included_es", "included_en", "category", "commercial_group",
   "modality", "duration_min", "people_rule_status", "people_min", "people_max",
   "selection_rule", "reservation_behavior", "component_eligible",
   "component_eligibility_status", "active", "price_pen", "previous_price_pen",
@@ -107,7 +109,7 @@ export function validateCanonicalCatalog(payload: unknown): CanonicalService[] {
     for (const key of ["slug", "name_es", "modality", "people_rule_status", "selection_rule", "reservation_behavior", "source_web_sha"] as const) {
       if (!nonEmptyString(row[key])) throw new CatalogError("SERVICE");
     }
-    for (const key of ["name_en", "commercial_group"] as const) {
+    for (const key of ["name_en", "included_es", "included_en", "commercial_group"] as const) {
       if (row[key] !== null && !nonEmptyString(row[key])) throw new CatalogError("SERVICE");
     }
     if (!(nonEmptyString(row.price_version) || (positiveNumber(row.price_version) && Number.isInteger(row.price_version)))) throw new CatalogError("SERVICE");

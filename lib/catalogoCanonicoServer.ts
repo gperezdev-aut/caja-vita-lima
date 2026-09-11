@@ -23,7 +23,7 @@ export function isCanonicalCatalogEnabled(env: CatalogEnvironment = process.env)
   return env.CATALOG_CANONICAL_ENABLED === "true";
 }
 
-function catalogConnection(env: CatalogEnvironment) {
+export function catalogConnection(env: CatalogEnvironment) {
   if (env.CATALOG_EXPECTED_RELEASE_ID !== CATALOG_RELEASE_ID ||
       env.CATALOG_EXPECTED_SERVICE_COUNT !== String(CATALOG_SERVICE_COUNT) ||
       !env.CATALOG_SUPABASE_URL || !env.CATALOG_SUPABASE_SERVICE_ROLE_KEY?.trim()) throw new CatalogError("CONFIGURATION");
