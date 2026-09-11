@@ -4,7 +4,7 @@ begin;
 
 create table if not exists public.caja_catalog_releases (
   release_id text primary key,
-  source_web_sha text not null,
+  source_web_sha text not null check (source_web_sha ~ '^[0-9a-f]{40}$'),
   source_path text not null,
   source_snapshot_sha256 text not null check (source_snapshot_sha256 ~ '^[0-9a-f]{64}$'),
   expected_service_count integer not null check (expected_service_count > 0),
@@ -79,7 +79,7 @@ declare v_release text:=btrim(coalesce(p_release->>'release_id','')); v_existing
 begin
   if jsonb_typeof(p_release)<>'object' or jsonb_typeof(p_services)<>'array' or jsonb_typeof(p_home_manifest)<>'object' or jsonb_typeof(p_home_rules)<>'array' then raise exception 'CAJA_CATALOG_PAYLOAD_INVALID'; end if;
   if v_release<>'catalog-v1-web-4104385' or coalesce((p_release->>'expected_service_count')::int,0)<>50
-    or btrim(coalesce(p_release->>'source_web_sha',''))='' or btrim(coalesce(p_release->>'source_path',''))=''
+    or coalesce(p_release->>'source_web_sha','') !~ '^[0-9a-f]{40}$' or btrim(coalesce(p_release->>'source_path',''))=''
     or coalesce(p_release->>'source_snapshot_sha256','') !~ '^[0-9a-f]{64}$' then raise exception 'CAJA_CATALOG_RELEASE_INVALID'; end if;
   if jsonb_array_length(p_services)<>50 then raise exception 'CAJA_CATALOG_SERVICE_COUNT_INVALID'; end if;
   with s as (select * from jsonb_to_recordset(p_services) as x(release_id text,service_code text,slug text,name_es text,name_en text,included_es text,included_en text,category text,commercial_group text,modality text,duration_min int,people_rule_status text,people_min int,people_max int,selection_rule text,reservation_behavior text,component_eligible boolean,component_eligibility_status text,active boolean,price_pen numeric,previous_price_pen numeric,effective_from timestamptz,effective_to timestamptz)), stats as (select count(*) n,count(distinct service_code) d,count(*) filter(where release_id=v_release and active and price_pen>0 and duration_min>0 and people_min>0 and people_max>=people_min and component_eligibility_status='PENDING_REVIEW') valid from s), cats as (select jsonb_object_agg(category,n) value from (select category,count(*) n from s group by category) q)
@@ -88,7 +88,22 @@ begin
   if not exists (select 1 from jsonb_to_recordset(p_services) as x(service_code text,category text,people_min int,people_max int,selection_rule text,reservation_behavior text) where service_code='SVC_008' and category='HOME' and people_min=1 and people_max=2 and selection_rule='HOME_FLOW' and reservation_behavior='HOME_APPOINTMENT')
     or not exists (select 1 from jsonb_to_recordset(p_services) as x(service_code text,category text,people_min int,people_max int,selection_rule text,reservation_behavior text) where service_code='SVC_009' and category='HOME' and people_min=1 and people_max=2 and selection_rule='HOME_FLOW' and reservation_behavior='HOME_APPOINTMENT') then raise exception 'CAJA_CATALOG_HOME_SERVICES_INVALID'; end if;
   if p_home_manifest->>'release_id'<>v_release or v_policy<>'HOME_MOBILITY_V1' or p_home_manifest->>'charge_scope'<>'PER_APPOINTMENT' or p_home_manifest->>'policy_sha256'<>'c94adc0adb80f56af291221a4363a4ddcd319790af73b64e2c9a42f69dee9bf1' or jsonb_array_length(p_home_rules)<>6 then raise exception 'CAJA_CATALOG_HOME_MANIFEST_INVALID'; end if;
-  if not (select count(*)=6 and count(distinct case when scope='DEFAULT' then 'DEFAULT' else district_normalized end)=6 and bool_and((scope='DISTRICT' and ((district_normalized='MIRAFLORES' and pricing_mode='INCLUDED' and fee_pen=0 and requires_confirmation=false) or (district_normalized in ('SAN BORJA','SURCO','SAN ISIDRO','BARRANCO') and pricing_mode='FIXED' and fee_pen=30 and requires_confirmation=false))) or (scope='DEFAULT' and pricing_mode='MANUAL_CONFIRMATION' and fee_pen is null and requires_confirmation=true)) from jsonb_to_recordset(p_home_rules) as h(scope text,district_code text,district_name text,district_normalized text,pricing_mode text,fee_pen numeric,requires_confirmation boolean)) then raise exception 'CAJA_CATALOG_HOME_RULES_INVALID'; end if;
+  if not (select count(*)=6 and count(distinct case when scope='DEFAULT' then 'DEFAULT' else district_normalized end)=6 from jsonb_to_recordset(p_home_rules) as h(scope text,district_code text,district_name text,district_normalized text,pricing_mode text,fee_pen numeric,requires_confirmation boolean)) then raise exception 'CAJA_CATALOG_HOME_RULES_INVALID'; end if;
+  -- El hash contractual llega validado por el servidor; SQL protege además cada campo de cada regla.
+  if exists (with actual as (
+    select scope,district_code,district_name,district_normalized,pricing_mode,fee_pen,requires_confirmation
+    from jsonb_to_recordset(p_home_rules) as h(scope text,district_code text,district_name text,district_normalized text,pricing_mode text,fee_pen numeric,requires_confirmation boolean)
+  ), expected as (
+    values
+      ('DISTRICT'::text,'MIRAFLORES'::text,'Miraflores'::text,'MIRAFLORES'::text,'INCLUDED'::text,0::numeric,false),
+      ('DISTRICT','SAN_BORJA','San Borja','SAN BORJA','FIXED',30::numeric,false),
+      ('DISTRICT','SURCO','Surco','SURCO','FIXED',30::numeric,false),
+      ('DISTRICT','SAN_ISIDRO','San Isidro','SAN ISIDRO','FIXED',30::numeric,false),
+      ('DISTRICT','BARRANCO','Barranco','BARRANCO','FIXED',30::numeric,false),
+      ('DEFAULT',null::text,null::text,null::text,'MANUAL_CONFIRMATION',null::numeric,true)
+  ) select 1 from ((select * from actual except select * from expected) union all (select * from expected except select * from actual)) differences) then
+    raise exception 'CAJA_CATALOG_HOME_RULES_INVALID';
+  end if;
   select * into v_existing from public.caja_catalog_releases where release_id=v_release for update;
   if found then
     if v_existing.source_web_sha<>p_release->>'source_web_sha' or v_existing.source_path<>p_release->>'source_path' or v_existing.source_snapshot_sha256<>p_release->>'source_snapshot_sha256' or v_existing.expected_service_count<>50 or v_existing.home_policy_id<>v_policy or v_existing.home_policy_sha256<>p_home_manifest->>'policy_sha256' then raise exception 'CAJA_CATALOG_RELEASE_CONFLICT'; end if;

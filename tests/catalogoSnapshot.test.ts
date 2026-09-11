@@ -76,7 +76,7 @@ test("acción y diagnóstico son solo ADMIN_GERALD y nunca devuelven credenciale
 
 test("migración y harness 018 son privados, inmutables y transaccionales", async () => {
   const [sql, harness, route] = await Promise.all([readFile(new URL("../sql/018_catalogo_canonico_snapshot_local.sql", import.meta.url), "utf8"), readFile(new URL("../sql/tests/018_catalogo_canonico_snapshot_local_rollback.sql", import.meta.url), "utf8"), readFile(new URL("../app/api/admin/catalogo/snapshot/route.ts", import.meta.url), "utf8")]);
-  for (const token of ["caja_catalog_releases", "caja_catalog_services", "caja_catalog_home_policy", "caja_import_catalog_snapshot_v1", "security definer", "CAJA_CATALOG_SNAPSHOT_IMMUTABLE", "CAJA_CATALOG_CONTENT_CONFLICT", "PENDING_REVIEW", "SVC_008", "SVC_009", "revoke all on table", "grant execute"]) assert.match(sql, new RegExp(token, "i"));
-  for (const token of ["begin;", "rollback;", "idempotente", "CAJA_CATALOG_SERVICE_COUNT_INVALID", "CAJA_CATALOG_HOME_RULES_INVALID", "CAJA_CATALOG_CONTENT_CONFLICT"]) assert.match(harness, new RegExp(token, "i"));
+  for (const token of ["caja_catalog_releases", "caja_catalog_services", "caja_catalog_home_policy", "caja_import_catalog_snapshot_v1", "security definer", "CAJA_CATALOG_SNAPSHOT_IMMUTABLE", "CAJA_CATALOG_CONTENT_CONFLICT", "PENDING_REVIEW", "SVC_008", "SVC_009", "MIRAFLORES", "SAN_BORJA", "SAN_ISIDRO", "MANUAL_CONFIRMATION", "source_web_sha ~ '^[0-9a-f]{40}$'", "revoke all on table", "grant execute"]) assert.match(sql, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
+  for (const token of ["begin;", "rollback;", "idempotente", "district_code", "district_name", "district_normalized", "requires_confirmation", "CAJA_CATALOG_SERVICE_COUNT_INVALID", "CAJA_CATALOG_HOME_RULES_INVALID", "CAJA_CATALOG_CONTENT_CONFLICT"]) assert.match(harness, new RegExp(token, "i"));
   assert.match(route, /syncCatalogSnapshotForAdmin/); assert.match(route, /diagnoseCatalogSnapshot/);
 });
