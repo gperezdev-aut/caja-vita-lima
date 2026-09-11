@@ -15,6 +15,12 @@ conexiones server-side separadas y está apagada por defecto mediante
 `CATALOG_SNAPSHOT_SYNC_ENABLED=false`. Nunca expone claves, URLs privadas ni
 el payload completo. La lectura runtime de Fase 3A no se reemplaza todavía.
 
+Para sincronizar el snapshot, Caja consume del catálogo remoto únicamente
+`catalog_services_read_v1`, `catalog_home_policy_read_v1` y la RPC privada
+`catalog_get_snapshot_metadata_v1`. Caja no lee directamente
+`catalog_releases` ni `catalog_home_policy_manifests_v1`; la RPC devuelve la
+metadata mínima del release PUBLISHED y del único manifest HOME activo.
+
 Fase 3B.0-B no cambia **Preparar cita** ni **Nueva atención**. Ambas continúan
 en legacy, igual que los componentes personalizados: los 50 servicios tienen
 `component_eligibility_status=PENDING_REVIEW` y no habilitan componentes.

@@ -33,6 +33,36 @@ async function getJson(fetcher: Fetcher, url: string, key: string): Promise<unkn
   } catch { throw new CatalogSnapshotError("REMOTE"); }
 }
 
+async function postJson(fetcher: Fetcher, url: string, key: string, body: Record<string, string>): Promise<unknown> {
+  try {
+    const response = await fetcher(url, { method: "POST", headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json", "Content-Profile": "public", "Accept-Profile": "public" }, body: JSON.stringify(body), cache: "no-store", redirect: "error", signal: AbortSignal.timeout(10_000) });
+    if (!response.ok) throw new Error();
+    return await response.json();
+  } catch { throw new CatalogSnapshotError("REMOTE"); }
+}
+
+function metadataFromRpc(payload: unknown): { metadata: CatalogReleaseMetadata; manifest: Record<string, unknown> } {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new CatalogSnapshotError("REMOTE");
+  const row = payload as Record<string, unknown>;
+  if (row.release_id !== CATALOG_RELEASE_ID || row.status !== "PUBLISHED" ||
+      typeof row.source_web_sha !== "string" || !/^[0-9a-f]{40}$/.test(row.source_web_sha) ||
+      typeof row.source_path !== "string" || !row.source_path.trim() ||
+      typeof row.snapshot_sha256 !== "string" || !/^[0-9a-f]{64}$/.test(row.snapshot_sha256) ||
+      row.expected_service_count !== 50 || row.policy_id !== "HOME_MOBILITY_V1" ||
+      row.policy_sha256 !== "c94adc0adb80f56af291221a4363a4ddcd319790af73b64e2c9a42f69dee9bf1" ||
+      row.charge_scope !== "PER_APPOINTMENT") throw new CatalogSnapshotError("REMOTE");
+  return {
+    metadata: {
+      release_id: CATALOG_RELEASE_ID,
+      source_web_sha: row.source_web_sha,
+      source_path: row.source_path,
+      source_snapshot_sha256: row.snapshot_sha256,
+      expected_service_count: 50,
+    },
+    manifest: { release_id: CATALOG_RELEASE_ID, policy_id: row.policy_id, policy_sha256: row.policy_sha256, charge_scope: row.charge_scope, active: true },
+  };
+}
+
 export function isCatalogSnapshotSyncEnabled(env: SnapshotEnv = process.env) {
   return env.CATALOG_SNAPSHOT_SYNC_ENABLED === "true";
 }
@@ -44,20 +74,10 @@ export async function syncCanonicalCatalogSnapshot({ env = process.env, fetcher 
     const local = localConnection(env, catalog);
     const read = await readCanonicalCatalog({ env, fetcher });
     if (read.source !== "canonical" || !read.services) throw new CatalogSnapshotError("REMOTE");
-    const query = new URLSearchParams({ select: "release_id,source_web_sha,source_path,snapshot_sha256,expected_service_count,status", release_id: `eq.${CATALOG_RELEASE_ID}`, status: "eq.PUBLISHED", limit: "2" });
-    const releases = await getJson(fetcher, `${catalog.origin}/rest/v1/catalog_releases?${query}`, catalog.key);
-    const manifest = await getJson(fetcher, `${catalog.origin}/rest/v1/catalog_home_policy_manifests_v1?release_id=eq.${CATALOG_RELEASE_ID}&active=eq.true&select=release_id,policy_id,policy_sha256,charge_scope,active&limit=2`, catalog.key);
+    const remoteMetadata = await postJson(fetcher, `${catalog.origin}/rest/v1/rpc/catalog_get_snapshot_metadata_v1`, catalog.key, { p_release_id: CATALOG_RELEASE_ID });
     const rules = await getJson(fetcher, `${catalog.origin}/rest/v1/catalog_home_policy_read_v1?release_id=eq.${CATALOG_RELEASE_ID}&select=scope,district_code,district_name,district_normalized,pricing_mode,fee_pen,requires_confirmation,active&limit=7`, catalog.key);
-    if (!Array.isArray(releases) || releases.length !== 1 || !Array.isArray(manifest) || manifest.length !== 1) throw new CatalogSnapshotError("REMOTE");
-    const release = releases[0] as Record<string, unknown>;
-    const metadata: CatalogReleaseMetadata = {
-      release_id: release.release_id === CATALOG_RELEASE_ID ? CATALOG_RELEASE_ID : (() => { throw new CatalogSnapshotError("REMOTE"); })(),
-      source_web_sha: typeof release.source_web_sha === "string" ? release.source_web_sha : (() => { throw new CatalogSnapshotError("REMOTE"); })(),
-      source_path: typeof release.source_path === "string" ? release.source_path : (() => { throw new CatalogSnapshotError("REMOTE"); })(),
-      source_snapshot_sha256: typeof release.snapshot_sha256 === "string" ? release.snapshot_sha256 : (() => { throw new CatalogSnapshotError("REMOTE"); })(),
-      expected_service_count: release.expected_service_count === 50 ? 50 : (() => { throw new CatalogSnapshotError("REMOTE"); })(),
-    };
-    const payload = buildCatalogSnapshotPayload(metadata, read.services, validateHomePolicy(manifest[0], rules));
+    const { metadata, manifest } = metadataFromRpc(remoteMetadata);
+    const payload = buildCatalogSnapshotPayload(metadata, read.services, validateHomePolicy(manifest, rules));
     const response = await fetcher(`${local.origin}/rest/v1/rpc/caja_import_catalog_snapshot_v1`, { method: "POST", headers: { apikey: local.key, Authorization: `Bearer ${local.key}`, "Content-Type": "application/json", Prefer: "return=representation", "Content-Profile": "public" }, body: JSON.stringify({ p_release: payload.release, p_services: payload.services, p_home_manifest: payload.home_manifest, p_home_rules: payload.home_rules }), cache: "no-store", redirect: "error", signal: AbortSignal.timeout(10_000) });
     if (!response.ok) throw new CatalogSnapshotError("LOCAL");
     const result = await response.json() as Record<string, unknown>;

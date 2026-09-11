@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { CATALOG_CATEGORY_COUNTS, type CanonicalService } from "../lib/catalogoCanonico.ts";
-import { HOME_POLICY_SHA256, validateHomePolicy } from "../lib/catalogoSnapshot.ts";
+import { CatalogSnapshotError, HOME_POLICY_SHA256, validateHomePolicy } from "../lib/catalogoSnapshot.ts";
 
 const hooks = registerHooks({ resolve(specifier, context, nextResolve) {
   if (specifier === "server-only") return { url: "data:text/javascript,export {};", shortCircuit: true };
@@ -32,13 +32,14 @@ const rules = [
   ["MIRAFLORES", "Miraflores", "INCLUDED", 0, false], ["SAN_BORJA", "San Borja", "FIXED", 30, false], ["SURCO", "Surco", "FIXED", 30, false], ["SAN_ISIDRO", "San Isidro", "FIXED", 30, false], ["BARRANCO", "Barranco", "FIXED", 30, false],
 ].map(([district_code, district_name, pricing_mode, fee_pen, requires_confirmation]) => ({ scope: "DISTRICT", district_code, district_name, district_normalized: String(district_code).replace("_", " "), pricing_mode, fee_pen, requires_confirmation })).concat([{ scope: "DEFAULT", district_code: null, district_name: null, district_normalized: null, pricing_mode: "MANUAL_CONFIRMATION", fee_pen: null, requires_confirmation: true }]);
 const manifest = { release_id: "catalog-v1-web-4104385", policy_id: "HOME_MOBILITY_V1", charge_scope: "PER_APPOINTMENT", policy_sha256: HOME_POLICY_SHA256, active: true };
+const metadata = { release_id: "catalog-v1-web-4104385", source_web_sha: "410438549a92d4766dcdeb4d17af07beba78f844", source_path: "content/services.ts", snapshot_sha256: "6ab5e47ac58c00a1a2f6739eab80fb8fda69e174733831f135ed5b8f04f9f654", expected_service_count: 50, status: "PUBLISHED", policy_id: "HOME_MOBILITY_V1", policy_sha256: HOME_POLICY_SHA256, charge_scope: "PER_APPOINTMENT" };
 
 test("valida la política HOME contractual y rechaza cambios económicos", () => {
   assert.equal(validateHomePolicy(manifest, rules).length, 6);
   assert.throws(() => validateHomePolicy(manifest, rules.map((rule, i) => i === 1 ? { ...rule, fee_pen: 15 } : rule)));
 });
 
-test("sync server-side separa credenciales, consulta contrato remoto y llama solo RPC local", async () => {
+test("sync server-side consume metadata por RPC y llama solo RPC local", async () => {
   const calls: { url: URL; init?: RequestInit }[] = [];
   const result = await syncCanonicalCatalogSnapshot({ env, fetcher: async (input, init) => {
     const url = new URL(String(input)); calls.push({ url, init });
@@ -46,9 +47,14 @@ test("sync server-side separa credenciales, consulta contrato remoto y llama sol
     if (url.origin === env.CATALOG_SUPABASE_URL) {
       assert.equal(headers.get("apikey"), catalogKey);
       if (url.pathname.endsWith("catalog_services_read_v1")) return Response.json(services(), { headers: { "content-range": "0-49/50" } });
-      if (url.pathname.endsWith("catalog_releases")) return Response.json([{ release_id: "catalog-v1-web-4104385", source_web_sha: "4104385", source_path: "content/services.ts", snapshot_sha256: "6ab5e47ac58c00a1a2f6739eab80fb8fda69e174733831f135ed5b8f04f9f654", expected_service_count: 50, status: "PUBLISHED" }]);
-      if (url.pathname.endsWith("catalog_home_policy_manifests_v1")) return Response.json([manifest]);
-      return Response.json(rules);
+      if (url.pathname.endsWith("catalog_get_snapshot_metadata_v1")) {
+        assert.equal(init?.method, "POST");
+        assert.deepEqual(JSON.parse(String(init?.body)), { p_release_id: "catalog-v1-web-4104385" });
+        assert.equal(headers.get("Content-Profile"), "public");
+        return Response.json(metadata);
+      }
+      if (url.pathname.endsWith("catalog_home_policy_read_v1")) return Response.json(rules);
+      assert.fail(`unexpected catalog endpoint: ${url.pathname}`);
     }
     assert.equal(url.origin, env.SUPABASE_URL);
     assert.equal(url.pathname, "/rest/v1/rpc/caja_import_catalog_snapshot_v1");
@@ -57,7 +63,33 @@ test("sync server-side separa credenciales, consulta contrato remoto y llama sol
     return Response.json({ release_id: "catalog-v1-web-4104385", services: 50, home_rules: 6, active: true });
   } });
   assert.deepEqual(result, { source: "canonical", release: "catalog-v1-web-4104385", services: 50, home_rules: 6, checksum: HOME_POLICY_SHA256, status: "SYNCED" });
-  assert.equal(calls.length, 5);
+  assert.equal(calls.length, 4);
+  assert.ok(calls.some(({ url }) => url.pathname.endsWith("catalog_get_snapshot_metadata_v1")));
+  assert.ok(calls.every(({ url }) => !url.pathname.endsWith("catalog_releases") && !url.pathname.endsWith("catalog_home_policy_manifests_v1")));
+});
+
+test("metadata RPC inválida, incompleta o rechazada falla REMOTE antes de importar", async () => {
+  const invalidMetadata = [
+    { ...metadata, release_id: "catalog-v2-web-4104385" }, { ...metadata, status: "DRAFT" },
+    { ...metadata, source_web_sha: "invalid" }, { ...metadata, snapshot_sha256: "invalid" },
+    { ...metadata, expected_service_count: 49 }, { ...metadata, policy_id: "HOME_MOBILITY_V2" },
+    { ...metadata, policy_sha256: "0".repeat(64) }, { ...metadata, charge_scope: "PER_SERVICE" }, {}, [],
+  ];
+  for (const remoteMetadata of invalidMetadata) {
+    await assert.rejects(syncCanonicalCatalogSnapshot({ env, fetcher: async (input) => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith("catalog_services_read_v1")) return Response.json(services(), { headers: { "content-range": "0-49/50" } });
+      if (url.pathname.endsWith("catalog_get_snapshot_metadata_v1")) return Response.json(remoteMetadata);
+      assert.fail(`metadata inválida no debe consultar: ${url.pathname}`);
+    } }), (error: unknown) => error instanceof CatalogSnapshotError && error.code === "REMOTE");
+  }
+  for (const status of [403, 500]) {
+    await assert.rejects(syncCanonicalCatalogSnapshot({ env, fetcher: async (input) => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith("catalog_services_read_v1")) return Response.json(services(), { headers: { "content-range": "0-49/50" } });
+      return new Response("provider detail", { status });
+    } }), (error: unknown) => error instanceof CatalogSnapshotError && error.code === "REMOTE");
+  }
 });
 
 test("sync fail-closed no usa fallback legacy ni mezcla claves", async () => {
