@@ -118,7 +118,7 @@ test("migración y harness 018 son privados, inmutables y transaccionales", asyn
 test("019 alinea la RPC local con vigencia y versión de precio canónicas", async () => {
   const [migration, runner, workflow] = await Promise.all([
     readFile(new URL("../sql/019_catalog_snapshot_contract_alignment.sql", import.meta.url), "utf8"),
-    readFile(new URL("./run-catalog-snapshot-postgres-validation.ps1", import.meta.url), "utf8"),
+    readFile(new URL("./run-catalog-snapshot-postgres-validation.mjs", import.meta.url), "utf8"),
     readFile(new URL("../.github/workflows/catalog-contract-sql.yml", import.meta.url), "utf8"),
   ]);
   for (const token of ["rename column effective_from to valid_from", "rename column effective_to to valid_to", "add column price_version text not null", "price_version text", "valid_from timestamptz", "valid_to timestamptz", "CAJA_CATALOG_CONTRACT_ALIGNMENT_REQUIRES_EMPTY_SNAPSHOT"]) assert.match(migration, new RegExp(token, "i"));
@@ -135,6 +135,7 @@ test("019 alinea la RPC local con vigencia y versión de precio canónicas", asy
   assert.match(runner, /018_catalogo_canonico_snapshot_local_rollback\.sql/i);
   assert.match(runner, /CATALOG_SNAPSHOT_POSTGRES_CONTRACT=PASS/);
   assert.match(runner, /DATABASE_URL/i);
-  assert.match(runner, /Get-Command docker/i);
+  assert.match(runner, /spawnSync/i);
+  assert.match(runner, /docker/i);
   for (const token of ["pull_request:", "workflow_dispatch:", "postgres:16-alpine", "DATABASE_URL", "npm run test:sql"]) assert.match(workflow, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
 });
