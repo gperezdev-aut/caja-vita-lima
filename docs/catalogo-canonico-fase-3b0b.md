@@ -10,6 +10,11 @@ su copia completa. Servicios, precios y reglas HOME quedan inmutables; un
 reintento con contenido idéntico es idempotente y cualquier diferencia para la
 misma release se rechaza.
 
+El contrato local conserva `valid_from`, `valid_to` y `price_version`, los
+mesmos nombres del catálogo canónico; no usa aliases `effective_*`. La
+migración 019 exige que el snapshot esté vacío antes de alinear 018 y preserva
+la versión de precio que originó cada copia.
+
 La sincronización administrativa requiere `ADMIN_GERALD`, usa las dos
 conexiones server-side separadas y está apagada por defecto mediante
 `CATALOG_SNAPSHOT_SYNC_ENABLED=false`. Nunca expone claves, URLs privadas ni
@@ -20,6 +25,11 @@ Para sincronizar el snapshot, Caja consume del catálogo remoto únicamente
 `catalog_get_snapshot_metadata_v1`. Caja no lee directamente
 `catalog_releases` ni `catalog_home_policy_manifests_v1`; la RPC devuelve la
 metadata mínima del release PUBLISHED y del único manifest HOME activo.
+
+La conexión canónica queda hoy limitada por allowlist al proyecto de staging.
+Producción es NO-GO mientras no exista una allowlist explícita por environment
+o una validación equivalente de project ref; nunca se aceptará una URL canónica
+arbitraria.
 
 Fase 3B.0-B no cambia **Preparar cita** ni **Nueva atención**. Ambas continúan
 en legacy, igual que los componentes personalizados: los 50 servicios tienen

@@ -11,7 +11,8 @@
     "build": "next build --webpack",
     "start": "next start",
     "typecheck": "tsc --noEmit --incremental false",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test:sql": "node tests/run-catalog-snapshot-postgres-validation.mjs"
   },
   "dependencies": {
     "@types/node": "26.1.1",

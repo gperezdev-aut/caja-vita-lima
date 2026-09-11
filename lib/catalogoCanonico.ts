@@ -32,7 +32,7 @@ export type CanonicalService = {
   active: true;
   price_pen: number;
   previous_price_pen: number | null;
-  price_version: string | number;
+  price_version: string;
   valid_from: string;
   valid_to: string | null;
   release_id: typeof CATALOG_RELEASE_ID;
@@ -112,7 +112,7 @@ export function validateCanonicalCatalog(payload: unknown): CanonicalService[] {
     for (const key of ["name_en", "included_es", "included_en", "commercial_group"] as const) {
       if (row[key] !== null && !nonEmptyString(row[key])) throw new CatalogError("SERVICE");
     }
-    if (!(nonEmptyString(row.price_version) || (positiveNumber(row.price_version) && Number.isInteger(row.price_version)))) throw new CatalogError("SERVICE");
+    if (!nonEmptyString(row.price_version)) throw new CatalogError("SERVICE");
     if (!positiveNumber(row.price_pen) || !positiveNumber(row.duration_min) ||
         (row.previous_price_pen !== null && !positiveNumber(row.previous_price_pen))) throw new CatalogError("ECONOMICS");
     if (!positiveNumber(row.people_min) || !Number.isInteger(row.people_min) ||

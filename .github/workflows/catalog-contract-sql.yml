@@ -1,0 +1,47 @@
+name: Validate catalog snapshot PostgreSQL
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DATABASE_URL: postgresql://caja_ci:caja_ci_only_password@localhost:5432/caja_contract_test
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: caja_contract_test
+          POSTGRES_USER: caja_ci
+          POSTGRES_PASSWORD: caja_ci_only_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U caja_ci -d caja_contract_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install --yes postgresql-client
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate 018, 019 and the rollback harness
+        shell: pwsh
+        run: npm run test:sql
