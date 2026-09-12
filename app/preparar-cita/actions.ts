@@ -72,15 +72,19 @@ function crearId(prefix: string) {
 export async function buscarClienteFichaAction(crudo: string, pais: string) {
   await requireModuleAccess("preparar-cita");
   const normalizado = normalizarTelefonoE164(crudo, pais);
-  if (!normalizado.ok) return { error: "Teléfono inválido.", cliente: "" };
+  if (!normalizado.ok) return { error: "Teléfono inválido.", cliente: "", idioma: "" };
 
-  const result = await supabaseSelectWhere<{ cliente?: string }>(
+  const result = await supabaseSelectWhere<{ cliente?: string; idioma?: string }>(
     "clientes",
-    `select=cliente&whatsapp_e164=eq.${encodeURIComponent(normalizado.e164)}&limit=1`
+    `select=cliente,idioma&whatsapp_e164=eq.${encodeURIComponent(normalizado.e164)}&limit=1`
   );
 
-  if (result.error) return { error: result.error, cliente: "" };
-  return { cliente: String(result.data[0]?.cliente ?? ""), error: "" };
+  if (result.error) return { error: result.error, cliente: "", idioma: "" };
+  return {
+    cliente: String(result.data[0]?.cliente ?? ""),
+    idioma: String(result.data[0]?.idioma ?? "es"),
+    error: "",
+  };
 }
 
 export async function prepararCitaAction(
