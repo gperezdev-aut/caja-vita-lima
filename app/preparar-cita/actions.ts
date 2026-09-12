@@ -14,7 +14,7 @@ import {
   describirAtencionDomicilio,
   horarioDentroDeSede,
   redondearDinero,
-  calcularExpiracionFicha,
+  resolverExpiracionFichaVigente,
   calcularAtencionPersonalizada,
   validarDatosDomicilio,
   validarPreparacionMvp,
@@ -224,6 +224,10 @@ export async function prepararCitaAction(
   ) {
     return { ok: false, error: "La cita terminaría fuera del horario de la sede." };
   }
+  const expiracionFicha = resolverExpiracionFichaVigente(fecha, hora, duracionMin);
+  if (!expiracionFicha.ok) {
+    return { ok: false, error: "La hora seleccionada ya terminó. Elige una hora vigente antes de generar el enlace." };
+  }
 
   const adelantoRequerido = personalizada?.ok ? personalizada.adelantoRequerido : calcularAdelantoRequerido({
     canal,
@@ -296,7 +300,7 @@ export async function prepararCitaAction(
       reserva_id: reservaId,
       pago_id: crearId("PAY"),
       token,
-      token_expira: calcularExpiracionFicha(fecha, hora, duracionMin),
+      token_expira: expiracionFicha.tokenExpira,
     },
   });
 

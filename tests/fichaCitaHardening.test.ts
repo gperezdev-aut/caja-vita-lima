@@ -5,12 +5,14 @@ import {
   FICHA_CONTRATO_VERSION,
   estadoConfirmacionPublica,
   calcularExpiracionFicha,
+  evaluarEstadoToken,
   expiracionTokenFichaValida,
   identidadSincronizada,
   normalizarTelefonoE164,
   pagoVisibleCliente,
   preservarDatosCliente,
   resolverClientePorTelefono,
+  resolverExpiracionFichaVigente,
   resolverReintentoPreparacion,
   precioCatalogoActivo,
   validarCatalogoSolicitado,
@@ -127,6 +129,52 @@ test("el payload de prepararCitaAction acepta un token que expira exactamente al
   }), false);
 });
 
+test("un enlace recién creado hoy permanece vigente con hora de Lima", () => {
+  const now = Date.parse("2026-09-11T23:00:00Z"); // 6:00 p. m. en Lima
+  const result = resolverExpiracionFichaVigente("2026-09-11", "19:00", 60, now);
+  assert.deepEqual(result, { ok: true, tokenExpira: "2026-09-12T01:00:00.000Z" });
+  assert.equal(result.ok && Date.parse(result.tokenExpira) > now, true);
+  assert.equal(result.ok && evaluarEstadoToken({ estado_ficha: "pendiente", token_expira: result.tokenExpira }, now), "vigente");
+});
+
+test("una fecha futura genera un enlace vigente", () => {
+  const result = resolverExpiracionFichaVigente(
+    "2026-09-12",
+    "10:00",
+    60,
+    Date.parse("2026-09-11T23:00:00Z"),
+  );
+  assert.equal(result.ok, true);
+  assert.equal(result.ok && evaluarEstadoToken({ estado_ficha: "pendiente", token_expira: result.tokenExpira }, Date.parse("2026-09-11T23:00:00Z")), "vigente");
+});
+
+test("no crea un enlace si la cita de hoy realmente ya terminó", () => {
+  const result = resolverExpiracionFichaVigente(
+    "2026-09-11",
+    "10:00",
+    60,
+    Date.parse("2026-09-11T18:00:00Z"), // 1:00 p. m. en Lima
+  );
+  assert.deepEqual(result, { ok: false });
+  assert.equal(evaluarEstadoToken({ estado_ficha: "pendiente", token_expira: "2026-09-11T16:00:00.000Z" }, Date.parse("2026-09-11T18:00:00Z")), "token_vencido");
+});
+
+test("la expiración cruza medianoche de Lima sin vencer anticipadamente", () => {
+  const beforeEnd = Date.parse("2026-09-12T05:29:59Z");
+  const result = resolverExpiracionFichaVigente("2026-09-11", "23:30", 60, beforeEnd);
+  assert.deepEqual(result, { ok: true, tokenExpira: "2026-09-12T05:30:00.000Z" });
+  assert.equal(result.ok && evaluarEstadoToken({ estado_ficha: "pendiente", token_expira: result.tokenExpira }, beforeEnd), "vigente");
+  assert.equal(resolverExpiracionFichaVigente("2026-09-11", "23:30", 60, beforeEnd + 1000).ok, false);
+});
+
+test("prepararCitaAction valida la vigencia calculada antes de invocar la RPC", async () => {
+  const action = await readFile(new URL("../app/preparar-cita/actions.ts", import.meta.url), "utf8");
+  const validation = action.indexOf("resolverExpiracionFichaVigente(fecha, hora, duracionMin)");
+  const rpc = action.indexOf("const rpc = await supabaseRpc");
+  assert.ok(validation > 0 && rpc > validation);
+  assert.match(action, /La hora seleccionada ya terminó/);
+});
+
 test("un código de convenio solo se admite en Cuponidad o Bee", () => {
   assert.equal(validarCodigoCuponPorCanal("cuponidad", ""), "Falta el código de cupón.");
   assert.equal(validarCodigoCuponPorCanal("bee", "BEE-123"), "");
@@ -212,6 +260,15 @@ test("normaliza Perú, EE. UU., Canadá, España y Japón y rechaza inconsistenc
   assert.deepEqual(normalizarTelefonoE164("09012345678", "JP"), { ok: true, e164: "+819012345678", pais: "JP" });
   assert.deepEqual(normalizarTelefonoE164("+34612345678", "PE"), { ok: false });
   assert.deepEqual(normalizarTelefonoE164("123", "PE"), { ok: false });
+});
+
+test("normaliza formatos pegados del operador sin duplicar prefijos", () => {
+  assert.deepEqual(normalizarTelefonoE164("987 654-321", "PE"), { ok: true, e164: "+51987654321", pais: "PE" });
+  assert.deepEqual(normalizarTelefonoE164("+51 987 654 321", "PE"), { ok: true, e164: "+51987654321", pais: "PE" });
+  assert.deepEqual(normalizarTelefonoE164("+1 (305) 555-1234", "US"), { ok: true, e164: "+13055551234", pais: "US" });
+  const peruInternacional = normalizarTelefonoE164("+51 987 654 321", "PE");
+  assert.equal(peruInternacional.ok, true);
+  if (peruInternacional.ok) assert.notEqual(peruInternacional.e164, "+5151987654321");
 });
 
 test("catálogo rechaza código inexistente, duplicado o económicamente inválido", () => {
