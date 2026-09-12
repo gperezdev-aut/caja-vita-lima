@@ -118,10 +118,11 @@ type CitaPresentation = {
   pendiente: number;
   comprobante: string;
   alerta: string;
+  puedeAtender: boolean;
 };
 
 function CitaMobileCard({ cita }: { cita: CitaPresentation }) {
-  const { row, movimientoId, terapistas, pendiente, comprobante, alerta } = cita;
+  const { row, movimientoId, terapistas, pendiente, comprobante, alerta, puedeAtender } = cita;
   const comprobanteOk = comprobante.toUpperCase().includes("OK");
 
   return (
@@ -184,6 +185,14 @@ function CitaMobileCard({ cita }: { cita: CitaPresentation }) {
       )}
 
       <small className="citasHoyMovement">Movimiento: {movimientoId}</small>
+      {puedeAtender && (
+        <a
+          className="citasHoyStartButton"
+          href={`/citas-hoy/${encodeURIComponent(movimientoId)}/atencion`}
+        >
+          {row.estado === "En atención" ? "Continuar atención" : "Iniciar atención"}
+        </a>
+      )}
     </article>
   );
 }
@@ -207,7 +216,7 @@ export default async function CitasHoyPage({
   const sedeLabel = selectedSede === "TODAS" ? "todas las sedes" : selectedSede;
 
   const movimientosQuery = [
-    "select=movimiento_id,fecha,hora,sede,cliente,whatsapp,servicio,total_cobrar,total_pagado,pendiente,estado,estado_boleta,tipo_comprobante,estado_comprobante_manual,numero_comprobante_final,source_type,created_at",
+    "select=movimiento_id,fecha,hora,sede,cliente_id,cliente,whatsapp,n_pax,servicio,total_cobrar,total_pagado,pendiente,estado,estado_boleta,tipo_comprobante,estado_comprobante_manual,numero_comprobante_final,tipo_movimiento,source_type,source_id,created_at",
     `fecha=eq.${selectedFecha}`,
   ];
 
@@ -216,14 +225,21 @@ export default async function CitasHoyPage({
     `fecha=eq.${selectedFecha}`,
   ];
 
+  const reservasQuery = [
+    "select=reserva_id,source_id,cliente_id,estado,requiere_confirmacion,confirmado_en",
+    `fecha_cita=eq.${selectedFecha}`,
+  ];
+
   if (selectedSede !== "TODAS") {
     const encodedSede = encodeURIComponent(selectedSede);
     movimientosQuery.push(`sede=eq.${encodedSede}`);
     detallesQuery.push(`sede=eq.${encodedSede}`);
+    reservasQuery.push(`sede=eq.${encodedSede}`);
   }
 
   movimientosQuery.push("order=hora.asc");
   detallesQuery.push("order=persona_n.asc");
+  reservasQuery.push("order=hora_cita.asc");
 
   const movimientos = await supabaseSelectWhere<Row>(
     "caja_movimientos",
@@ -233,6 +249,11 @@ export default async function CitasHoyPage({
   const detalles = await supabaseSelectWhere<Row>(
     "caja_atencion_detalle",
     detallesQuery.join("&")
+  );
+
+  const reservas = await supabaseSelectWhere<Row>(
+    "citas_reservadas",
+    reservasQuery.join("&")
   );
 
   const whatsappList = Array.from(
@@ -263,11 +284,14 @@ export default async function CitasHoyPage({
     }
   }
 
-  const errors = [config.error, movimientos.error, detalles.error, alertasResult.error].filter(
+  const errors = [config.error, movimientos.error, detalles.error, reservas.error, alertasResult.error].filter(
     Boolean
   );
 
   const detallePorMovimiento = new Map<string, Row[]>();
+  const reservaPorId = new Map(
+    reservas.data.map((row) => [String(row.reserva_id ?? ""), row])
+  );
 
   for (const detalle of detalles.data) {
     const movimientoId = String(detalle.movimiento_id ?? "");
@@ -308,6 +332,16 @@ export default async function CitasHoyPage({
         "-"
     );
     const alerta = alertaPorWhatsapp.get(String(row.whatsapp ?? "").trim()) ?? "";
+    const reserva = reservaPorId.get(String(row.source_id ?? ""));
+    const reservaRelacionada = Boolean(
+      reserva && reserva.source_id === movimientoId &&
+      reserva.cliente_id === row.cliente_id &&
+      (reserva.requiere_confirmacion !== true || Boolean(reserva.confirmado_en))
+    );
+    const puedeAtender = reservaRelacionada && (
+      (row.tipo_movimiento === "RESERVA_APP" && row.estado === "Reservado" && reserva?.estado === "PENDIENTE") ||
+      (row.tipo_movimiento === "ATENCION_APP" && row.estado === "En atención" && reserva?.estado === "EN_ATENCION")
+    );
 
     return {
       row,
@@ -316,6 +350,7 @@ export default async function CitasHoyPage({
       pendiente,
       comprobante,
       alerta,
+      puedeAtender,
     };
   });
 
@@ -511,6 +546,7 @@ export default async function CitasHoyPage({
                       <th>Estado</th>
                       <th>Comprobante</th>
                       <th>Movimiento</th>
+                      <th>Acción</th>
                     </tr>
                   </thead>
 
@@ -523,6 +559,7 @@ export default async function CitasHoyPage({
                         pendiente,
                         comprobante,
                         alerta,
+                        puedeAtender,
                       }) => (
                         <tr key={movimientoId}>
                           <td>{hourLabel(row.hora)}</td>
@@ -568,6 +605,13 @@ export default async function CitasHoyPage({
                             </Badge>
                           </td>
                           <td>{movimientoId}</td>
+                          <td>
+                            {puedeAtender ? (
+                              <a className="citasHoyTableAction" href={`/citas-hoy/${encodeURIComponent(movimientoId)}/atencion`}>
+                                {row.estado === "En atención" ? "Continuar atención" : "Iniciar atención"}
+                              </a>
+                            ) : "-"}
+                          </td>
                         </tr>
                       )
                     )}
