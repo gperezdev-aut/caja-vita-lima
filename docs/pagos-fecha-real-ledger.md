@@ -16,7 +16,13 @@ La idempotencia existente se conserva: `request_id` identifica la preparación, 
 
 El cierre obtiene ingresos desde `caja_pagos` y salidas desde `caja_salidas`; la acción vuelve a calcular ambos importes server-side y no confía en los totales del formulario. La interfaz muestra EFECTIVO, YAPE, PLIN, IZIPAY POS, BCP y OTRO.
 
-`caja_salidas` no tiene método de desembolso. Por ello no puede saberse si cada salida redujo efectivo físico o una cuenta digital. La fórmula histórica almacenada en `caja_cierres.caja_esperada` se conserva como saldo operativo (`caja_inicial + pozo_fondo + ingresos totales - salidas totales`), pero no debe interpretarse como caja física. Definir caja física exige una decisión de negocio y registrar el método de cada salida; esta fase no inventa esa regla.
+`caja_salidas` no tiene método de desembolso. Por ello no puede saberse si cada salida redujo efectivo físico o una cuenta digital. Para nuevos cierres se persiste `caja_esperada = NULL` y `diferencia = NULL`; la interfaz muestra “No calculable”. Los totales operativos sí se conservan: `total_ingresos = sum(caja_pagos.monto)` y `total_salidas = sum(caja_salidas.monto)` por fecha real y sede.
+
+No existe una fórmula de caja física en esta fase. En particular, no se resta `efectivo_contado` de un saldo que incluya Yape, Plin, POS o transferencias. Definir caja física exige una decisión de negocio y registrar el método de cada salida; esta fase no inventa esa regla. Los cierres históricos conservan sus valores anteriores y no se recalculan.
+
+## Clasificación financiera
+
+En `vista_reporte_financiero_mensual`, `ATENCION_HISTORICA`, `RESERVA_APP` y `ATENCION_APP` son ingresos de servicios: los dos tipos de app representan pagos vinculados a citas o atenciones. Se mantienen sin cambios las categorías independientes `GIFT_CARD_VENTA`, `PRESTAMO_CAJA_INGRESO` y `CUPONIDAD`. `total_ingresos_confirmados` continúa siendo la suma completa del ledger, por lo que la reclasificación no modifica el total general.
 
 ## Histórico y backfill
 

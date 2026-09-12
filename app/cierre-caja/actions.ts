@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { supabaseInsert, supabaseSelectAllWhere } from "@/lib/supabaseServer";
 import { requireModuleAccess } from "@/lib/auth";
 import {
+  cajaFisicaNoCalculable,
   resumirMovimientosOperativos,
   resumirPagosCierre,
   sumarSalidas,
@@ -93,10 +94,10 @@ export async function createCierreCajaAction(formData: FormData) {
   const totalSalidas = sumarSalidas(salidas.data);
   const { paxTotal, boletasPendientes } = resumirMovimientosOperativos(movimientos.data);
 
-  // Compatibilidad con caja_cierres: esta fórmula representa saldo operativo.
-  // No se presenta como caja física porque caja_salidas aún no guarda método.
-  const cajaEsperada = cajaInicial + pozoFondo + totalIngresos - totalSalidas;
-  const diferencia = efectivoContado - cajaEsperada;
+  // caja_salidas no registra método, por lo que no se puede determinar cuánto
+  // salió de la caja física. Se escriben NULL explícitos para conservar el
+  // esquema sin persistir una diferencia engañosa que incluya pagos digitales.
+  const { cajaEsperada, diferencia } = cajaFisicaNoCalculable();
   const cierreId = id("CIE");
 
   const cierre = await supabaseInsert("caja_cierres", {

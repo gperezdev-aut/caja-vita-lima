@@ -2,12 +2,30 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import {
+  cajaFisicaNoCalculable,
   esBoletaPendiente,
   normalizarMetodoCierre,
   resumirMovimientosOperativos,
   resumirPagosCierre,
   sumarSalidas,
 } from "../lib/cierreCaja.ts";
+
+test("cierre no atribuye pagos digitales a una diferencia de caja física", () => {
+  const resumen = resumirPagosCierre([
+    { metodo: "EFECTIVO", monto: 100 },
+    { metodo: "YAPE", monto: 200 },
+  ]);
+  const resultadoFisico = cajaFisicaNoCalculable();
+
+  assert.equal(resumen.total, 300);
+  assert.equal(resumen.efectivo, 100);
+  assert.equal(resumen.digital, 200);
+  assert.deepEqual(resultadoFisico, {
+    cajaEsperada: null,
+    diferencia: null,
+  });
+  assert.notEqual(resultadoFisico.diferencia, -200);
+});
 
 test("cierre agrupa los métodos del ledger sin confundir efectivo y digital", () => {
   const resumen = resumirPagosCierre([
@@ -69,7 +87,10 @@ test("la app recalcula el cierre server-side y exporta caja_pagos", async () => 
 
   assert.match(action, /supabaseSelectAllWhere[\s\S]*"caja_pagos"/);
   assert.doesNotMatch(action, /money\(formData\.get\("total_ingresos"\)\)/);
+  assert.match(action, /cajaFisicaNoCalculable\(\)/);
+  assert.doesNotMatch(action, /efectivoContado\s*-\s*cajaEsperada/);
   assert.match(page, /resumirPagosCierre\(pagos\.data\)/);
+  assert.match(page, /value == null \? "No calculable"/);
   assert.match(exportRoute, /supabaseSelectAllWhere<Row>\("caja_pagos", ingresosQuery\)/);
 });
 
@@ -89,4 +110,25 @@ test("021 fija hora de cobro en PostgreSQL y conserva contrato idempotente", asy
     sql,
     /insert into public\.caja_pagos[^;]+values\s*\([^;]*v_fecha\s*,\s*v_hora/i
   );
+});
+
+test("reporte mensual clasifica pagos de app como servicios sin alterar el total", async () => {
+  const [sql, rollback] = await Promise.all([
+    readFile(new URL("../sql/021_pagos_fecha_real_ledger.sql", import.meta.url), "utf8"),
+    readFile(
+      new URL("../sql/tests/021_pagos_fecha_real_ledger_rollback.sql", import.meta.url),
+      "utf8"
+    ),
+  ]);
+
+  assert.match(
+    sql,
+    /m\.tipo_movimiento in \(\s*'ATENCION_HISTORICA',\s*'RESERVA_APP',\s*'ATENCION_APP'\s*\)/i
+  );
+  assert.match(
+    sql,
+    /sum\(coalesce\(p\.monto, 0\)\) as total_ingresos_confirmados/i
+  );
+  assert.match(rollback, /'ATENCION_APP', 25/);
+  assert.match(rollback, /QA_021_FINANCIAL_CLASSIFICATION/);
 });

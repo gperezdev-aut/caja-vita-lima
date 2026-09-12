@@ -21,6 +21,13 @@ export type MovimientoCierre = {
   estado_boleta?: unknown;
 };
 
+export function cajaFisicaNoCalculable() {
+  return {
+    cajaEsperada: null,
+    diferencia: null,
+  } as const;
+}
+
 export function normalizarMetodoCierre(value: unknown): MetodoCierre {
   const metodo = String(value ?? "")
     .normalize("NFD")

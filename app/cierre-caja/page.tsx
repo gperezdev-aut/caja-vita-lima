@@ -34,6 +34,10 @@ function money(value: any) {
   })}`;
 }
 
+function physicalMoney(value: unknown) {
+  return value == null ? "No calculable" : money(value);
+}
+
 function numberFmt(value: any) {
   return Number(value ?? 0).toLocaleString("es-PE");
 }
@@ -504,8 +508,8 @@ export default async function CierreCajaPage({
                     <th>Sede</th>
                     <th>Ingresos</th>
                     <th>Salidas</th>
-                    <th>Saldo operativo esperado</th>
-                    <th>Diferencia vs saldo</th>
+                    <th>Caja física esperada</th>
+                    <th>Diferencia física</th>
                     <th>Responsable</th>
                     <th>Estado</th>
                     <th>Cierre</th>
@@ -518,8 +522,8 @@ export default async function CierreCajaPage({
                       <td>{row.sede}</td>
                       <td>{money(row.total_ingresos)}</td>
                       <td>{money(row.total_salidas)}</td>
-                      <td>{money(row.caja_esperada)}</td>
-                      <td className="strong">{money(row.diferencia)}</td>
+                      <td>{physicalMoney(row.caja_esperada)}</td>
+                      <td className="strong">{physicalMoney(row.diferencia)}</td>
                       <td>{row.responsable || "-"}</td>
                       <td>{row.estado || "-"}</td>
                       <td>{row.cierre_id}</td>

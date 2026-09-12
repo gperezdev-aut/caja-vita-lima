@@ -124,6 +124,19 @@ begin
     raise exception 'QA_021_PERSONALIZED_REAL_PAYMENT_DATE';
   end if;
 
+  -- ATENCION_APP también es ingreso de servicios; la reclasificación no altera el total.
+  insert into public.caja_movimientos (
+    movimiento_id, fecha, hora, sede, tipo_movimiento, total_pagado
+  ) values (
+    'MOV-QA-021-ATENCION', v_hoy, time '13:00', 'Miraflores', 'ATENCION_APP', 25
+  );
+  insert into public.caja_pagos (
+    pago_id, movimiento_id, fecha, hora, sede, tipo_pago, metodo, monto, concepto
+  ) values (
+    'PAY-QA-021-ATENCION', 'MOV-QA-021-ATENCION', v_hoy, time '13:00',
+    'Miraflores', 'PAGO_QA', 'YAPE', 25, 'Atención app QA'
+  );
+
   -- Caso D: el modelo admite varios pagos en fechas distintas para un movimiento.
   insert into public.caja_pagos (
     pago_id, movimiento_id, fecha, hora, sede, tipo_pago, metodo, monto, concepto
@@ -157,6 +170,40 @@ begin
   from public.caja_pagos where fecha = v_hoy and sede = 'Miraflores';
   if (select total_pagado from public.vista_ingresos_por_fecha where fecha = v_hoy and sede = 'Miraflores') <> v_total_dia then
     raise exception 'QA_021_DAILY_VIEW_NOT_FROM_LEDGER';
+  end if;
+
+  if not exists (
+    select 1
+    from public.vista_reporte_financiero_mensual v
+    where v.mes = date_trunc('month', v_hoy)::date
+      and v.sede = 'Miraflores'
+      and v.ingresos_servicios = (
+        select coalesce(sum(p.monto), 0)
+        from public.caja_pagos p
+        join public.caja_movimientos m on m.movimiento_id = p.movimiento_id
+        where date_trunc('month', p.fecha)::date = date_trunc('month', v_hoy)::date
+          and p.sede = 'Miraflores'
+          and m.tipo_movimiento in ('ATENCION_HISTORICA', 'RESERVA_APP', 'ATENCION_APP')
+      )
+      and v.otros_ingresos = (
+        select coalesce(sum(p.monto), 0)
+        from public.caja_pagos p
+        left join public.caja_movimientos m on m.movimiento_id = p.movimiento_id
+        where date_trunc('month', p.fecha)::date = date_trunc('month', v_hoy)::date
+          and p.sede = 'Miraflores'
+          and (m.tipo_movimiento is null or m.tipo_movimiento not in (
+            'ATENCION_HISTORICA', 'RESERVA_APP', 'ATENCION_APP',
+            'GIFT_CARD_VENTA', 'PRESTAMO_CAJA_INGRESO', 'CUPONIDAD'
+          ))
+      )
+      and v.total_ingresos_confirmados = (
+        select coalesce(sum(p.monto), 0)
+        from public.caja_pagos p
+        where date_trunc('month', p.fecha)::date = date_trunc('month', v_hoy)::date
+          and p.sede = 'Miraflores'
+      )
+  ) then
+    raise exception 'QA_021_FINANCIAL_CLASSIFICATION';
   end if;
 
   if exists (

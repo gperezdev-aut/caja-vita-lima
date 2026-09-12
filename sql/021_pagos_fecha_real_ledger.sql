@@ -512,12 +512,15 @@ with pagos as (
   select
     date_trunc('month', p.fecha)::date as mes,
     p.sede,
-    sum(case when m.tipo_movimiento = 'ATENCION_HISTORICA' then coalesce(p.monto, 0) else 0 end) as ingresos_servicios,
+    sum(case when m.tipo_movimiento in (
+      'ATENCION_HISTORICA', 'RESERVA_APP', 'ATENCION_APP'
+    ) then coalesce(p.monto, 0) else 0 end) as ingresos_servicios,
     sum(case when m.tipo_movimiento = 'GIFT_CARD_VENTA' then coalesce(p.monto, 0) else 0 end) as ingresos_gift_cards,
     sum(case when m.tipo_movimiento = 'PRESTAMO_CAJA_INGRESO' then coalesce(p.monto, 0) else 0 end) as prestamos_caja,
     sum(case when m.tipo_movimiento = 'CUPONIDAD' then coalesce(p.monto, 0) else 0 end) as ingresos_cuponidad_en_caja,
     sum(case when m.tipo_movimiento is null or m.tipo_movimiento not in (
-      'ATENCION_HISTORICA', 'GIFT_CARD_VENTA', 'PRESTAMO_CAJA_INGRESO', 'CUPONIDAD'
+      'ATENCION_HISTORICA', 'RESERVA_APP', 'ATENCION_APP',
+      'GIFT_CARD_VENTA', 'PRESTAMO_CAJA_INGRESO', 'CUPONIDAD'
     ) then coalesce(p.monto, 0) else 0 end) as otros_ingresos,
     sum(coalesce(p.monto, 0)) as total_ingresos_confirmados
   from public.caja_pagos p
@@ -596,6 +599,11 @@ left join salidas s on s.mes = b.mes and s.sede is not distinct from b.sede
 left join cupones c on c.mes = b.mes and c.sede is not distinct from b.sede
 left join revision r on r.mes = b.mes and r.sede is not distinct from b.sede
 order by b.mes desc, b.sede;
+
+comment on column public.caja_cierres.caja_esperada is
+  'NULL significa no calculable: caja_salidas no registra método y no permite derivar caja física.';
+comment on column public.caja_cierres.diferencia is
+  'NULL significa no calculable: no comparar efectivo contado con ingresos que incluyen pagos digitales.';
 
 revoke all on function public.preparar_ficha_cita(jsonb) from public, anon, authenticated;
 revoke all on function public.preparar_atencion_personalizada(jsonb) from public, anon, authenticated;
