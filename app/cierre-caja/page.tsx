@@ -1,6 +1,12 @@
 import { requireModuleAccess } from "@/lib/auth";
 import { CajaSidebar } from "@/components/CajaSidebar";
-import { supabaseSelect, supabaseSelectWhere } from "@/lib/supabaseServer";
+import { supabaseSelect, supabaseSelectAllWhere, supabaseSelectWhere } from "@/lib/supabaseServer";
+import {
+  METODOS_CIERRE,
+  resumirMovimientosOperativos,
+  resumirPagosCierre,
+  sumarSalidas,
+} from "@/lib/cierreCaja";
 import Link from "next/link";
 import { SubmitButton } from "@/components/SubmitButton";
 import { FormField } from "@/components/FormField";
@@ -26,6 +32,10 @@ function money(value: any) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
+}
+
+function physicalMoney(value: unknown) {
+  return value == null ? "No calculable" : money(value);
 }
 
 function numberFmt(value: any) {
@@ -162,67 +172,51 @@ export default async function CierreCajaPage({
   const selectedFecha = safeDate(params?.fecha, today);
   const selectedSede = safeCierreSede(params?.sede);
 
-  const config = await supabaseSelect<Row>("config_listas");
-
-  const movimientos = await supabaseSelectWhere<Row>(
-    "caja_movimientos",
-    [
-      "select=movimiento_id,fecha,sede,n_pax,total_pagado,estado_comprobante_manual,tipo_comprobante,estado_boleta",
-      `fecha=eq.${selectedFecha}`,
-      `sede=eq.${encodeURIComponent(selectedSede)}`,
-    ].join("&")
-  );
-
-  const salidas = await supabaseSelectWhere<Row>(
-    "caja_salidas",
-    [
-      "select=salida_id,fecha,sede,monto",
-      `fecha=eq.${selectedFecha}`,
-      `sede=eq.${encodeURIComponent(selectedSede)}`,
-    ].join("&")
-  );
-
-  const cierres = await supabaseSelectWhere<Row>(
-    "caja_cierres",
-    [
-      "select=cierre_id,fecha,sede,total_ingresos,total_salidas,caja_esperada,diferencia,responsable,estado,observacion,created_at",
-      `fecha=eq.${selectedFecha}`,
-      `sede=eq.${encodeURIComponent(selectedSede)}`,
-      "order=created_at.desc",
-    ].join("&")
-  );
+  const [config, pagos, movimientos, salidas, cierres] = await Promise.all([
+    supabaseSelect<Row>("config_listas"),
+    supabaseSelectAllWhere<Row>(
+      "caja_pagos",
+      [
+        "select=pago_id,fecha,hora,sede,metodo,monto",
+        `fecha=eq.${selectedFecha}`,
+        `sede=eq.${encodeURIComponent(selectedSede)}`,
+      ].join("&")
+    ),
+    supabaseSelectAllWhere<Row>(
+      "caja_movimientos",
+      [
+        "select=movimiento_id,fecha,sede,n_pax,estado_comprobante_manual,tipo_comprobante,estado_boleta",
+        `fecha=eq.${selectedFecha}`,
+        `sede=eq.${encodeURIComponent(selectedSede)}`,
+      ].join("&")
+    ),
+    supabaseSelectAllWhere<Row>(
+      "caja_salidas",
+      [
+        "select=salida_id,fecha,sede,monto",
+        `fecha=eq.${selectedFecha}`,
+        `sede=eq.${encodeURIComponent(selectedSede)}`,
+      ].join("&")
+    ),
+    supabaseSelectWhere<Row>(
+      "caja_cierres",
+      [
+        "select=cierre_id,fecha,sede,total_ingresos,total_salidas,caja_esperada,diferencia,responsable,estado,observacion,created_at",
+        `fecha=eq.${selectedFecha}`,
+        `sede=eq.${encodeURIComponent(selectedSede)}`,
+        "order=created_at.desc",
+      ].join("&")
+    ),
+  ]);
 
   const sedes = list(config.data, "SEDES");
   const responsables = list(config.data, "RESPONSABLES");
 
-  const errors = [config.error, movimientos.error, salidas.error, cierres.error].filter(Boolean);
-
-  const totalIngresos = movimientos.data.reduce(
-    (sum, row) => sum + Number(row.total_pagado ?? 0),
-    0
-  );
-
-  const totalSalidas = salidas.data.reduce(
-    (sum, row) => sum + Number(row.monto ?? 0),
-    0
-  );
-
-  const paxTotal = movimientos.data.reduce(
-    (sum, row) => sum + Number(row.n_pax ?? 0),
-    0
-  );
-
-  const boletasPendientes = movimientos.data.filter((row) => {
-    const estado = String(
-      row.estado_comprobante_manual || row.estado_boleta || row.tipo_comprobante || ""
-    ).toUpperCase();
-
-    return (
-      estado.includes("PEND") ||
-      estado.includes("OBSERV") ||
-      estado.includes("POR_DEFINIR")
-    );
-  }).length;
+  const errors = [config.error, pagos.error, movimientos.error, salidas.error, cierres.error].filter(Boolean);
+  const resumenPagos = resumirPagosCierre(pagos.data);
+  const totalIngresos = resumenPagos.total;
+  const totalSalidas = sumarSalidas(salidas.data);
+  const { paxTotal, boletasPendientes } = resumirMovimientosOperativos(movimientos.data);
 
   return (
     <main className="appShell">
@@ -234,8 +228,8 @@ export default async function CierreCajaPage({
             <p className="eyebrow">Control diario</p>
             <h1>Cierre de caja</h1>
             <p className="subtitle">
-              Registra el cierre diario por sede. Los valores sugeridos se
-              calculan con movimientos y salidas de {dateLabel(selectedFecha)} en {selectedSede}.
+              Registra el cierre diario por sede. Los ingresos se calculan desde
+              pagos realmente recibidos y las salidas desde su ledger de {dateLabel(selectedFecha)} en {selectedSede}.
             </p>
           </div>
 
@@ -352,9 +346,28 @@ export default async function CierreCajaPage({
 
         <section className="grid secondary">
           <Card label="Ingresos" value={money(totalIngresos)} tone="good" />
+          <Card label="Efectivo recibido" value={money(resumenPagos.efectivo)} tone="good" />
+          <Card label="Pagos digitales" value={money(resumenPagos.digital)} />
           <Card label="Salidas" value={money(totalSalidas)} />
           <Card label="Pax" value={numberFmt(paxTotal)} />
           <Card label="Boletas pendientes" value={numberFmt(boletasPendientes)} tone="warn" />
+        </section>
+
+        <section className="panel" style={{ marginBottom: "24px" }}>
+          <div className="panelTitle">
+            <div>
+              <h2>Ingresos por método</h2>
+              <p>Desglose del ledger de pagos por fecha real de cobro.</p>
+            </div>
+          </div>
+          <div className="miniList">
+            {METODOS_CIERRE.map((metodo) => (
+              <div className="miniItem" key={metodo}>
+                <span>{metodo}</span>
+                <strong>{money(resumenPagos.porMetodo[metodo])}</strong>
+              </div>
+            ))}
+          </div>
         </section>
 
         <form
@@ -409,21 +422,26 @@ export default async function CierreCajaPage({
               </FormField>
 
               <FormField label="Total ingresos">
-                <Input name="total_ingresos" type="number" step="0.01" min="0" defaultValue={totalIngresos.toFixed(2)} required />
+                <Input name="total_ingresos" type="number" step="0.01" min="0" value={totalIngresos.toFixed(2)} readOnly />
               </FormField>
 
               <FormField label="Total salidas">
-                <Input name="total_salidas" type="number" step="0.01" min="0" defaultValue={totalSalidas.toFixed(2)} required />
+                <Input name="total_salidas" type="number" step="0.01" min="0" value={totalSalidas.toFixed(2)} readOnly />
               </FormField>
 
               <FormField label="Pax total">
-                <Input name="pax_total" type="number" min="0" defaultValue={String(paxTotal)} required />
+                <Input name="pax_total" type="number" min="0" value={String(paxTotal)} readOnly />
               </FormField>
 
               <FormField label="Boletas pendientes">
-                <Input name="boletas_pendientes" type="number" min="0" defaultValue={String(boletasPendientes)} required />
+                <Input name="boletas_pendientes" type="number" min="0" value={String(boletasPendientes)} readOnly />
               </FormField>
             </FormGrid>
+            <p className="subtitle" style={{ marginTop: "16px" }}>
+              La tabla actual no indica si una salida fue en efectivo o digital. Por eso
+              el saldo esperado guardado sigue siendo operativo y no debe interpretarse
+              como caja física hasta definir y registrar el método de cada salida.
+            </p>
           </Section>
 
           <Section title="Observación">
@@ -490,8 +508,8 @@ export default async function CierreCajaPage({
                     <th>Sede</th>
                     <th>Ingresos</th>
                     <th>Salidas</th>
-                    <th>Caja esperada</th>
-                    <th>Diferencia</th>
+                    <th>Caja física esperada</th>
+                    <th>Diferencia física</th>
                     <th>Responsable</th>
                     <th>Estado</th>
                     <th>Cierre</th>
@@ -504,8 +522,8 @@ export default async function CierreCajaPage({
                       <td>{row.sede}</td>
                       <td>{money(row.total_ingresos)}</td>
                       <td>{money(row.total_salidas)}</td>
-                      <td>{money(row.caja_esperada)}</td>
-                      <td className="strong">{money(row.diferencia)}</td>
+                      <td>{physicalMoney(row.caja_esperada)}</td>
+                      <td className="strong">{physicalMoney(row.diferencia)}</td>
                       <td>{row.responsable || "-"}</td>
                       <td>{row.estado || "-"}</td>
                       <td>{row.cierre_id}</td>

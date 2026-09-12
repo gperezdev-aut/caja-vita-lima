@@ -1,8 +1,14 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { supabaseInsert } from "@/lib/supabaseServer";
+import { supabaseInsert, supabaseSelectAllWhere } from "@/lib/supabaseServer";
 import { requireModuleAccess } from "@/lib/auth";
+import {
+  cajaFisicaNoCalculable,
+  resumirMovimientosOperativos,
+  resumirPagosCierre,
+  sumarSalidas,
+} from "@/lib/cierreCaja";
 
 function clean(value: FormDataEntryValue | null) {
   return String(value ?? "").trim();
@@ -11,11 +17,6 @@ function clean(value: FormDataEntryValue | null) {
 function money(value: FormDataEntryValue | null) {
   const parsed = Number(String(value ?? "0").replace(",", "."));
   return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function intValue(value: FormDataEntryValue | null) {
-  const parsed = Number.parseInt(String(value ?? "0"), 10);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
 }
 
 function id(prefix: string) {
@@ -42,10 +43,6 @@ export async function createCierreCajaAction(formData: FormData) {
   const cajaInicial = money(formData.get("caja_inicial"));
   const efectivoContado = money(formData.get("efectivo_contado"));
   const pozoFondo = money(formData.get("pozo_fondo"));
-  const totalIngresos = money(formData.get("total_ingresos"));
-  const totalSalidas = money(formData.get("total_salidas"));
-  const paxTotal = intValue(formData.get("pax_total"));
-  const boletasPendientes = intValue(formData.get("boletas_pendientes"));
   const responsable = clean(formData.get("responsable")) || "Gerald";
   const observacion = clean(formData.get("observacion"));
 
@@ -59,15 +56,48 @@ export async function createCierreCajaAction(formData: FormData) {
   if (
     cajaInicial < 0 ||
     efectivoContado < 0 ||
-    pozoFondo < 0 ||
-    totalIngresos < 0 ||
-    totalSalidas < 0
+    pozoFondo < 0
   ) {
     redirect(`${baseUrl}${separator}error=${encodeURIComponent("Los montos no pueden ser negativos.")}`);
   }
 
-  const cajaEsperada = cajaInicial + pozoFondo + totalIngresos - totalSalidas;
-  const diferencia = efectivoContado - cajaEsperada;
+  const filtroFechaSede = [
+    `fecha=eq.${fecha}`,
+    `sede=eq.${encodeURIComponent(sede)}`,
+  ];
+  const [pagos, salidas, movimientos] = await Promise.all([
+    supabaseSelectAllWhere<Record<string, unknown>>(
+      "caja_pagos",
+      ["select=metodo,monto", ...filtroFechaSede].join("&")
+    ),
+    supabaseSelectAllWhere<Record<string, unknown>>(
+      "caja_salidas",
+      ["select=monto", ...filtroFechaSede].join("&")
+    ),
+    supabaseSelectAllWhere<Record<string, unknown>>(
+      "caja_movimientos",
+      [
+        "select=n_pax,estado_comprobante_manual,tipo_comprobante,estado_boleta",
+        ...filtroFechaSede,
+      ].join("&")
+    ),
+  ]);
+
+  const lecturaError = pagos.error || salidas.error || movimientos.error;
+  if (lecturaError) {
+    redirect(`${baseUrl}${separator}error=${encodeURIComponent(lecturaError)}`);
+  }
+
+  // Los importes automáticos se recalculan server-side. Los valores visibles
+  // del formulario no son parte del contrato financiero de escritura.
+  const totalIngresos = resumirPagosCierre(pagos.data).total;
+  const totalSalidas = sumarSalidas(salidas.data);
+  const { paxTotal, boletasPendientes } = resumirMovimientosOperativos(movimientos.data);
+
+  // caja_salidas no registra método, por lo que no se puede determinar cuánto
+  // salió de la caja física. Se escriben NULL explícitos para conservar el
+  // esquema sin persistir una diferencia engañosa que incluya pagos digitales.
+  const { cajaEsperada, diferencia } = cajaFisicaNoCalculable();
   const cierreId = id("CIE");
 
   const cierre = await supabaseInsert("caja_cierres", {

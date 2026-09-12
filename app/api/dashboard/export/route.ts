@@ -103,7 +103,7 @@ export async function GET(request: NextRequest) {
     : [];
 
   const ingresosQuery = [
-    "select=fecha,hora,sede,cliente,whatsapp,servicio,total_cobrar,total_pagado,pendiente,estado_boleta",
+    "select=fecha,hora,sede,movimiento_id,tipo_pago,metodo,monto,concepto,numero_operacion",
     `fecha=gte.${fechaDesde}`,
     `fecha=lte.${fechaHasta}`,
     ...sedeFilter,
@@ -119,7 +119,7 @@ export async function GET(request: NextRequest) {
   ].join("&");
 
   const [ingresosResult, salidasResult] = await Promise.all([
-    supabaseSelectAllWhere<Row>("caja_movimientos", ingresosQuery),
+    supabaseSelectAllWhere<Row>("caja_pagos", ingresosQuery),
     supabaseSelectAllWhere<Row>("caja_salidas", salidasQuery),
   ]);
 
@@ -128,13 +128,12 @@ export async function GET(request: NextRequest) {
     "Fecha",
     "Hora",
     "Sede",
-    "Cliente",
-    "WhatsApp",
-    "Servicio",
-    "Total cobrar",
-    "Total pagado",
-    "Pendiente",
-    "Estado boleta",
+    "Movimiento",
+    "Tipo de pago",
+    "Método",
+    "Monto recibido",
+    "Concepto",
+    "Número de operación",
   ]);
   ingresosHeaderRow.font = { bold: true };
 
@@ -147,17 +146,16 @@ export async function GET(request: NextRequest) {
       row.fecha ?? "",
       hourLabel(row.hora),
       row.sede ?? "",
-      row.cliente ?? "",
-      row.whatsapp ?? "",
-      row.servicio ?? "",
+      row.movimiento_id ?? "",
+      row.tipo_pago ?? "",
+      row.metodo ?? "",
     ]);
-    addMoneyCell(excelRow, 7, row.total_cobrar);
-    addMoneyCell(excelRow, 8, row.total_pagado);
-    addMoneyCell(excelRow, 9, row.pendiente);
-    excelRow.getCell(10).value = row.estado_boleta ?? "";
+    addMoneyCell(excelRow, 7, row.monto);
+    excelRow.getCell(8).value = row.concepto ?? "";
+    excelRow.getCell(9).value = row.numero_operacion ?? "";
   }
 
-  setColumnWidths(ingresosSheet, [12, 8, 14, 26, 14, 32, 14, 14, 14, 16]);
+  setColumnWidths(ingresosSheet, [12, 8, 14, 24, 18, 16, 16, 32, 22]);
 
   const salidasSheet = workbook.addWorksheet("Salidas");
   const salidasHeaderRow = salidasSheet.addRow([
