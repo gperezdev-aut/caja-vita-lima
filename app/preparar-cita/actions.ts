@@ -2,21 +2,23 @@
 
 import { randomUUID } from "crypto";
 import { requireModuleAccess } from "@/lib/auth";
+import { leerCatalogoPrepararCita } from "@/lib/catalogoPrepararCita";
+import {
+  calcularEconomiaHome,
+  servicioEsComponente,
+  validarSeleccionCita,
+} from "@/lib/catalogoPrepararCitaDominio";
 import {
   calcularAdelantoRequerido,
-  calcularCitaDomicilio,
   CANALES_FICHA,
   describirAtencionDomicilio,
   horarioDentroDeSede,
-  precioCatalogoActivo,
   redondearDinero,
-  tipoAtencionDesdeServicios,
   calcularExpiracionFicha,
   calcularAtencionPersonalizada,
   validarDatosDomicilio,
   validarPreparacionMvp,
   validarPagoPreparacion,
-  validarCatalogoSolicitado,
   type CanalFicha,
   type PersonaPersonalizada,
 } from "@/lib/fichaCitaDominio";
@@ -46,17 +48,6 @@ function text(formData: FormData, name: string) {
 function number(formData: FormData, name: string) {
   const value = Number(text(formData, name).replace(",", "."));
   return Number.isFinite(value) ? value : NaN;
-}
-
-function parseCatalogNumber(value: unknown) {
-  const parsed = Number(
-    String(value ?? "")
-      .replace(/S\//gi, "")
-      .replace(/\s/g, "")
-      .replace(",", ".")
-      .replace(/[^\d.-]/g, "")
-  );
-  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function truthy(value: unknown) {
@@ -141,18 +132,13 @@ export async function prepararCitaAction(
     try { componentesPersonalizados = JSON.parse(text(formData, "componentes")); } catch { return { ok: false, error: "Los componentes personalizados no son válidos." }; }
     if (!Array.isArray(componentesPersonalizados)) return { ok: false, error: "Los componentes personalizados no son válidos." };
   }
-  const serviceCodes = esPersonalizada ? componentesPersonalizados!.flatMap((p) => p.componentes.filter((c) => c.tipo === "catalogo").map((c) => c.codigo ?? "")) : [text(formData, "servicio_1")];
-  if (!esPersonalizada && personas === 2) serviceCodes.push(text(formData, "servicio_2"));
-  if (!esPersonalizada && serviceCodes.some((code) => !code)) {
-    return { ok: false, error: "Selecciona un servicio para cada persona." };
-  }
-  const tipoAtencion = esPersonalizada ? "sede" : tipoAtencionDesdeServicios(serviceCodes);
-  if (tipoAtencion === "mezclado") {
-    return { ok: false, error: "No se pueden mezclar servicios presenciales y a domicilio en una misma cita." };
-  }
+  const serviceCodes = esPersonalizada
+    ? componentesPersonalizados!.flatMap((p) => p.componentes.filter((c) => c.tipo === "catalogo").map((c) => c.codigo ?? ""))
+    : [text(formData, "servicio_1"), text(formData, "servicio_2")].filter(Boolean);
+  if (!esPersonalizada && !serviceCodes.length) return { ok: false, error: "Selecciona un servicio." };
 
   const [catalogResult, sedeResult, metodosResult] = await Promise.all([
-    supabaseSelect<Row>("stg_services_catalog_v5"),
+    leerCatalogoPrepararCita(),
     supabaseSelectWhere<{
       nombre: string | null;
       hora_apertura: string | null;
@@ -164,24 +150,27 @@ export async function prepararCitaAction(
     supabaseSelect<Row>("config_listas"),
   ]);
 
-  const dataError = catalogResult.error || sedeResult.error || metodosResult.error;
+  const dataError = ("error" in catalogResult ? catalogResult.error : "") || sedeResult.error || metodosResult.error;
   if (dataError) return { ok: false, error: `No se pudo validar la cita: ${dataError}` };
 
-  const catalog = catalogResult.data.filter((row) => truthy(row.active)).map((row) => ({
-      codigo: String(row.CodeId ?? "").trim(),
-      nombre: String(row.option_name ?? "").trim(),
-      duracion_min: Math.round(parseCatalogNumber(row.duration_min)),
-      precio: precioCatalogoActivo(row.price_pen, row.price),
-  }));
-  const catalogoValidado = validarCatalogoSolicitado(serviceCodes, catalog);
-  if (!catalogoValidado.ok && serviceCodes.length) {
-    return { ok: false, error: "Cada código debe corresponder a un único servicio activo con nombre, precio y duración válidos." };
+  if (!catalogResult.ok) return { ok: false, error: "El snapshot canónico local no está disponible." };
+  const catalogByCode = new Map(catalogResult.services.map((service) => [service.serviceCode, service]));
+  const canonicalServices = serviceCodes.map((code) => catalogByCode.get(code));
+  if (canonicalServices.some((service) => !service)) {
+    return { ok: false, error: "Cada código debe corresponder a un servicio único del snapshot activo." };
   }
-  const serviciosValidos = catalogoValidado.ok ? catalogoValidado.servicios : [];
+  const serviciosCanonicos = canonicalServices.filter((service) => service !== undefined);
+  const serviciosValidos = serviciosCanonicos.map((service) => ({
+    codigo: service.serviceCode, nombre: service.nameEs, duracion_min: service.durationMin,
+    precio: service.pricePen, release_id: service.releaseId, price_version: service.priceVersion,
+  }));
+  const seleccion = esPersonalizada ? null : validarSeleccionCita(personas, serviciosCanonicos);
+  if (seleccion && !seleccion.ok) return { ok: false, error: seleccion.error };
+  const tipoAtencion = esPersonalizada ? "sede" : seleccion!.tipoAtencion;
   if (esPersonalizada) {
-    const porCodigo = new Map(serviciosValidos.map((s) => [s.codigo, s]));
+    const porCodigo = new Map(serviciosCanonicos.map((service) => [service.serviceCode, service]));
     for (const persona of componentesPersonalizados!) for (const componente of persona.componentes) {
-      if (componente.tipo === "catalogo") { const servicio = porCodigo.get(componente.codigo ?? ""); if (!servicio) return { ok:false, error:"Un servicio de catálogo no es válido." }; componente.nombre=servicio.nombre; componente.precio=servicio.precio; componente.duracion_min=servicio.duracion_min; }
+      if (componente.tipo === "catalogo") { const servicio = porCodigo.get(componente.codigo ?? ""); if (!servicio || !servicioEsComponente(servicio)) return { ok:false, error:"Un servicio de catálogo no es elegible como componente." }; componente.nombre=servicio.nameEs; componente.precio=servicio.pricePen; componente.duracion_min=servicio.durationMin; Object.assign(componente, { release_id: servicio.releaseId, price_version: servicio.priceVersion }); }
     }
   }
   const esDomicilio = tipoAtencion === "domicilio";
@@ -200,13 +189,14 @@ export async function prepararCitaAction(
   }
   let montoTotal = personalizada?.ok ? personalizada.precioFinal : redondearDinero(serviciosValidos.reduce((sum, item) => sum + item.precio, 0));
   let costoMovilidad = 0;
-  let economiaDomicilio: ReturnType<typeof calcularCitaDomicilio> | null = null;
+  let economiaDomicilio: ReturnType<typeof calcularEconomiaHome> | null = null;
 
   if (esDomicilio) {
-    economiaDomicilio = calcularCitaDomicilio(serviciosValidos);
+    economiaDomicilio = calcularEconomiaHome(serviciosCanonicos, distritoDomicilio, catalogResult.homePolicies);
     if (!economiaDomicilio.ok) return { ok: false, error: economiaDomicilio.error };
+    if (economiaDomicilio.feePen === null || economiaDomicilio.total === null) return { ok: false, error: "El distrito requiere confirmar manualmente la movilidad antes de guardar." };
     montoTotal = economiaDomicilio.total;
-    costoMovilidad = economiaDomicilio.movilidad;
+    costoMovilidad = economiaDomicilio.feePen;
   }
 
   if (montoTotal <= 0) {
@@ -274,6 +264,8 @@ export async function prepararCitaAction(
       domicilio_direccion: esDomicilio ? direccionDomicilio : null,
       domicilio_referencia: esDomicilio ? referenciaDomicilio || null : null,
       costo_movilidad: costoMovilidad,
+      home_policy_id: economiaDomicilio?.ok ? economiaDomicilio.policy.policyId : null,
+      home_policy_sha256: economiaDomicilio?.ok ? economiaDomicilio.policy.policySha256 : null,
       cliente,
       whatsapp_e164: telefono.e164,
       pais_telefono: telefono.pais,

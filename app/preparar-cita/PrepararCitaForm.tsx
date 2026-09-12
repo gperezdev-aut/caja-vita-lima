@@ -2,11 +2,16 @@
 
 import { useActionState, useMemo, useState } from "react";
 import {
-  calcularCitaDomicilio,
   calcularAdelantoRequerido,
   calcularAtencionPersonalizada,
-  esCodigoDomicilio,
 } from "@/lib/fichaCitaDominio";
+import {
+  calcularEconomiaHome,
+  servicioEsCitaNormal,
+  servicioEsComponente,
+  servicioEsHome,
+  type PoliticaHome,
+} from "@/lib/catalogoPrepararCitaDominio";
 import {
   buscarClienteFichaAction,
   prepararCitaAction,
@@ -19,12 +24,17 @@ type Service = {
   name: string;
   duration: number;
   price: number;
-  paxType: string;
-  sortOrder: number;
+  category: string;
+  modality: string;
+  peopleMin: number;
+  peopleMax: number;
+  selectionRule: string;
+  reservationBehavior: string;
 };
 
 type Props = {
   services: Service[];
+  homePolicies: PoliticaHome[];
   sedes: { name: string; open: string; close: string }[];
   metodos: string[];
   countries: { code: string; name: string; callingCode: string }[];
@@ -47,7 +57,14 @@ function fromMinutes(value: number) {
   return `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`;
 }
 
-export function PrepararCitaForm({ services, sedes, metodos, countries, requestId, minDate }: Props) {
+function domainService(service: Service) {
+  return {
+    pricePen: service.price, category: service.category, modality: service.modality,
+    selectionRule: service.selectionRule, reservationBehavior: service.reservationBehavior,
+  };
+}
+
+export function PrepararCitaForm({ services, homePolicies, sedes, metodos, countries, requestId, minDate }: Props) {
   const [state, formAction, pending] = useActionState(prepararCitaAction, initialState);
   const [personas, setPersonas] = useState(1);
   const [personalizada, setPersonalizada] = useState(false);
@@ -65,28 +82,33 @@ export function PrepararCitaForm({ services, sedes, metodos, countries, requestI
   const [service1, setService1] = useState("");
   const [service2, setService2] = useState("");
   const [paid, setPaid] = useState(0);
+  const [district, setDistrict] = useState("");
   const [lookupMessage, setLookupMessage] = useState("");
 
   const eligibleServices = useMemo(() => {
-    const onePerson = services.filter((item) => item.paxType === "1p");
-    const withDomicilio = services.filter((item) => esCodigoDomicilio(item.code));
-    return Array.from(new Map([...onePerson, ...withDomicilio].map((item) => [item.code, item])).values());
-  }, [services]);
+    return services.filter((item) => servicioEsCitaNormal(domainService(item)) && (
+      personas === 1
+        ? item.selectionRule === "ONE_PERSON" || item.selectionRule === "HOME_FLOW"
+        : ["ONE_PERSON", "FIXED_TWO_PACKAGE", "HOME_FLOW"].includes(item.selectionRule)
+    ));
+  }, [personas, services]);
+  const first = eligibleServices.find((item) => item.code === service1);
+  const seleccionUnica = personas === 2 && first?.selectionRule === "FIXED_TWO_PACKAGE";
   const selected = [
     eligibleServices.find((item) => item.code === service1),
-    personas === 2 ? eligibleServices.find((item) => item.code === service2) : null,
+    personas === 2 && !seleccionUnica ? eligibleServices.find((item) => item.code === service2) : null,
   ].filter((item): item is Service => Boolean(item));
-  const esDomicilio = !personalizada && selected.length > 0 && selected.every((item) => esCodigoDomicilio(item.code));
+  const esDomicilio = !personalizada && selected.length > 0 && selected.every((item) => servicioEsHome(domainService(item)));
   const personalizadaCalculada = personalizada ? calcularAtencionPersonalizada({ personas, modalidad, componentes, precioFinal: precioFinal ? Number(precioFinal) : null, motivoAjuste: "UI exige campo", confirmaDisponibilidad: true }) : null;
   const opcionesServicio2 = service1
-    ? eligibleServices.filter((item) => esCodigoDomicilio(item.code) === esCodigoDomicilio(service1))
+    ? eligibleServices.filter((item) => item.selectionRule === first?.selectionRule && item.selectionRule !== "FIXED_TWO_PACKAGE")
     : eligibleServices;
   const economiaDomicilio = esDomicilio
-    ? calcularCitaDomicilio(selected.map((item) => ({ codigo: item.code, precio: item.price, duracion_min: item.duration })))
+    ? calcularEconomiaHome(selected.map(domainService), district, homePolicies)
     : null;
   const subtotalServicios = personalizadaCalculada?.ok ? personalizadaCalculada.precioCalculado : selected.reduce((sum, item) => sum + item.price, 0);
-  const movilidad = economiaDomicilio?.ok ? economiaDomicilio.movilidad : 0;
-  const total = personalizadaCalculada?.ok ? personalizadaCalculada.precioFinal : economiaDomicilio?.ok ? economiaDomicilio.total : subtotalServicios;
+  const movilidad = economiaDomicilio?.ok ? economiaDomicilio.feePen : 0;
+  const total = personalizadaCalculada?.ok ? personalizadaCalculada.precioFinal : economiaDomicilio?.ok ? (economiaDomicilio.total ?? 0) : subtotalServicios;
   const required = calcularAdelantoRequerido({
     canal: "directo",
     personas,
@@ -187,26 +209,26 @@ export function PrepararCitaForm({ services, sedes, metodos, countries, requestI
         <div className="atencionGrid">
           <label className="atencionField">
             Personas
-            <select name="personas" value={personas} onChange={(event) => { const n=Number(event.target.value); setPersonas(n); setComponentes(Array.from({length:n},(_,i)=>componentes[i] ?? {persona:i+1,componentes:[]})); setHora(""); }}>
+            <select name="personas" value={personas} onChange={(event) => { const n=Number(event.target.value); setPersonas(n); setService1(""); setService2(""); setComponentes(Array.from({length:n},(_,i)=>componentes[i] ?? {persona:i+1,componentes:[]})); setHora(""); }}>
               {[1,2,3,4,5].filter((n)=>personalizada || n<=2).map((n)=><option key={n} value={n}>{n} persona{n>1?"s":""}</option>)}
             </select>
           </label>
           {personalizada && <><label className="atencionField">Modalidad<select value={modalidad} onChange={(e)=>{const valor=e.target.value; if (valor === "simultanea" || valor === "consecutiva") setModalidad(valor); setHora("");}}><option value="simultanea">Simultánea</option><option value="consecutiva">Consecutiva</option></select></label>
-          {componentes.map((p, index)=><div className="atencionField atencionFieldWide" key={p.persona}><strong>Persona {p.persona}</strong>{p.componentes.map((c, ci)=><div key={ci} className="atencionGrid"><select value={c.tipo==="catalogo"?c.codigo:"manual"} onChange={(e)=>{const code=e.target.value;const next=structuredClone(componentes);next[index].componentes[ci]=code==="manual"?{tipo:"manual",nombre:"",duracion_min:0,precio:0}:{tipo:"catalogo",codigo:code,nombre:"",duracion_min:0,precio:0};setComponentes(next);}}><option value="manual">Manual</option>{services.filter(s=>!esCodigoDomicilio(s.code)).map(s=><option key={s.code} value={s.code}>{s.name}</option>)}</select>{c.tipo==="manual"&&<><input placeholder="Nombre" onChange={(e)=>{const n=structuredClone(componentes);n[index].componentes[ci].nombre=e.target.value;setComponentes(n);}}/><input type="number" placeholder="Minutos" onChange={(e)=>{const n=structuredClone(componentes);n[index].componentes[ci].duracion_min=Number(e.target.value);setComponentes(n);}}/><input type="number" placeholder="Precio" onChange={(e)=>{const n=structuredClone(componentes);n[index].componentes[ci].precio=Number(e.target.value);setComponentes(n);}}/></>}</div>)}<button type="button" onClick={()=>{const n=structuredClone(componentes);n[index].componentes.push({tipo:"catalogo",codigo:"",nombre:"",precio:0,duracion_min:0});setComponentes(n);}}>Añadir componente</button></div>)}</>}
+          {componentes.map((p, index)=><div className="atencionField atencionFieldWide" key={p.persona}><strong>Persona {p.persona}</strong>{p.componentes.map((c, ci)=><div key={ci} className="atencionGrid"><select value={c.tipo==="catalogo"?c.codigo:"manual"} onChange={(e)=>{const code=e.target.value;const next=structuredClone(componentes);next[index].componentes[ci]=code==="manual"?{tipo:"manual",nombre:"",duracion_min:0,precio:0}:{tipo:"catalogo",codigo:code,nombre:"",duracion_min:0,precio:0};setComponentes(next);}}><option value="manual">Manual</option>{services.filter(s=>servicioEsComponente(domainService(s))).map(s=><option key={s.code} value={s.code}>{s.name} · {money(s.price)} · {s.duration} min</option>)}</select>{c.tipo==="manual"&&<><input placeholder="Nombre" onChange={(e)=>{const n=structuredClone(componentes);n[index].componentes[ci].nombre=e.target.value;setComponentes(n);}}/><input type="number" placeholder="Minutos" onChange={(e)=>{const n=structuredClone(componentes);n[index].componentes[ci].duracion_min=Number(e.target.value);setComponentes(n);}}/><input type="number" placeholder="Precio" onChange={(e)=>{const n=structuredClone(componentes);n[index].componentes[ci].precio=Number(e.target.value);setComponentes(n);}}/></>}</div>)}<button type="button" onClick={()=>{const n=structuredClone(componentes);n[index].componentes.push({tipo:"catalogo",codigo:"",nombre:"",precio:0,duracion_min:0});setComponentes(n);}}>Añadir componente</button></div>)}</>}
           {!personalizada && <>
           <label className="atencionField">
             Servicio — persona 1
             <select name="servicio_1" value={service1} onChange={(event) => { setService1(event.target.value); setService2(""); setHora(""); }} required>
               <option value="">Selecciona</option>
-              {eligibleServices.map((item) => <option key={item.code} value={item.code}>{item.name} · {money(item.price)}</option>)}
+              {eligibleServices.map((item) => <option key={item.code} value={item.code}>{item.name} · {money(item.price)} · {item.duration} min</option>)}
             </select>
           </label>
-          {personas === 2 && (
+          {personas === 2 && !seleccionUnica && (
             <label className="atencionField">
               Servicio — persona 2
               <select name="servicio_2" value={service2} onChange={(event) => { setService2(event.target.value); setHora(""); }} required>
                 <option value="">Selecciona</option>
-                {opcionesServicio2.map((item) => <option key={item.code} value={item.code}>{item.name} · {money(item.price)}</option>)}
+                {opcionesServicio2.map((item) => <option key={item.code} value={item.code}>{item.name} · {money(item.price)} · {item.duration} min</option>)}
               </select>
             </label>
           )}
@@ -227,7 +249,7 @@ export function PrepararCitaForm({ services, sedes, metodos, countries, requestI
             <>
               <label className="atencionField">
                 Distrito
-                <input name="domicilio_distrito" required />
+                <input name="domicilio_distrito" value={district} onChange={(event) => setDistrict(event.target.value)} required />
               </label>
               <label className="atencionField atencionFieldWide">
                 Dirección
@@ -260,11 +282,11 @@ export function PrepararCitaForm({ services, sedes, metodos, countries, requestI
         <h2>4. Pago y envío</h2>
         <div className="paymentSummary">
           <div><span>Servicios</span><strong>{money(subtotalServicios)}</strong></div>
-          {esDomicilio && <div><span>Movilidad</span><strong>{money(movilidad)}</strong></div>}
+          {esDomicilio && <div><span>Movilidad</span><strong>{movilidad === null ? "Por confirmar" : money(movilidad)}</strong></div>}
           <div><span>Total calculado</span><strong>{money(total)}</strong></div>
           <div><span>Adelanto requerido</span><strong>{money(required)}</strong></div>
           <div><span>Saldo pendiente</span><strong>{money(Math.max(total - paid, 0))}</strong></div>
-          <div><span>Confirmación manual</span><strong>{esDomicilio ? "Sí" : "No"}</strong></div>
+          <div><span>Confirmación manual</span><strong>{economiaDomicilio?.ok && economiaDomicilio.requiresConfirmation ? "Sí" : "No"}</strong></div>
         </div>
         <div className="atencionGrid paymentFields">
           {personalizada && <><label className="atencionField">Precio final acordado<input name="precio_final" type="number" step="0.01" value={precioFinal} onChange={e=>setPrecioFinal(e.target.value)} placeholder={String(subtotalServicios)} /></label>{precioFinal && Number(precioFinal)!==subtotalServicios && <label className="atencionField atencionFieldWide">Motivo del ajuste<input name="motivo_ajuste" required /></label>}<label className="fichaConsent atencionFieldWide"><input name="confirmar_disponibilidad" value="1" type="checkbox" required /> Confirmo disponibilidad de cabinas y terapistas</label></>}
@@ -273,7 +295,8 @@ export function PrepararCitaForm({ services, sedes, metodos, countries, requestI
           <label className="atencionField">Número de operación<input name="numero_operacion" disabled={paid <= 0} /></label>
           <label className="atencionField atencionFieldWide">Observación<textarea name="observacion" rows={2} /></label>
         </div>
-        <button type="submit" className="primaryButton saveFichaButton" disabled={pending || !hora || total <= 0 || paid < required || (esDomicilio && !economiaDomicilio?.ok)}>
+        {esDomicilio && economiaDomicilio?.ok && economiaDomicilio.feePen === null && <div className="formMessage error" role="alert">El distrito requiere confirmar manualmente la movilidad antes de guardar.</div>}
+        <button type="submit" className="primaryButton saveFichaButton" disabled={pending || !hora || total <= 0 || paid < required || (esDomicilio && (!economiaDomicilio?.ok || economiaDomicilio.feePen === null))}>
           {pending ? "Guardando transacción…" : "Guardar cita, pago y generar enlace"}
         </button>
       </section>
