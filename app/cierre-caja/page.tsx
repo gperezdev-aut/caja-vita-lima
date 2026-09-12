@@ -351,11 +351,18 @@ export default async function CierreCajaPage({
         </section>
 
         <section className="grid secondary">
-          <Card label="Ingresos" value={money(totalIngresos)} tone="good" />
+          <Card label="Ingresos atribuidos a citas" value={money(totalIngresos)} tone="good" />
           <Card label="Salidas" value={money(totalSalidas)} />
           <Card label="Pax" value={numberFmt(paxTotal)} />
           <Card label="Boletas pendientes" value={numberFmt(boletasPendientes)} tone="warn" />
         </section>
+
+        <div className="calculationNotice" role="note">
+          <strong>Cálculo automático actual</strong>
+          <span>
+            Los ingresos provienen del total pagado acumulado en movimientos con fecha de cita seleccionada. Hasta migrar el cierre al ledger de pagos, confirma manualmente los cobros realmente recibidos hoy.
+          </span>
+        </div>
 
         <form
           action={createCierreCajaAction}
@@ -394,7 +401,7 @@ export default async function CierreCajaPage({
             </FormGrid>
           </Section>
 
-          <Section title="Montos">
+          <Section title="Montos automáticos y conteo manual">
             <FormGrid>
               <FormField label="Caja inicial">
                 <Input name="caja_inicial" type="number" step="0.01" min="0" defaultValue="0.00" required />
@@ -408,11 +415,11 @@ export default async function CierreCajaPage({
                 <Input name="pozo_fondo" type="number" step="0.01" min="0" defaultValue="0.00" required />
               </FormField>
 
-              <FormField label="Total ingresos">
+              <FormField label="Ingresos sugeridos (editable)">
                 <Input name="total_ingresos" type="number" step="0.01" min="0" defaultValue={totalIngresos.toFixed(2)} required />
               </FormField>
 
-              <FormField label="Total salidas">
+              <FormField label="Salidas sugeridas (editable)">
                 <Input name="total_salidas" type="number" step="0.01" min="0" defaultValue={totalSalidas.toFixed(2)} required />
               </FormField>
 

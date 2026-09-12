@@ -51,7 +51,7 @@ async function patchMovimientoComprobante(
 }
 
 export async function updateComprobanteAction(formData: FormData) {
-  await requireModuleAccess("comprobantes");
+  const session = await requireModuleAccess("comprobantes");
 
   const movimientoId = clean(formData.get("movimiento_id"));
   const tipoComprobante = clean(formData.get("tipo_comprobante"));
@@ -59,7 +59,7 @@ export async function updateComprobanteAction(formData: FormData) {
   const numeroComprobante = clean(formData.get("numero_comprobante_final"));
   const fechaEmision = clean(formData.get("fecha_emision_comprobante"));
   const observacionComprobante = clean(formData.get("observacion_comprobante"));
-  const revisadoPor = clean(formData.get("comprobante_revisado_por")) || "Gerald";
+  const revisadoPor = session.nombre;
 
   if (!movimientoId) {
     redirect("/comprobantes?error=Falta el ID del movimiento.");
@@ -71,6 +71,23 @@ export async function updateComprobanteAction(formData: FormData) {
         "Selecciona tipo de comprobante y estado."
       )}`
     );
+  }
+
+  const tiposPermitidos = new Set(["POR_DEFINIR", "BOLETA", "FACTURA", "NO_APLICA"]);
+  const estadosPermitidos = new Set(["PENDIENTE", "OBSERVAR", "OK", "NO_APLICA"]);
+  if (!tiposPermitidos.has(tipoComprobante) || !estadosPermitidos.has(estadoComprobante)) {
+    redirect("/comprobantes?error=Tipo o estado de comprobante inválido.");
+  }
+
+  if (estadoComprobante === "OK" && (!numeroComprobante || !fechaEmision)) {
+    redirect("/comprobantes?error=Un comprobante OK requiere número y fecha de emisión.");
+  }
+
+  if (
+    (tipoComprobante === "NO_APLICA" && estadoComprobante !== "NO_APLICA") ||
+    (estadoComprobante === "NO_APLICA" && tipoComprobante !== "NO_APLICA")
+  ) {
+    redirect("/comprobantes?error=No aplica debe seleccionarse como tipo y estado.");
   }
 
   await patchMovimientoComprobante(movimientoId, {
