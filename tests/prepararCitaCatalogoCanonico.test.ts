@@ -114,10 +114,17 @@ test("020 crea fronteras privadas y un resolver transaccional sin staging", asyn
     assert.match(sql, new RegExp(token, "i"));
   }
   assert.doesNotMatch(sql, /\b(?:from|join)\s+public\.stg_services_catalog_v5/i);
-  assert.match(sql, /pg_get_functiondef[\s\S]*CAJA_PREPARAR_CITA_RPC_PATCH_FAILED/i);
+  assert.doesNotMatch(sql, /pg_get_functiondef|execute\s+v_updated|v_definition|v_updated/i);
+  assert.equal((sql.match(/create or replace function public\.preparar_ficha_cita\(p_payload jsonb\)/gi) ?? []).length, 1);
+  assert.equal((sql.match(/create or replace function public\.preparar_atencion_personalizada\(p_payload jsonb\)/gi) ?? []).length, 1);
+  assert.match(sql, /v_resuelto := public\.caja_catalog_resolve_appointment_v1/i);
+  assert.match(sql, /from public\.caja_catalog_active_services_legacy_shape_v1 sc/i);
   assert.match(sql, /caja_preparar_cita_catalog_metadata_v1/i);
   assert.match(sql, /revoke all on function public\.caja_catalog_active_services_read_v1\(\) from public, anon, authenticated/i);
   assert.match(harness, /^begin;/i);
   assert.match(harness, /rollback;/i);
   assert.match(harness, /Miraflores|San Borja|Surco|San Isidro|Barranco/i);
+  for (const token of ["QA_020_PACKAGE_TWO_INVALID", "QA_020_ONE_PERSON_X2_INVALID", "QA_020_HOME_TWO_PEOPLE_INVALID", "QA_020_HOME_BRANCH_MIX_SHOULD_FAIL", "QA_020_DEFAULT_RPC_SHOULD_FAIL", "QA_020_INACTIVE_SNAPSHOT_SHOULD_FAIL", "QA_020_INVALID_SNAPSHOT_SHOULD_FAIL"]) {
+    assert.match(harness, new RegExp(token));
+  }
 });
