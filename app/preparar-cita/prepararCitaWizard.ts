@@ -54,6 +54,21 @@ export function appointmentTypeLabel(type: AppointmentType | "", personas: numbe
   return "Cita sin definir";
 }
 
+/** Limpia únicamente la presentación; el valor canónico permanece intacto. */
+export function serviceDisplayName(name: string) {
+  const trimmed = name.trim();
+  const withoutMojibakePrefix = /^(?:ð|â|Ã|Â)\S*\s+/u.test(trimmed)
+    ? trimmed.replace(/^\S+\s+/u, "")
+    : trimmed;
+  return withoutMojibakePrefix.replace(/^[^\p{L}\p{N}]+/u, "").trim();
+}
+
+export function compactPhoneInput(value: string) {
+  const trimmed = value.trim();
+  const digits = trimmed.replace(/\D/g, "");
+  return trimmed.startsWith("+") && digits ? `+${digits}` : digits;
+}
+
 export function formatTime(value: string) {
   const [hour, minute] = value.split(":").map(Number);
   if (!Number.isFinite(hour) || !Number.isFinite(minute)) return value;

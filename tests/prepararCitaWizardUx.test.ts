@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { appointmentTypeLabel, categoryLabel, formatTime, homeServicesForPeople, progressIndex, reconcileHomeSelection, servicesForType } from "../app/preparar-cita/prepararCitaWizard.ts";
+import { appointmentTypeLabel, categoryLabel, compactPhoneInput, formatTime, homeServicesForPeople, progressIndex, reconcileHomeSelection, serviceDisplayName, servicesForType } from "../app/preparar-cita/prepararCitaWizard.ts";
 import type { Service } from "../app/preparar-cita/components/types.ts";
 import { calcularEconomiaHome, parsearSnapshotServicios, validarSeleccionCita, type PoliticaHome } from "../lib/catalogoPrepararCitaDominio.ts";
 
@@ -113,6 +113,19 @@ test("las etiquetas visibles se derivan de las categorías disponibles", () => {
   assert.equal(formatTime("19:00"), "7:00 p. m.");
 });
 
+test("limpia prefijos emoji correctos o mojibake sin cambiar el nombre comercial", () => {
+  assert.equal(serviceDisplayName("🌅 Supreme"), "Supreme");
+  assert.equal(serviceDisplayName("\u00f0\u0178\u0152\u2026 Supreme"), "Supreme");
+  assert.equal(serviceDisplayName("\u00e2\u008f\u00b3 Break Time"), "Break Time");
+  assert.equal(serviceDisplayName("Masaje Prenatal"), "Masaje Prenatal");
+});
+
+test("compacta separadores telefónicos sin añadir ni duplicar prefijos", () => {
+  assert.equal(compactPhoneInput("987 654-321"), "987654321");
+  assert.equal(compactPhoneInput("+51 987 654 321"), "+51987654321");
+  assert.equal(compactPhoneInput("+1 (305) 555-1234"), "+13055551234");
+});
+
 test("la vista es progresiva, permite volver y conserva pago decimal editable", async () => {
   const source = await readFile(new URL("../app/preparar-cita/PrepararCitaForm.tsx", import.meta.url), "utf8");
   for (const step of [0, 1, 2, 3, 4, 5]) assert.match(source, new RegExp(`step === ${step}`));
@@ -140,4 +153,7 @@ test("los estilos incluyen navegación móvil, barra fija y objetivos táctiles"
   assert.match(css, /\.mobileSummaryBar\{position:fixed/);
   assert.match(css, /min-height:44px/);
   assert.match(css, /\.sidebarMobile\{display:block\}/);
+  assert.match(css, /input\[type="date"\]\{display:block;width:100%;max-width:100%;min-width:0;box-sizing:border-box\}/);
+  assert.match(css, /\.serviceCardList>button\{min-height:52px;padding:8px 11px\}/);
+  assert.match(css, /env\(safe-area-inset-bottom\)/);
 });

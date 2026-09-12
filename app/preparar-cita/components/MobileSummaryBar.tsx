@@ -12,7 +12,7 @@ export function MobileSummaryBar({ visible, summary, detail, actionLabel, disabl
   return (
     <aside className="mobileSummaryBar" aria-label="Resumen de la cita">
       <div>
-        <strong>{summary}</strong>
+        <strong title={summary}>{summary}</strong>
         {detail && <span>{detail}</span>}
       </div>
       <button type="button" disabled={disabled} onClick={onAction}>{actionLabel}</button>

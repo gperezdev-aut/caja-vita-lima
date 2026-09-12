@@ -5,6 +5,7 @@ import { requireModuleAccess } from "@/lib/auth";
 import { leerCatalogoPrepararCita } from "@/lib/catalogoPrepararCita";
 import { supabaseSelect } from "@/lib/supabaseServer";
 import { PrepararCitaForm } from "./PrepararCitaForm";
+import { serviceDisplayName } from "./prepararCitaWizard";
 
 type Row = Record<string, unknown>;
 
@@ -29,7 +30,7 @@ export default async function PrepararCitaPage() {
   const services = catalogResult.ok
     ? catalogResult.services.map((service) => ({
         code: service.serviceCode,
-        name: service.nameEs,
+        name: serviceDisplayName(service.nameEs),
         duration: service.durationMin,
         price: service.pricePen,
         category: service.category,

@@ -273,6 +273,28 @@ export function calcularExpiracionFicha(fecha: string, hora: string, duracionMin
   return new Date(inicio.getTime() + duracionMin * 60_000).toISOString();
 }
 
+/**
+ * Conserva la expiración contractual al final de la cita y evita crear un
+ * token que ya nació vencido cuando se registra hoy una atención terminada.
+ */
+export function resolverExpiracionFichaVigente(
+  fecha: string,
+  hora: string,
+  duracionMin: number,
+  ahora = Date.now()
+) {
+  try {
+    const tokenExpira = calcularExpiracionFicha(fecha, hora, duracionMin);
+    const expiraEn = Date.parse(tokenExpira);
+    if (!Number.isFinite(expiraEn) || expiraEn <= ahora) {
+      return { ok: false as const };
+    }
+    return { ok: true as const, tokenExpira };
+  } catch {
+    return { ok: false as const };
+  }
+}
+
 export type NormalizarTelefonoResultado =
   | { ok: true; e164: string; pais: string }
   | { ok: false };
