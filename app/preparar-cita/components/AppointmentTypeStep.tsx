@@ -35,13 +35,13 @@ export function AppointmentTypeStep({ value, personas, onSelect, onPersonas }: P
           </button>
         ))}
       </div>
-      {value === "custom" && (
+      {(value === "custom" || value === "home") && (
         <fieldset className="peoplePicker">
-          <legend>¿Para cuántas personas?</legend>
+          <legend>{value === "home" ? "Personas para la cita a domicilio" : "¿Para cuántas personas?"}</legend>
           <div>
-            {[1, 2, 3, 4, 5].map((count) => (
+            {(value === "home" ? [1, 2] : [1, 2, 3, 4, 5]).map((count) => (
               <button key={count} type="button" className={personas === count ? "selected" : ""} onClick={() => onPersonas(count)}>
-                {count}
+                {count} persona{count === 1 ? "" : "s"}
               </button>
             ))}
           </div>

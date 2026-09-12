@@ -25,6 +25,35 @@ export function servicesForType(services: Service[], type: AppointmentType) {
   return [];
 }
 
+export function homeServicesForPeople(services: Service[], personas: 1 | 2) {
+  return services.filter((service) =>
+    service.selectionRule === "HOME_FLOW" &&
+    personas >= service.peopleMin &&
+    personas <= service.peopleMax
+  );
+}
+
+export function reconcileHomeSelection(
+  services: Service[],
+  personas: 1 | 2,
+  service1: string,
+  service2: string,
+) {
+  const compatibleCodes = new Set(homeServicesForPeople(services, personas).map((service) => service.code));
+  return {
+    service1: compatibleCodes.has(service1) ? service1 : "",
+    service2: personas === 2 && compatibleCodes.has(service2) ? service2 : "",
+  };
+}
+
+export function appointmentTypeLabel(type: AppointmentType | "", personas: number) {
+  if (type === "single") return "1 persona";
+  if (type === "couple") return "2 personas";
+  if (type === "home") return `Domicilio · ${personas} persona${personas === 1 ? "" : "s"}`;
+  if (type === "custom") return `Personalizada · ${personas} persona${personas === 1 ? "" : "s"}`;
+  return "Cita sin definir";
+}
+
 export function formatTime(value: string) {
   const [hour, minute] = value.split(":").map(Number);
   if (!Number.isFinite(hour) || !Number.isFinite(minute)) return value;
