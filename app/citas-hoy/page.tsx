@@ -5,6 +5,8 @@ import { Badge } from "@/components/Badge";
 import { FormField } from "@/components/FormField";
 import { Input } from "@/components/Input";
 import { Select } from "@/components/Select";
+import { whatsappHref } from "@/lib/whatsapp";
+import Link from "next/link";
 
 type Row = Record<string, any>;
 
@@ -91,16 +93,6 @@ function hourLabel(value: any) {
   return String(value).slice(0, 5);
 }
 
-function waHref(value: any) {
-  let digits = String(value ?? "").replace(/\D/g, "");
-  if (!digits) return "";
-  if (digits.length > 9 && digits.startsWith("51")) {
-    digits = digits.slice(2);
-  }
-  digits = digits.slice(-9);
-  return `https://wa.me/51${digits}`;
-}
-
 function AlertaBadge({ alerta }: { alerta: string }) {
   if (!alerta) return null;
 
@@ -172,16 +164,18 @@ function CitaMobileCard({ cita }: { cita: CitaPresentation }) {
         </div>
       </div>
 
-      {row.whatsapp && (
-        <p className="citasHoyWhatsapp">
-          <span>WhatsApp</span>
-          <strong>
-            <a href={waHref(row.whatsapp)} target="_blank" rel="noopener noreferrer" style={{ color: "var(--green)" }}>
-              {row.whatsapp}
-            </a>
-          </strong>
-        </p>
-      )}
+      <div className="operationActions">
+        {whatsappHref(row.whatsapp) && (
+          <a href={whatsappHref(row.whatsapp)} target="_blank" rel="noopener noreferrer" className="actionButton actionButtonPrimary">
+            WhatsApp
+          </a>
+        )}
+        {row.cliente_id && (
+          <Link href={`/clientes/${encodeURIComponent(String(row.cliente_id))}`} className="actionButton">
+            Ver cliente
+          </Link>
+        )}
+      </div>
 
       <small className="citasHoyMovement">Movimiento: {movimientoId}</small>
     </article>
@@ -207,7 +201,7 @@ export default async function CitasHoyPage({
   const sedeLabel = selectedSede === "TODAS" ? "todas las sedes" : selectedSede;
 
   const movimientosQuery = [
-    "select=movimiento_id,fecha,hora,sede,cliente,whatsapp,servicio,total_cobrar,total_pagado,pendiente,estado,estado_boleta,tipo_comprobante,estado_comprobante_manual,numero_comprobante_final,source_type,created_at",
+    "select=movimiento_id,fecha,hora,sede,cliente_id,cliente,whatsapp,servicio,total_cobrar,total_pagado,pendiente,estado,estado_boleta,tipo_comprobante,estado_comprobante_manual,numero_comprobante_final,source_type,source_id,created_at",
     `fecha=eq.${selectedFecha}`,
   ];
 
@@ -510,6 +504,7 @@ export default async function CitasHoyPage({
                       <th>Pendiente</th>
                       <th>Estado</th>
                       <th>Comprobante</th>
+                      <th>Acciones</th>
                       <th>Movimiento</th>
                     </tr>
                   </thead>
@@ -535,8 +530,8 @@ export default async function CitasHoyPage({
                             )}
                           </td>
                           <td>
-                            {row.whatsapp ? (
-                              <a href={waHref(row.whatsapp)} target="_blank" rel="noopener noreferrer" style={{ color: "var(--green)" }}>
+                            {whatsappHref(row.whatsapp) ? (
+                              <a href={whatsappHref(row.whatsapp)} target="_blank" rel="noopener noreferrer" className="textLink">
                                 {row.whatsapp}
                               </a>
                             ) : (
@@ -566,6 +561,16 @@ export default async function CitasHoyPage({
                             >
                               {comprobante}
                             </Badge>
+                          </td>
+                          <td>
+                            <div className="tableActions">
+                              {whatsappHref(row.whatsapp) && (
+                                <a href={whatsappHref(row.whatsapp)} target="_blank" rel="noopener noreferrer" className="textLink">WhatsApp</a>
+                              )}
+                              {row.cliente_id && (
+                                <Link href={`/clientes/${encodeURIComponent(String(row.cliente_id))}`} className="textLink">Cliente</Link>
+                              )}
+                            </div>
                           </td>
                           <td>{movimientoId}</td>
                         </tr>

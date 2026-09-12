@@ -8,6 +8,7 @@ import { Input } from "@/components/Input";
 import { Select } from "@/components/Select";
 import { Textarea } from "@/components/Textarea";
 import { updateComprobanteAction } from "./actions";
+import { whatsappHref } from "@/lib/whatsapp";
 
 type Row = Record<string, any>;
 
@@ -40,16 +41,6 @@ function dateLabel(value: any) {
 function hourLabel(value: any) {
   if (!value) return "-";
   return String(value).slice(0, 5);
-}
-
-function waHref(value: any) {
-  let digits = String(value ?? "").replace(/\D/g, "");
-  if (!digits) return "";
-  if (digits.length > 9 && digits.startsWith("51")) {
-    digits = digits.slice(2);
-  }
-  digits = digits.slice(-9);
-  return `https://wa.me/51${digits}`;
 }
 
 function isPendingComprobante(row: Row) {
@@ -117,8 +108,8 @@ function ComprobanteCard({ row }: { row: Row }) {
           </p>
           <p style={{ margin: "8px 0 0", color: "var(--muted)", lineHeight: 1.5 }}>
             WhatsApp:{" "}
-            {row.whatsapp ? (
-              <a href={waHref(row.whatsapp)} target="_blank" rel="noopener noreferrer" style={{ color: "var(--green)" }}>
+            {whatsappHref(row.whatsapp) ? (
+              <a href={whatsappHref(row.whatsapp)} target="_blank" rel="noopener noreferrer" className="textLink">
                 {row.whatsapp}
               </a>
             ) : (
@@ -179,7 +170,8 @@ function ComprobanteCard({ row }: { row: Row }) {
           <FormField label="Revisado por">
             <Input
               name="comprobante_revisado_por"
-              defaultValue={row.comprobante_revisado_por ?? "Gerald"}
+              value="Se registrará desde la sesión activa"
+              readOnly
             />
           </FormField>
         </FormGrid>

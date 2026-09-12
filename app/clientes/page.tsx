@@ -7,6 +7,7 @@ import { Badge } from "@/components/Badge";
 import { FormField } from "@/components/FormField";
 import { Input } from "@/components/Input";
 import { Select } from "@/components/Select";
+import { whatsappHref } from "@/lib/whatsapp";
 
 type Row = Record<string, any>;
 
@@ -49,22 +50,14 @@ function safe(value: any) {
   return text || "-";
 }
 
-function waHref(value: any) {
-  let digits = String(value ?? "").replace(/\D/g, "");
-  if (!digits) return "";
-  if (digits.length > 9 && digits.startsWith("51")) {
-    digits = digits.slice(2);
-  }
-  digits = digits.slice(-9);
-  return `https://wa.me/51${digits}`;
-}
-
 function WhatsappCell({ value }: { value: any }) {
   const text = safe(value);
   if (text === "-") return <>{text}</>;
+  const href = whatsappHref(value);
+  if (!href) return <>{text}</>;
 
   return (
-    <a href={waHref(value)} target="_blank" rel="noopener noreferrer" style={{ color: "var(--green)" }}>
+    <a href={href} target="_blank" rel="noopener noreferrer" className="textLink">
       {text}
     </a>
   );
@@ -639,6 +632,7 @@ export default async function ClientesPage({ searchParams }: { searchParams: Sea
               </tbody>
             </table>
           </div>
+
         </section>
 
         <section className="panel">
@@ -649,7 +643,7 @@ export default async function ClientesPage({ searchParams }: { searchParams: Sea
             </div>
           </div>
 
-          <div className="tableWrap">
+          <div className="tableWrap clientesBaseTable">
             <table>
               <thead>
                 <tr>
@@ -700,6 +694,34 @@ export default async function ClientesPage({ searchParams }: { searchParams: Sea
                 ))}
               </tbody>
             </table>
+          </div>
+
+          <div className="crmMobileList">
+            {clientes.length === 0 ? (
+              <div className="emptyState">No hay clientes con los filtros seleccionados.</div>
+            ) : clientes.map((row, index) => (
+              <article className="crmMobileCard" key={`${row.cliente_id ?? row.cliente}-mobile-${index}`}>
+                <div className="crmMobileHeader">
+                  <div>
+                    <Link href={clienteHref(row)} className="crmLink">{safe(row.cliente)}</Link>
+                    <span>{getCatalogoNombre(row)}</span>
+                  </div>
+                  <Badge tone={cardToneByEstado(getEstado(row))}>{getEstado(row)}</Badge>
+                </div>
+                <div className="crmMobileFacts">
+                  <div><span>Última visita</span><strong>{dateShort(row.ultima_visita ?? row.ultima_reserva)}</strong></div>
+                  <div><span>Sede</span><strong>{getSede(row)}</strong></div>
+                  <div><span>Visitas</span><strong>{numberFmt(row.total_visitas ?? row.total_reservas)}</strong></div>
+                  <div><span>Total</span><strong>{money(row.total_gastado)}</strong></div>
+                </div>
+                <div className="operationActions">
+                  {whatsappHref(row.whatsapp) && (
+                    <a className="actionButton actionButtonPrimary" href={whatsappHref(row.whatsapp)} target="_blank" rel="noopener noreferrer">WhatsApp</a>
+                  )}
+                  <Link className="actionButton" href={clienteHref(row)}>Ver ficha</Link>
+                </div>
+              </article>
+            ))}
           </div>
         </section>
       </section>

@@ -246,7 +246,7 @@ export default async function HomePage({
 
         <section className="grid">
           <Card
-            label="Ingresos confirmados"
+            label="Ingresos por fecha operativa"
             value={money(dashboardTotals.ingresos)}
             tone="good"
           />

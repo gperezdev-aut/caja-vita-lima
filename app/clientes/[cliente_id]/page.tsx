@@ -11,6 +11,7 @@ import { Input } from "@/components/Input";
 import { Select } from "@/components/Select";
 import { Textarea } from "@/components/Textarea";
 import { updateClienteCrmAction } from "./actions";
+import { whatsappHref } from "@/lib/whatsapp";
 
 type Row = Record<string, any>;
 
@@ -67,16 +68,6 @@ function dateShort(value: any) {
 function dateInput(value: any) {
   const text = String(value ?? "").trim();
   return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : "";
-}
-
-function waHref(value: any) {
-  let digits = String(value ?? "").replace(/\D/g, "");
-  if (!digits) return "";
-  if (digits.length > 9 && digits.startsWith("51")) {
-    digits = digits.slice(2);
-  }
-  digits = digits.slice(-9);
-  return `https://wa.me/51${digits}`;
 }
 
 function timeShort(value: any) {
@@ -426,10 +417,10 @@ export default async function ClienteDetallePage({
             <InfoItem
               label="WhatsApp"
               value={
-                whatsapp === "-" ? (
+                whatsapp === "-" || !whatsappHref(whatsapp) ? (
                   whatsapp
                 ) : (
-                  <a href={waHref(whatsapp)} target="_blank" rel="noopener noreferrer" style={{ color: "var(--green)" }}>
+                  <a href={whatsappHref(whatsapp)} target="_blank" rel="noopener noreferrer" className="textLink">
                     {whatsapp}
                   </a>
                 )
