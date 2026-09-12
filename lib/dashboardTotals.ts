@@ -60,6 +60,11 @@ export function getNumber(row: Row, key: string) {
 }
 
 export function getCuponidadFromMonthlyRow(row: Row) {
+  if (Object.prototype.hasOwnProperty.call(row, "Cuponidad cobrada en caja")) {
+    return getNumber(row, "Cuponidad cobrada en caja");
+  }
+
+  // Compatibilidad con respuestas antiguas que no proyectaban la columna.
   const totalIngresos = getNumber(row, "Total ingresos confirmados");
   const servicios = getNumber(row, "Ingresos por servicios");
   const giftCards = getNumber(row, "Ingresos por Gift Cards");

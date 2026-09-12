@@ -12,7 +12,7 @@
     "start": "next start",
     "typecheck": "tsc --noEmit --incremental false",
     "lint": "eslint .",
-    "test:sql": "node tests/run-catalog-snapshot-postgres-validation.mjs"
+    "test:sql": "node tests/run-catalog-snapshot-postgres-validation.mjs && node tests/run-pagos-ledger-postgres-validation.mjs"
   },
   "dependencies": {
     "@types/node": "26.1.1",
