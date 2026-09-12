@@ -2,28 +2,12 @@ import { randomUUID } from "crypto";
 import { getCountries, getCountryCallingCode } from "libphonenumber-js/max";
 import { CajaSidebar } from "@/components/CajaSidebar";
 import { requireModuleAccess } from "@/lib/auth";
-import { precioCatalogoActivo } from "@/lib/fichaCitaDominio";
+import { leerCatalogoPrepararCita } from "@/lib/catalogoPrepararCita";
 import { supabaseSelect } from "@/lib/supabaseServer";
 import { PrepararCitaForm } from "./PrepararCitaForm";
 
 type Row = Record<string, unknown>;
 
-function number(value: unknown) {
-  const parsed = Number(
-    String(value ?? "")
-      .replace(/S\//gi, "")
-      .replace(/\s/g, "")
-      .replace(",", ".")
-      .replace(/[^\d.-]/g, "")
-  );
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function truthy(value: unknown) {
-  return ["true", "1", "yes", "si", "sí"].includes(
-    String(value ?? "").trim().toLowerCase()
-  );
-}
 function todayInLima() {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Lima",
@@ -37,23 +21,26 @@ export default async function PrepararCitaPage() {
   const session = await requireModuleAccess("preparar-cita");
   const [catalogResult, sedesResult, configResult] =
     await Promise.all([
-      supabaseSelect<Row>("stg_services_catalog_v5"),
+      leerCatalogoPrepararCita(),
       supabaseSelect<Row>("sedes"),
       supabaseSelect<Row>("config_listas"),
     ]);
 
-  const services = catalogResult.data
-    .filter((row) => truthy(row.active))
-    .map((row) => ({
-      code: String(row.CodeId ?? "").trim(),
-      name: String(row.option_name ?? "").trim(),
-      duration: Math.round(number(row.duration_min)),
-      price: precioCatalogoActivo(row.price_pen, row.price),
-      paxType: String(row.pax_type ?? row.category ?? "").trim().toLowerCase(),
-      sortOrder: number(row.sort_order),
-    }))
-    .filter((row) => row.code && row.name && row.duration > 0 && row.price > 0)
-    .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+  const services = catalogResult.ok
+    ? catalogResult.services.map((service) => ({
+        code: service.serviceCode,
+        name: service.nameEs,
+        duration: service.durationMin,
+        price: service.pricePen,
+        category: service.category,
+        modality: service.modality,
+        peopleMin: service.peopleMin,
+        peopleMax: service.peopleMax,
+        selectionRule: service.selectionRule,
+        reservationBehavior: service.reservationBehavior,
+      })).sort((a, b) => a.name.localeCompare(b.name, "es"))
+    : [];
+  const homePolicies = catalogResult.ok ? catalogResult.homePolicies : [];
 
   const today = todayInLima();
 
@@ -73,7 +60,7 @@ export default async function PrepararCitaPage() {
     .filter(Boolean);
 
   const error =
-    catalogResult.error || sedesResult.error || configResult.error ||
+    ("error" in catalogResult ? catalogResult.error : "") || sedesResult.error || configResult.error ||
     (!metodos.length ? "No hay métodos de pago activos configurados." : "");
   const regionNames = new Intl.DisplayNames(["es"], { type: "region" });
   const countries = getCountries()
@@ -105,6 +92,7 @@ export default async function PrepararCitaPage() {
         ) : (
           <PrepararCitaForm
             services={services}
+            homePolicies={homePolicies}
             sedes={sedes}
             metodos={metodos}
             countries={countries}
