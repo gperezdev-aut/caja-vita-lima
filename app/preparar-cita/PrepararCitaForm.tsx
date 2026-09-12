@@ -1,305 +1,105 @@
 "use client";
 
 import { useActionState, useMemo, useState } from "react";
-import {
-  calcularAdelantoRequerido,
-  calcularAtencionPersonalizada,
-} from "@/lib/fichaCitaDominio";
-import {
-  calcularEconomiaHome,
-  servicioEsCitaNormal,
-  servicioEsComponente,
-  servicioEsHome,
-  type PoliticaHome,
-} from "@/lib/catalogoPrepararCitaDominio";
-import {
-  buscarClienteFichaAction,
-  prepararCitaAction,
-  type PrepararCitaState,
-} from "./actions";
-import type { PersonaPersonalizada } from "@/lib/fichaCitaDominio";
+import { calcularAdelantoRequerido, calcularAtencionPersonalizada, redondearDinero, type PersonaPersonalizada } from "@/lib/fichaCitaDominio";
+import { calcularEconomiaHome, servicioEsCitaNormal, servicioEsComponente, servicioEsHome, type PoliticaHome } from "@/lib/catalogoPrepararCitaDominio";
+import { buscarClienteFichaAction, prepararCitaAction, type PrepararCitaState } from "./actions";
+import { AppointmentTypeStep } from "./components/AppointmentTypeStep";
+import { MobileSummaryBar } from "./components/MobileSummaryBar";
+import { PersonalizedServiceBuilder } from "./components/PersonalizedServiceBuilder";
+import { ServicePicker } from "./components/ServicePicker";
+import type { AppointmentType, Service } from "./components/types";
+import { WizardStepper } from "./components/WizardStepper";
+import { appointmentTypeLabel, formatDate, formatTime, homeServicesForPeople, reconcileHomeSelection, servicesForType } from "./prepararCitaWizard";
 
-type Service = {
-  code: string;
-  name: string;
-  duration: number;
-  price: number;
-  category: string;
-  modality: string;
-  peopleMin: number;
-  peopleMax: number;
-  selectionRule: string;
-  reservationBehavior: string;
-};
-
-type Props = {
-  services: Service[];
-  homePolicies: PoliticaHome[];
-  sedes: { name: string; open: string; close: string }[];
-  metodos: string[];
-  countries: { code: string; name: string; callingCode: string }[];
-  requestId: string;
-  minDate: string;
-};
-
+type Props = { services: Service[]; homePolicies: PoliticaHome[]; sedes: { name: string; open: string; close: string }[]; metodos: string[]; countries: { code: string; name: string; callingCode: string }[]; requestId: string; minDate: string };
 const initialState: PrepararCitaState = { ok: false };
-
-function money(value: number) {
-  return new Intl.NumberFormat("es-PE", { style: "currency", currency: "PEN" }).format(value);
-}
-
-function toMinutes(value: string) {
-  const [h, m] = value.split(":").map(Number);
-  return h * 60 + m;
-}
-
-function fromMinutes(value: number) {
-  return `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`;
-}
-
-function domainService(service: Service) {
-  return {
-    pricePen: service.price, category: service.category, modality: service.modality,
-    selectionRule: service.selectionRule, reservationBehavior: service.reservationBehavior,
-  };
-}
+const money = (value: number) => new Intl.NumberFormat("es-PE", { style: "currency", currency: "PEN" }).format(value);
+const toMinutes = (value: string) => { const [h, m] = value.split(":").map(Number); return h * 60 + m; };
+const fromMinutes = (value: number) => `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`;
+const domainService = (service: Service) => ({ pricePen: service.price, category: service.category, modality: service.modality, selectionRule: service.selectionRule, reservationBehavior: service.reservationBehavior });
+function initialComponents(count: number, previous: PersonaPersonalizada[] = []) { return Array.from({ length: count }, (_, index) => previous[index] ?? { persona: index + 1, componentes: [{ tipo: "catalogo" as const, codigo: "", nombre: "", precio: 0, duracion_min: 0 }] }); }
 
 export function PrepararCitaForm({ services, homePolicies, sedes, metodos, countries, requestId, minDate }: Props) {
   const [state, formAction, pending] = useActionState(prepararCitaAction, initialState);
-  const [personas, setPersonas] = useState(1);
-  const [personalizada, setPersonalizada] = useState(false);
-  const [modalidad, setModalidad] = useState<"simultanea" | "consecutiva">("simultanea");
-  const [componentes, setComponentes] = useState<PersonaPersonalizada[]>([
-    { persona: 1, componentes: [] },
-  ]);
-  const [precioFinal, setPrecioFinal] = useState("");
-  const [sede, setSede] = useState(sedes[0]?.name ?? "");
-  const [fecha, setFecha] = useState(minDate);
-  const [hora, setHora] = useState("");
-  const [pais, setPais] = useState("PE");
-  const [telefono, setTelefono] = useState("");
-  const [cliente, setCliente] = useState("");
-  const [service1, setService1] = useState("");
-  const [service2, setService2] = useState("");
-  const [paid, setPaid] = useState(0);
-  const [district, setDistrict] = useState("");
-  const [lookupMessage, setLookupMessage] = useState("");
+  const [step, setStep] = useState(0); const [maxStep, setMaxStep] = useState(0); const [stepError, setStepError] = useState("");
+  const [appointmentType, setAppointmentType] = useState<AppointmentType | "">(""); const [personas, setPersonas] = useState(1); const [coupleMode, setCoupleMode] = useState<"package" | "individual">("package");
+  const [modalidad, setModalidad] = useState<"simultanea" | "consecutiva">("simultanea"); const [componentes, setComponentes] = useState<PersonaPersonalizada[]>(initialComponents(1));
+  const [precioFinal, setPrecioFinal] = useState(""); const [motivoAjuste, setMotivoAjuste] = useState(""); const [availabilityConfirmed, setAvailabilityConfirmed] = useState(false);
+  const [sede, setSede] = useState(sedes[0]?.name ?? ""); const [fecha, setFecha] = useState(minDate); const [hora, setHora] = useState("");
+  const [pais, setPais] = useState("PE"); const [telefono, setTelefono] = useState(""); const [cliente, setCliente] = useState(""); const [idioma, setIdioma] = useState<"es" | "en">("es");
+  const [service1, setService1] = useState(""); const [service2, setService2] = useState(""); const [paid, setPaid] = useState(""); const [method, setMethod] = useState(""); const [operation, setOperation] = useState("");
+  const [district, setDistrict] = useState(""); const [address, setAddress] = useState(""); const [reference, setReference] = useState("");
+  const [observation, setObservation] = useState("");
+  const [lookupMessage, setLookupMessage] = useState(""); const [lookupPending, setLookupPending] = useState(false); const [copied, setCopied] = useState(false);
 
-  const eligibleServices = useMemo(() => {
-    return services.filter((item) => servicioEsCitaNormal(domainService(item)) && (
-      personas === 1
-        ? item.selectionRule === "ONE_PERSON" || item.selectionRule === "HOME_FLOW"
-        : ["ONE_PERSON", "FIXED_TWO_PACKAGE", "HOME_FLOW"].includes(item.selectionRule)
-    ));
-  }, [personas, services]);
-  const first = eligibleServices.find((item) => item.code === service1);
-  const seleccionUnica = personas === 2 && first?.selectionRule === "FIXED_TWO_PACKAGE";
-  const selected = [
-    eligibleServices.find((item) => item.code === service1),
-    personas === 2 && !seleccionUnica ? eligibleServices.find((item) => item.code === service2) : null,
-  ].filter((item): item is Service => Boolean(item));
-  const esDomicilio = !personalizada && selected.length > 0 && selected.every((item) => servicioEsHome(domainService(item)));
-  const personalizadaCalculada = personalizada ? calcularAtencionPersonalizada({ personas, modalidad, componentes, precioFinal: precioFinal ? Number(precioFinal) : null, motivoAjuste: "UI exige campo", confirmaDisponibilidad: true }) : null;
-  const opcionesServicio2 = service1
-    ? eligibleServices.filter((item) => item.selectionRule === first?.selectionRule && item.selectionRule !== "FIXED_TWO_PACKAGE")
-    : eligibleServices;
-  const economiaDomicilio = esDomicilio
-    ? calcularEconomiaHome(selected.map(domainService), district, homePolicies)
-    : null;
-  const subtotalServicios = personalizadaCalculada?.ok ? personalizadaCalculada.precioCalculado : selected.reduce((sum, item) => sum + item.price, 0);
-  const movilidad = economiaDomicilio?.ok ? economiaDomicilio.feePen : 0;
-  const total = personalizadaCalculada?.ok ? personalizadaCalculada.precioFinal : economiaDomicilio?.ok ? (economiaDomicilio.total ?? 0) : subtotalServicios;
-  const required = calcularAdelantoRequerido({
-    canal: "directo",
-    personas,
-    montoTotal: total,
-    esDomicilio,
-  });
-  const selectedSede = sedes.find((item) => item.name === sede);
-  const duration = personalizadaCalculada?.ok ? personalizadaCalculada.duracionMin : Math.max(0, ...selected.map((item) => item.duration));
-  const hours = (() => {
-    if (!selectedSede || duration <= 0) return [];
-    const result: string[] = [];
-    for (
-      let minute = toMinutes(selectedSede.open);
-      minute + duration <= toMinutes(selectedSede.close);
-      minute += 30
-    ) {
-      result.push(fromMinutes(minute));
+  const normalServices = useMemo(() => services.filter((service) => servicioEsCitaNormal(domainService(service))), [services]);
+  const componentServices = useMemo(() => services.filter((service) => servicioEsComponente(domainService(service))), [services]);
+  const typeServices = appointmentType ? servicesForType(normalServices, appointmentType) : [];
+  const packageServices = typeServices.filter((service) => service.selectionRule === "FIXED_TWO_PACKAGE"); const individualServices = typeServices.filter((service) => service.selectionRule === "ONE_PERSON");
+  const homeServices = typeServices.filter((service) => servicioEsHome(domainService(service)));
+  const compatibleHomeServices = homeServicesForPeople(homeServices, personas === 2 ? 2 : 1);
+  const first = normalServices.find((service) => service.code === service1); const second = normalServices.find((service) => service.code === service2);
+  const selected = [first, second].filter((service): service is Service => Boolean(service)); const personalizada = appointmentType === "custom"; const esDomicilio = appointmentType === "home";
+  const calculatedComponents = componentes.map((person) => ({ ...person, componentes: person.componentes.map((component) => { if (component.tipo !== "catalogo") return component; const catalog = componentServices.find((service) => service.code === component.codigo); return catalog ? { ...component, nombre: catalog.name, precio: catalog.price, duracion_min: catalog.duration } : component; }) }));
+  const personalizadaCalculada = personalizada ? calcularAtencionPersonalizada({ personas, modalidad, componentes: calculatedComponents, precioFinal: precioFinal ? Number(precioFinal) : null, motivoAjuste: motivoAjuste || "pendiente en paso de pago", confirmaDisponibilidad: true }) : null;
+  const economiaDomicilio = esDomicilio && selected.length ? calcularEconomiaHome(selected.map(domainService), district, homePolicies) : null;
+  const subtotalServicios = personalizadaCalculada?.ok ? personalizadaCalculada.precioCalculado : selected.reduce((sum, service) => sum + service.price, 0);
+  const mobilityPending = esDomicilio && economiaDomicilio?.ok && economiaDomicilio.feePen === null; const movilidad = economiaDomicilio?.ok ? economiaDomicilio.feePen : 0;
+  const total = personalizadaCalculada?.ok ? personalizadaCalculada.precioFinal : economiaDomicilio?.ok && economiaDomicilio.total !== null ? economiaDomicilio.total : subtotalServicios;
+  const required = calcularAdelantoRequerido({ canal: "directo", personas, montoTotal: total, esDomicilio }); const paidNumber = Number(paid || 0); const balance = redondearDinero(Math.max(total - paidNumber, 0));
+  const selectedSede = sedes.find((item) => item.name === sede); const duration = personalizadaCalculada?.ok ? personalizadaCalculada.duracionMin : Math.max(0, ...selected.map((service) => service.duration));
+  const hours = (() => { if (!selectedSede || duration <= 0) return []; const result: string[] = []; for (let minute = toMinutes(selectedSede.open); minute + duration <= toMinutes(selectedSede.close); minute += 30) result.push(fromMinutes(minute)); return result; })();
+  const serviceSummary = personalizada ? "Atención personalizada" : selected.map((service) => service.name).join(" + ") || "Servicio pendiente"; const locationSummary = esDomicilio ? district || "Distrito pendiente" : sede;
+  const serviceValid = personalizada ? Boolean(personalizadaCalculada?.ok) : appointmentType === "home" ? Boolean(service1 && (personas === 1 || service2)) : appointmentType === "couple" && coupleMode === "individual" ? Boolean(service1 && service2) : Boolean(service1);
+  const scheduleValid = Boolean(sede && fecha && hora) && (!esDomicilio || Boolean(district.trim() && address.trim() && economiaDomicilio?.ok && !mobilityPending));
+  const paymentValid = Number.isFinite(paidNumber) && paidNumber >= required && paidNumber <= total && Boolean(!paidNumber || (method && (method.toUpperCase() === "EFECTIVO" || operation.trim()))) && (!personalizada || availabilityConfirmed) && !(personalizadaCalculada?.ok && personalizadaCalculada.diferencia !== 0 && !motivoAjuste.trim());
+  const canSubmit = Boolean(telefono.trim() && cliente.trim() && appointmentType && serviceValid && scheduleValid && paymentValid);
+
+  function goTo(target: number) { if (target > maxStep) return; setStepError(""); setStep(target); window.scrollTo({ top: 0, behavior: "smooth" }); }
+  function next() {
+    let error = "";
+    if (step === 0 && (!telefono.trim() || !cliente.trim())) error = "Completa el WhatsApp y el nombre del cliente.";
+    if (step === 1 && !appointmentType) error = "Elige el tipo de cita para continuar.";
+    if (step === 2) {
+      if (personalizada && !personalizadaCalculada?.ok) error = personalizadaCalculada?.error ?? "Completa los componentes de cada persona.";
+      if (appointmentType === "single" && !service1) error = "Elige un servicio."; if (appointmentType === "home" && (!service1 || (personas === 2 && !service2))) error = personas === 2 ? "Elige un servicio HOME para cada persona." : "Elige un servicio a domicilio.";
+      if (appointmentType === "couple" && coupleMode === "package" && !service1) error = "Elige un paquete para dos personas.";
+      if (appointmentType === "couple" && coupleMode === "individual" && (!service1 || !service2)) error = "Elige un servicio para cada persona.";
     }
-    return result;
-  })();
-
-  async function lookupClient() {
-    setLookupMessage("Buscando…");
-    const result = await buscarClienteFichaAction(telefono, pais);
-    if (result.cliente) {
-      setCliente(result.cliente);
-      setLookupMessage("Cliente localizado.");
-    } else {
-      setLookupMessage(result.error || "No existe; se creará al guardar.");
-    }
+    if (step === 3) { if (!sede || !fecha || !hora) error = "Selecciona sede, fecha y hora."; if (esDomicilio && (!district.trim() || !address.trim())) error = "Completa distrito y dirección."; if (esDomicilio && (!economiaDomicilio?.ok || mobilityPending)) error = "La movilidad de este distrito está por confirmar y aún no permite avanzar."; }
+    if (step === 4) { if (personalizada && !availabilityConfirmed) error = "Confirma la disponibilidad de cabinas y terapistas."; else if (personalizadaCalculada?.ok && personalizadaCalculada.diferencia !== 0 && !motivoAjuste.trim()) error = "Explica el motivo del ajuste de precio."; else if (!Number.isFinite(paidNumber) || paidNumber < required) error = `Registra al menos ${money(required)} como monto recibido.`; else if (paidNumber > total) error = "El monto recibido no puede superar el total."; else if (paidNumber > 0 && !method) error = "Selecciona el método de pago."; else if (paidNumber > 0 && method.toUpperCase() !== "EFECTIVO" && !operation.trim()) error = "Ingresa el número de operación."; }
+    if (error) { setStepError(error); return; } const target = step + 1; setStepError(""); setMaxStep((current) => Math.max(current, target)); setStep(target); window.scrollTo({ top: 0, behavior: "smooth" });
   }
+  function selectType(value: AppointmentType) { setAppointmentType(value); const count = value === "couple" ? 2 : 1; setPersonas(count); setComponentes(initialComponents(count, componentes)); setCoupleMode("package"); setService1(""); setService2(""); setHora(""); setStepError(""); }
+  function selectPeople(count: number) { setPersonas(count); if (appointmentType === "home") { const next = reconcileHomeSelection(homeServices, count === 2 ? 2 : 1, service1, service2); setService1(next.service1); setService2(next.service2); } else { setComponentes(initialComponents(count, componentes)); } setHora(""); setStepError(""); }
+  async function lookupClient() { if (!telefono.trim()) { setLookupMessage("Ingresa un WhatsApp antes de buscar."); return; } setLookupPending(true); setLookupMessage(""); const result = await buscarClienteFichaAction(telefono, pais); if (result.cliente) { setCliente(result.cliente); if (result.idioma === "en" || result.idioma === "es") setIdioma(result.idioma); setLookupMessage("Cliente encontrado. Verifica sus datos y continúa."); } else { setCliente(""); setLookupMessage(result.error || "Cliente nuevo. Ingresa su nombre."); } setLookupPending(false); }
+  async function copyLink() { if (!state.enlace) return; await navigator.clipboard.writeText(state.enlace); setCopied(true); }
 
-  async function copyMessage() {
-    if (state.mensaje) await navigator.clipboard.writeText(state.mensaje);
-  }
+  if (state.ok) { const whatsappUrl = `https://wa.me/${telefono.replace(/\D/g, "")}?text=${encodeURIComponent(state.mensaje ?? state.enlace ?? "")}`; return <section className="atencionForm fichaSuccess" aria-live="polite"><span className="successMark" aria-hidden="true">✓</span><p className="eyebrow">Cita y pago guardados</p><h2>Enlace listo para enviar</h2><p className="successMessage">{state.mensaje}</p><div className="successActions"><button type="button" className="primaryButton" onClick={copyLink}>{copied ? "Enlace copiado" : "Copiar enlace"}</button><a className="ghostButton" href={whatsappUrl} target="_blank" rel="noreferrer">Abrir WhatsApp</a><a className="ghostButton" href="/preparar-cita">Nueva cita</a></div></section>; }
 
-  if (state.ok) {
-    return (
-      <section className="atencionForm fichaSuccess" aria-live="polite">
-        <p className="eyebrow">Cita y pago guardados</p>
-        <h2>Enlace listo</h2>
-        <p>{state.mensaje}</p>
-        <button type="button" className="primaryButton copyMessageButton" onClick={copyMessage}>
-          Copiar mensaje
-        </button>
-      </section>
-    );
-  }
-
-  return (
-    <form action={formAction} className="atencionForm fichaPrepararForm">
-      <input type="hidden" name="request_id" value={requestId} />
-      <input type="hidden" name="canal" value="directo" />
-      <input type="hidden" name="tipo_atencion" value={esDomicilio ? "domicilio" : "sede"} />
-      <input type="hidden" name="atencion_personalizada" value={personalizada ? "1" : "0"} />
-      {personalizada && <><input type="hidden" name="componentes" value={JSON.stringify(componentes)} /><input type="hidden" name="modalidad" value={modalidad} /></>}
-      {state.error && <div className="formMessage error" role="alert">{state.error}</div>}
-
-      <section className="wizardPanel visible">
-        <h2>1. Origen y cliente</h2>
-        <p className="wizardIntro">
-          Este nuevo flujo admite por ahora citas directas presenciales y a domicilio. Cuponidad, Bee Beneficios,
-          promociones y gift cards continúan registrándose mediante el proceso actual.
-        </p>
-        <div className="atencionGrid">
-          <div className="atencionField"><span>Canal</span><strong>Directo</strong></div>
-          <label className="atencionField">
-            País del teléfono
-            <select name="pais" value={pais} onChange={(event) => setPais(event.target.value)}>
-              {countries.map((country) => (
-                <option key={country.code} value={country.code}>{country.name} (+{country.callingCode})</option>
-              ))}
-            </select>
-          </label>
-          <label className="atencionField">
-            WhatsApp
-            <input name="telefono" value={telefono} onChange={(event) => setTelefono(event.target.value)} placeholder="987 654 321 o +…" required />
-          </label>
-          <div className="atencionField lookupField">
-            <span>Cliente existente</span>
-            <button type="button" className="ghostButton" onClick={lookupClient}>Buscar</button>
-            <small>{lookupMessage}</small>
-          </div>
-          <label className="atencionField atencionFieldWide">
-            Nombre del cliente
-            <input name="cliente" value={cliente} onChange={(event) => setCliente(event.target.value)} required />
-          </label>
-          <label className="atencionField">
-            Idioma
-            <select name="idioma" defaultValue="es"><option value="es">Español</option><option value="en">English</option></select>
-          </label>
-        </div>
-      </section>
-
-      <section className="wizardPanel visible">
-        <h2>2. Servicios</h2>
-        <label className="fichaConsent"><input type="checkbox" checked={personalizada} onChange={(e) => { setPersonalizada(e.target.checked); setHora(""); }} /> Atención personalizada</label>
-        <div className="atencionGrid">
-          <label className="atencionField">
-            Personas
-            <select name="personas" value={personas} onChange={(event) => { const n=Number(event.target.value); setPersonas(n); setService1(""); setService2(""); setComponentes(Array.from({length:n},(_,i)=>componentes[i] ?? {persona:i+1,componentes:[]})); setHora(""); }}>
-              {[1,2,3,4,5].filter((n)=>personalizada || n<=2).map((n)=><option key={n} value={n}>{n} persona{n>1?"s":""}</option>)}
-            </select>
-          </label>
-          {personalizada && <><label className="atencionField">Modalidad<select value={modalidad} onChange={(e)=>{const valor=e.target.value; if (valor === "simultanea" || valor === "consecutiva") setModalidad(valor); setHora("");}}><option value="simultanea">Simultánea</option><option value="consecutiva">Consecutiva</option></select></label>
-          {componentes.map((p, index)=><div className="atencionField atencionFieldWide" key={p.persona}><strong>Persona {p.persona}</strong>{p.componentes.map((c, ci)=><div key={ci} className="atencionGrid"><select value={c.tipo==="catalogo"?c.codigo:"manual"} onChange={(e)=>{const code=e.target.value;const next=structuredClone(componentes);next[index].componentes[ci]=code==="manual"?{tipo:"manual",nombre:"",duracion_min:0,precio:0}:{tipo:"catalogo",codigo:code,nombre:"",duracion_min:0,precio:0};setComponentes(next);}}><option value="manual">Manual</option>{services.filter(s=>servicioEsComponente(domainService(s))).map(s=><option key={s.code} value={s.code}>{s.name} · {money(s.price)} · {s.duration} min</option>)}</select>{c.tipo==="manual"&&<><input placeholder="Nombre" onChange={(e)=>{const n=structuredClone(componentes);n[index].componentes[ci].nombre=e.target.value;setComponentes(n);}}/><input type="number" placeholder="Minutos" onChange={(e)=>{const n=structuredClone(componentes);n[index].componentes[ci].duracion_min=Number(e.target.value);setComponentes(n);}}/><input type="number" placeholder="Precio" onChange={(e)=>{const n=structuredClone(componentes);n[index].componentes[ci].precio=Number(e.target.value);setComponentes(n);}}/></>}</div>)}<button type="button" onClick={()=>{const n=structuredClone(componentes);n[index].componentes.push({tipo:"catalogo",codigo:"",nombre:"",precio:0,duracion_min:0});setComponentes(n);}}>Añadir componente</button></div>)}</>}
-          {!personalizada && <>
-          <label className="atencionField">
-            Servicio — persona 1
-            <select name="servicio_1" value={service1} onChange={(event) => { setService1(event.target.value); setService2(""); setHora(""); }} required>
-              <option value="">Selecciona</option>
-              {eligibleServices.map((item) => <option key={item.code} value={item.code}>{item.name} · {money(item.price)} · {item.duration} min</option>)}
-            </select>
-          </label>
-          {personas === 2 && !seleccionUnica && (
-            <label className="atencionField">
-              Servicio — persona 2
-              <select name="servicio_2" value={service2} onChange={(event) => { setService2(event.target.value); setHora(""); }} required>
-                <option value="">Selecciona</option>
-                {opcionesServicio2.map((item) => <option key={item.code} value={item.code}>{item.name} · {money(item.price)} · {item.duration} min</option>)}
-              </select>
-            </label>
-          )}
-          </>}
-        </div>
-      </section>
-
-      <section className="wizardPanel visible">
-        <h2>3. {esDomicilio ? "Domicilio, fecha y hora" : "Sede, fecha y hora"}</h2>
-        <div className="atencionGrid">
-          <label className="atencionField">
-            {esDomicilio ? "Sede operativa" : "Sede"}
-            <select name="sede" value={sede} onChange={(event) => { setSede(event.target.value); setHora(""); }} required>
-              {sedes.map((item) => <option key={item.name} value={item.name}>{item.name} · {item.open}–{item.close}</option>)}
-            </select>
-          </label>
-          {esDomicilio && (
-            <>
-              <label className="atencionField">
-                Distrito
-                <input name="domicilio_distrito" value={district} onChange={(event) => setDistrict(event.target.value)} required />
-              </label>
-              <label className="atencionField atencionFieldWide">
-                Dirección
-                <input name="domicilio_direccion" required />
-              </label>
-              <label className="atencionField atencionFieldWide">
-                Referencia (opcional)
-                <input name="domicilio_referencia" />
-              </label>
-            </>
-          )}
-          <label className="atencionField">
-            Fecha
-            <input name="fecha" type="date" min={minDate} value={fecha} onChange={(event) => setFecha(event.target.value)} required />
-          </label>
-          <div className="atencionField atencionFieldWide">
-            <span>Hora (la duración completa debe caber)</span>
-            <div className="timeChips">
-              {hours.map((value) => (
-                <button key={value} type="button" className={hora === value ? "active" : ""} onClick={() => setHora(value)}>{value}</button>
-              ))}
-              {!hours.length && <small>Selecciona todos los servicios para ver horas disponibles.</small>}
-            </div>
-            <input type="hidden" name="hora" value={hora} />
-          </div>
-        </div>
-      </section>
-
-      <section className="wizardPanel visible">
-        <h2>4. Pago y envío</h2>
-        <div className="paymentSummary">
-          <div><span>Servicios</span><strong>{money(subtotalServicios)}</strong></div>
-          {esDomicilio && <div><span>Movilidad</span><strong>{movilidad === null ? "Por confirmar" : money(movilidad)}</strong></div>}
-          <div><span>Total calculado</span><strong>{money(total)}</strong></div>
-          <div><span>Adelanto requerido</span><strong>{money(required)}</strong></div>
-          <div><span>Saldo pendiente</span><strong>{money(Math.max(total - paid, 0))}</strong></div>
-          <div><span>Confirmación manual</span><strong>{economiaDomicilio?.ok && economiaDomicilio.requiresConfirmation ? "Sí" : "No"}</strong></div>
-        </div>
-        <div className="atencionGrid paymentFields">
-          {personalizada && <><label className="atencionField">Precio final acordado<input name="precio_final" type="number" step="0.01" value={precioFinal} onChange={e=>setPrecioFinal(e.target.value)} placeholder={String(subtotalServicios)} /></label>{precioFinal && Number(precioFinal)!==subtotalServicios && <label className="atencionField atencionFieldWide">Motivo del ajuste<input name="motivo_ajuste" required /></label>}<label className="fichaConsent atencionFieldWide"><input name="confirmar_disponibilidad" value="1" type="checkbox" required /> Confirmo disponibilidad de cabinas y terapistas</label></>}
-          <label className="atencionField">Monto recibido<input name="monto_pagado" type="number" min="0" step="0.01" value={paid} onChange={(event) => setPaid(Number(event.target.value || 0))} required /></label>
-          <label className="atencionField">Método<select name="metodo_pago" disabled={paid <= 0} defaultValue=""><option value="">{paid > 0 ? "Selecciona" : "Convenio / sin adelanto"}</option>{metodos.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
-          <label className="atencionField">Número de operación<input name="numero_operacion" disabled={paid <= 0} /></label>
-          <label className="atencionField atencionFieldWide">Observación<textarea name="observacion" rows={2} /></label>
-        </div>
-        {esDomicilio && economiaDomicilio?.ok && economiaDomicilio.feePen === null && <div className="formMessage error" role="alert">El distrito requiere confirmar manualmente la movilidad antes de guardar.</div>}
-        <button type="submit" className="primaryButton saveFichaButton" disabled={pending || !hora || total <= 0 || paid < required || (esDomicilio && (!economiaDomicilio?.ok || economiaDomicilio.feePen === null))}>
-          {pending ? "Guardando transacción…" : "Guardar cita, pago y generar enlace"}
-        </button>
-      </section>
-    </form>
-  );
+  return <form action={formAction} className="atencionForm fichaPrepararForm prepararWizard" noValidate>
+    <input type="hidden" name="request_id" value={requestId}/><input type="hidden" name="canal" value="directo"/><input type="hidden" name="tipo_atencion" value={esDomicilio ? "domicilio" : "sede"}/><input type="hidden" name="atencion_personalizada" value={personalizada ? "1" : "0"}/><input type="hidden" name="personas" value={personas}/><input type="hidden" name="servicio_1" value={service1}/><input type="hidden" name="servicio_2" value={service2}/><input type="hidden" name="hora" value={hora}/>
+    <input type="hidden" name="pais" value={pais}/><input type="hidden" name="telefono" value={telefono}/><input type="hidden" name="cliente" value={cliente}/><input type="hidden" name="idioma" value={idioma}/><input type="hidden" name="sede" value={sede}/><input type="hidden" name="fecha" value={fecha}/><input type="hidden" name="domicilio_distrito" value={district}/><input type="hidden" name="domicilio_direccion" value={address}/><input type="hidden" name="domicilio_referencia" value={reference}/><input type="hidden" name="monto_pagado" value={paid}/><input type="hidden" name="metodo_pago" value={method}/><input type="hidden" name="numero_operacion" value={operation}/><input type="hidden" name="observacion" value={observation}/>
+    {personalizada && <><input type="hidden" name="componentes" value={JSON.stringify(componentes)}/><input type="hidden" name="modalidad" value={modalidad}/><input type="hidden" name="precio_final" value={precioFinal}/><input type="hidden" name="motivo_ajuste" value={motivoAjuste}/><input type="hidden" name="confirmar_disponibilidad" value={availabilityConfirmed?"1":""}/></>}
+    <WizardStepper step={step} maxStep={maxStep} onNavigate={goTo}/>{state.error && <div className="formMessage error" role="alert">{state.error}</div>}
+    {step === 0 && <section className="wizardPanel visible prepararStepPanel" aria-labelledby="client-step-title"><p className="stepKicker">Paso 1 de 6</p><h2 id="client-step-title">Primero, identifica al cliente</h2><p className="wizardIntro">Busca por WhatsApp para recuperar sus datos o registra un cliente nuevo.</p><div className="clientLookupRow"><label className="atencionField countryField">País / teléfono<select name="pais" value={pais} onChange={(e)=>setPais(e.target.value)} aria-label="País del teléfono">{countries.map((country)=><option key={country.code} value={country.code}>{country.name} (+{country.callingCode})</option>)}</select></label><label className="atencionField phoneField">WhatsApp<input name="telefono" value={telefono} inputMode="tel" autoComplete="tel" onChange={(e)=>{setTelefono(e.target.value);setLookupMessage("");}} placeholder="987 654 321"/></label><button type="button" className="ghostButton lookupButton" disabled={lookupPending} onClick={lookupClient}>{lookupPending?"Buscando…":"Buscar"}</button></div>{lookupMessage&&<p className="fieldMessage" aria-live="polite">{lookupMessage}</p>}<div className="clientDetailsGrid"><label className="atencionField">Nombre del cliente<input name="cliente" value={cliente} autoComplete="name" onChange={(e)=>setCliente(e.target.value)} placeholder="Nombre para la ficha"/></label><label className="atencionField">Idioma<select name="idioma" value={idioma} onChange={(e)=>setIdioma(e.target.value as "es"|"en")}><option value="es">Español</option><option value="en">English</option></select></label></div></section>}
+    {step === 1 && <AppointmentTypeStep value={appointmentType} personas={personas} onSelect={selectType} onPersonas={selectPeople}/>}
+    {step === 2 && <section className="wizardPanel visible prepararStepPanel" aria-labelledby="service-step-title"><p className="stepKicker">Paso 3 de 6 · {appointmentTypeLabel(appointmentType,personas)}</p><h2 id="service-step-title">Elige el servicio</h2>
+      {appointmentType === "single"&&<ServicePicker label="Servicios para una persona" services={individualServices} value={service1} onChange={(code)=>{setService1(code);setService2("");setHora("");}} autofocus/>}
+      {appointmentType === "home"&&personas===1&&<ServicePicker label="Servicio a domicilio" services={compatibleHomeServices} value={service1} onChange={(code)=>{setService1(code);setService2("");setHora("");}} autofocus/>}
+      {appointmentType === "home"&&personas===2&&<div className="twoServicePickers"><ServicePicker label="Servicio HOME · persona 1" services={compatibleHomeServices} value={service1} onChange={(code)=>{setService1(code);setHora("");}} autofocus/><ServicePicker label="Servicio HOME · persona 2" services={compatibleHomeServices} value={service2} onChange={(code)=>{setService2(code);setHora("");}}/></div>}
+      {appointmentType === "couple"&&coupleMode==="package"&&<><ServicePicker label="Paquetes para dos personas" services={packageServices} value={service1} onChange={(code)=>{setService1(code);setService2("");setHora("");}} autofocus/><button type="button" className="alternateServiceMode" onClick={()=>{setCoupleMode("individual");setService1("");setService2("");}}>Elegir un servicio para cada persona</button></>}
+      {appointmentType === "couple"&&coupleMode==="individual"&&<><button type="button" className="alternateServiceMode compact" onClick={()=>{setCoupleMode("package");setService1("");setService2("");}}>← Volver a paquetes para dos</button><div className="twoServicePickers"><ServicePicker label="Servicio · persona 1" services={individualServices} value={service1} onChange={(code)=>{setService1(code);setHora("");}}/><ServicePicker label="Servicio · persona 2" services={individualServices} value={service2} onChange={(code)=>{setService2(code);setHora("");}}/></div></>}
+      {personalizada&&<PersonalizedServiceBuilder services={componentServices} modalidad={modalidad} componentes={componentes} onModalidad={(value)=>{setModalidad(value);setHora("");}} onComponentes={(value)=>{setComponentes(value);setHora("");}}/>}</section>}
+    {step === 3 && <section className="wizardPanel visible prepararStepPanel" aria-labelledby="schedule-step-title"><p className="stepKicker">Paso 4 de 6</p><h2 id="schedule-step-title">{esDomicilio?"Domicilio, fecha y hora":"Lugar, fecha y hora"}</h2><div className="scheduleGrid"><label className="atencionField">{esDomicilio?"Sede operativa":"Sede"}<select name="sede" value={sede} onChange={(e)=>{setSede(e.target.value);setHora("");}}>{sedes.map((item)=><option key={item.name} value={item.name}>{item.name} · {item.open}–{item.close}</option>)}</select></label><label className="atencionField">Fecha<input name="fecha" type="date" min={minDate} value={fecha} onChange={(e)=>{setFecha(e.target.value);setHora("");}}/></label>
+      {esDomicilio&&<><label className="atencionField">Distrito<input name="domicilio_distrito" value={district} onChange={(e)=>setDistrict(e.target.value)} placeholder="Ej. Miraflores"/></label><label className="atencionField">Dirección<input name="domicilio_direccion" value={address} autoComplete="street-address" onChange={(e)=>setAddress(e.target.value)}/></label><label className="atencionField scheduleWide">Referencia (opcional)<input name="domicilio_referencia" value={reference} onChange={(e)=>setReference(e.target.value)}/></label><div className={`mobilityNotice scheduleWide ${mobilityPending?"pending":""}`} aria-live="polite"><span>Movilidad</span><strong>{!district.trim()?"Ingresa el distrito":movilidad===null?"Por confirmar":money(movilidad??0)}</strong>{mobilityPending&&<small>Este distrito requiere confirmar la tarifa antes de guardar. No se asumirá S/0.</small>}</div></>}
+      <fieldset className="timeField scheduleWide"><legend>Hora disponible</legend><div className="timeChips">{hours.map((value)=><button key={value} type="button" className={hora===value?"active":""} aria-pressed={hora===value} onClick={()=>setHora(value)}>{formatTime(value)}</button>)}{!hours.length&&<small>Completa el servicio para ver los horarios.</small>}</div></fieldset></div></section>}
+    {step === 4 && <section className="wizardPanel visible prepararStepPanel" aria-labelledby="payment-step-title"><p className="stepKicker">Paso 5 de 6</p><h2 id="payment-step-title">Registra el pago</h2><div className="paymentSummary prepararPaymentSummary"><div><span>Servicios</span><strong>{money(subtotalServicios)}</strong></div>{esDomicilio&&<div><span>Movilidad</span><strong>{movilidad===null?"Por confirmar":money(movilidad??0)}</strong></div>}<div><span>Total</span><strong>{money(total)}</strong></div><div className="requiredPayment"><span>Adelanto mínimo</span><strong>{money(required)}</strong></div><div><span>Monto recibido</span><strong>{money(paidNumber)}</strong></div><div><span>Saldo</span><strong>{money(balance)}</strong></div><div><span>Confirmación manual</span><strong>{economiaDomicilio?.ok&&economiaDomicilio.requiresConfirmation?"Sí":"No"}</strong></div></div><div className="paymentInputGrid">
+      {personalizada&&<><label className="atencionField">Precio final acordado<input name="precio_final" inputMode="decimal" type="number" min="0.01" step="0.01" value={precioFinal} onChange={(e)=>setPrecioFinal(e.target.value)} placeholder={String(subtotalServicios)}/></label>{personalizadaCalculada?.ok&&personalizadaCalculada.diferencia!==0&&<label className="atencionField">Motivo del ajuste<input name="motivo_ajuste" value={motivoAjuste} onChange={(e)=>setMotivoAjuste(e.target.value)}/></label>}<label className="confirmationCheck paymentWide"><input name="confirmar_disponibilidad" value="1" type="checkbox" checked={availabilityConfirmed} onChange={(e)=>setAvailabilityConfirmed(e.target.checked)}/><span>Confirmo disponibilidad de cabinas y terapistas</span></label></>}
+      <label className="atencionField">Monto recibido<input name="monto_pagado" inputMode="decimal" type="number" min="0" step="0.01" value={paid} onChange={(e)=>setPaid(e.target.value)} placeholder={required.toFixed(2)}/></label><label className="atencionField">Método<select name="metodo_pago" value={method} disabled={paidNumber<=0} onChange={(e)=>setMethod(e.target.value)}><option value="">Selecciona</option>{metodos.map((item)=><option key={item} value={item}>{item}</option>)}</select></label><label className="atencionField">Número de operación<input name="numero_operacion" inputMode="numeric" value={operation} disabled={paidNumber<=0} onChange={(e)=>setOperation(e.target.value)}/></label><label className="atencionField paymentWide">Observación<textarea name="observacion" rows={2} value={observation} onChange={(e)=>setObservation(e.target.value)}/></label></div></section>}
+    {step === 5 && <section className="wizardPanel visible prepararStepPanel confirmationStep" aria-labelledby="confirmation-step-title"><p className="stepKicker">Paso 6 de 6</p><h2 id="confirmation-step-title">Confirma los datos</h2><p className="wizardIntro">Revisa antes de crear la ficha. Puedes volver a cualquier paso completado.</p><div className="finalSummary"><div className="finalClient"><span>Cliente</span><strong>{cliente}</strong><small>{telefono} · {idioma==="es"?"Español":"English"}</small></div><div><span>Tipo</span><strong>{appointmentTypeLabel(appointmentType,personas)}</strong></div><div className="summaryWide"><span>Servicios</span><strong>{serviceSummary}</strong></div><div><span>Lugar</span><strong>{locationSummary}</strong></div><div><span>Horario</span><strong>{formatDate(fecha)} · {formatTime(hora)}</strong></div><div><span>Total</span><strong>{money(total)}</strong></div><div><span>Recibido</span><strong>{money(paidNumber)}</strong></div><div className="summaryBalance"><span>Saldo</span><strong>{money(balance)}</strong></div></div>{!canSubmit&&<div className="wizardError" role="alert">Hay datos incompletos. Vuelve al paso marcado y revísalos antes de crear la ficha.</div>}<button type="submit" className="primaryButton finalSubmitButton" disabled={pending||!canSubmit}>{pending?"Creando ficha…":"Crear ficha y generar enlace"}</button></section>}
+    {stepError&&<div className="wizardError stepError" role="alert">{stepError}</div>}{step>0&&step<5&&<button type="button" className="backButton" onClick={()=>goTo(step-1)}>← Volver</button>}{step<5&&<button type="button" className="desktopContinueButton primaryButton" onClick={next}>Continuar</button>}
+    <MobileSummaryBar visible={step<5} summary={step<2?(step===0?"Cliente":appointmentTypeLabel(appointmentType,personas)):`${appointmentTypeLabel(appointmentType,personas)} · ${serviceSummary}`} detail={step>=2&&total>0?`${money(total)} · Adelanto ${money(required)}`:undefined} actionLabel="Continuar" onAction={next}/>
+  </form>;
 }

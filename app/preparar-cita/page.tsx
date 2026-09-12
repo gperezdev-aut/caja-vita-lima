@@ -70,8 +70,8 @@ export default async function PrepararCitaPage() {
   return (
     <main className="appShell">
       <CajaSidebar session={session} />
-      <section className="page nuevaAtencionPage">
-        <section className="hero nuevaAtencionHero">
+      <section className="page nuevaAtencionPage prepararCitaPage">
+        <section className="hero nuevaAtencionHero prepararCitaHero">
           <div>
             <p className="eyebrow">Ficha de cita</p>
             <h1>Preparar cita</h1>
