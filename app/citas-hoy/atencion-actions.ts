@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireModuleAccess } from "@/lib/auth";
+import { validarDatosPago } from "@/lib/atencionReservada";
 import { supabaseRpc } from "@/lib/supabaseServer";
 
 export type AtencionReservadaState = {
@@ -65,6 +66,17 @@ export async function guardarAtencionReservadaAction(
   }
   if (!Number.isFinite(pago) || pago < 0) {
     return { ok: false, error: "Ingresa un pago válido, incluso 0 si no corresponde cobrar." };
+  }
+  const errorPago = validarDatosPago(
+    pago,
+    text(formData, "metodo_pago"),
+    text(formData, "numero_operacion")
+  );
+  if (errorPago === "METODO_PAGO_REQUERIDO") {
+    return { ok: false, error: "Selecciona el método del pago recibido." };
+  }
+  if (errorPago === "NUMERO_OPERACION_REQUERIDO") {
+    return { ok: false, error: "Ingresa el número de operación para el método elegido." };
   }
 
   const terapistas = Array.from({ length: personas }, (_, index) => ({

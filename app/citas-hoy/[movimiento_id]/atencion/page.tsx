@@ -112,6 +112,7 @@ export default async function AtencionReservadaPage({
             metodos={orderedValues(configResult.data, "METODOS_PAGO")}
             terapistasActuales={terapeutasActuales}
             comprobante={comprobante}
+            estadoActual={movimiento.estado === "En atención" ? "En atención" : "Reservado"}
           />
         )}
       </section>

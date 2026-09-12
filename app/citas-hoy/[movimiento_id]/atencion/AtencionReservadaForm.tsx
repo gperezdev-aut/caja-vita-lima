@@ -5,6 +5,12 @@ import {
   guardarAtencionReservadaAction,
   INITIAL_ATENCION_RESERVADA_STATE,
 } from "@/app/citas-hoy/atencion-actions";
+import {
+  calcularSaldoPosterior,
+  estadoCobroInicial,
+  etiquetaAccionAtencion,
+  type EstadoActualAtencion,
+} from "@/lib/atencionReservada";
 
 type Props = {
   requestId: string;
@@ -18,6 +24,7 @@ type Props = {
   metodos: string[];
   terapistasActuales: Record<number, string>;
   comprobante: string;
+  estadoActual: EstadoActualAtencion;
 };
 
 function money(value: number) {
@@ -29,12 +36,13 @@ export function AtencionReservadaForm(props: Props) {
     guardarAtencionReservadaAction,
     INITIAL_ATENCION_RESERVADA_STATE
   );
-  const [pago, setPago] = useState(String(props.pendiente));
-  const [metodo, setMetodo] = useState(props.pendiente > 0 ? props.metodos[0] ?? "" : "");
+  const cobroInicial = estadoCobroInicial();
+  const [pago, setPago] = useState(cobroInicial.pago);
+  const [metodo, setMetodo] = useState(cobroInicial.metodo);
   const [seleccion, setSeleccion] = useState<Record<number, string>>(props.terapistasActuales);
   const pagoNumerico = Number(pago.replace(",", "."));
   const saldoPosterior = useMemo(
-    () => Math.max(props.pendiente - (Number.isFinite(pagoNumerico) ? pagoNumerico : 0), 0),
+    () => calcularSaldoPosterior(props.pendiente, pagoNumerico),
     [pagoNumerico, props.pendiente]
   );
 
@@ -148,7 +156,9 @@ export function AtencionReservadaForm(props: Props) {
       )}
       <div className="atencionReservadaSticky">
         <a href="/citas-hoy">Cancelar</a>
-        <button type="submit" disabled={pending}>{pending ? "Confirmando…" : saldoPosterior === 0 ? "Finalizar atención" : "Iniciar atención"}</button>
+        <button type="submit" disabled={pending}>
+          {pending ? "Confirmando…" : etiquetaAccionAtencion(pagoNumerico, props.pendiente, props.estadoActual)}
+        </button>
       </div>
     </form>
   );
