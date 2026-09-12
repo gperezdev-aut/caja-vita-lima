@@ -80,7 +80,7 @@ begin
       'servicios', jsonb_build_array(jsonb_build_object('codigo', 'SVC_008'))
     ));
     raise exception 'QA_020_DEFAULT_RPC_SHOULD_FAIL';
-  exception when raise_exception then
+  exception when sqlstate '22023' then
     if sqlerrm <> 'MOVILIDAD_HOME_REQUIERE_CONFIRMACION_MANUAL' then raise; end if;
   end;
   begin
