@@ -7,6 +7,7 @@ import {
   supabaseUpsert,
 } from "@/lib/supabaseServer";
 import { requireModuleAccess } from "@/lib/auth";
+import { normalizarTelefonoE164 } from "@/lib/fichaCitaDominio";
 
 type ClienteRow = {
   cliente_id: string;
@@ -72,6 +73,8 @@ function comprobanteFromEstado(estadoBoleta: string, numeroBoleta: string) {
 async function getOrCreateCliente({
   cliente,
   whatsapp,
+  whatsappE164,
+  paisTelefono,
   dni,
   sede,
   fecha,
@@ -79,6 +82,8 @@ async function getOrCreateCliente({
 }: {
   cliente: string;
   whatsapp: string;
+  whatsappE164: string | null;
+  paisTelefono: string | null;
   dni: string;
   sede: string;
   fecha: string;
@@ -86,10 +91,10 @@ async function getOrCreateCliente({
 }) {
   let clienteId = "";
 
-  if (whatsapp) {
+  if (whatsappE164) {
     const existing = await supabaseSelectWhere<ClienteRow>(
       "clientes",
-      `select=cliente_id&whatsapp=eq.${encodeURIComponent(whatsapp)}&limit=1`
+      `select=cliente_id&whatsapp_e164=eq.${encodeURIComponent(whatsappE164)}&limit=1`
     );
 
     if (existing.error) {
@@ -109,6 +114,8 @@ async function getOrCreateCliente({
       cliente_id: clienteId,
       cliente,
       whatsapp: whatsapp || null,
+      whatsapp_e164: whatsappE164,
+      pais_telefono: paisTelefono,
       dni: dni || null,
       ultima_sede: sede || null,
       ultima_visita: fecha || null,
@@ -176,18 +183,23 @@ async function saveCustomServiceToCatalog({
   });
 }
 
-export async function lookupClienteAlertaAction(whatsapp: string, dni: string) {
+export async function lookupClienteAlertaAction(whatsapp: string, pais: string, dni: string) {
   await requireModuleAccess("nueva-atencion");
 
   const cleanWhatsapp = clean(whatsapp);
   const cleanDni = clean(dni);
 
+  const telefono = cleanWhatsapp ? normalizarTelefonoE164(cleanWhatsapp, pais) : null;
   if (!cleanWhatsapp && !cleanDni) {
     return { cliente: "", alerta: "" };
   }
 
-  const filter = cleanWhatsapp
-    ? `whatsapp=eq.${encodeURIComponent(cleanWhatsapp)}`
+  if (cleanWhatsapp && !telefono?.ok) {
+    return { cliente: "", alerta: "", error: "Selecciona el país y usa un WhatsApp válido antes de buscar." };
+  }
+
+  const filter = telefono?.ok
+    ? `whatsapp_e164=eq.${encodeURIComponent(telefono.e164)}`
     : `dni=eq.${encodeURIComponent(cleanDni)}`;
 
   const result = await supabaseSelectWhere<{ cliente?: string; alerta_atencion?: string }>(
@@ -200,6 +212,7 @@ export async function lookupClienteAlertaAction(whatsapp: string, dni: string) {
   return {
     cliente: String(row?.cliente ?? "").trim(),
     alerta: String(row?.alerta_atencion ?? "").trim(),
+    error: "",
   };
 }
 
@@ -218,6 +231,7 @@ export async function createAtencionAction(formData: FormData) {
   const sede = clean(formData.get("sede"));
   const cliente = clean(formData.get("cliente"));
   const whatsapp = clean(formData.get("whatsapp"));
+  const paisTelefono = clean(formData.get("pais_telefono"));
   const dni = clean(formData.get("dni"));
   const servicio = clean(formData.get("servicio"));
   const duracion = clean(formData.get("duracion"));
@@ -261,8 +275,9 @@ export async function createAtencionAction(formData: FormData) {
     );
   }
 
-  if (whatsapp && !/^\d{9}$/.test(whatsapp)) {
-    redirect("/nueva-atencion?error=El WhatsApp debe tener 9 dígitos.");
+  const telefono = whatsapp ? normalizarTelefonoE164(whatsapp, paisTelefono) : null;
+  if (whatsapp && !telefono?.ok) {
+    redirect("/nueva-atencion?error=Selecciona el país y usa un WhatsApp válido. No se asumirá +51 automáticamente.");
   }
 
   if (dni && !/^\d{8}$/.test(dni)) {
@@ -293,6 +308,8 @@ export async function createAtencionAction(formData: FormData) {
   const clienteId = await getOrCreateCliente({
     cliente,
     whatsapp,
+    whatsappE164: telefono?.ok ? telefono.e164 : null,
+    paisTelefono: telefono?.ok ? telefono.pais : null,
     dni,
     sede,
     fecha,
