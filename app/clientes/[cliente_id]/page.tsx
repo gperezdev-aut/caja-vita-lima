@@ -69,14 +69,15 @@ function dateInput(value: any) {
   return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : "";
 }
 
-function waHref(value: any) {
-  let digits = String(value ?? "").replace(/\D/g, "");
-  if (!digits) return "";
-  if (digits.length > 9 && digits.startsWith("51")) {
-    digits = digits.slice(2);
-  }
-  digits = digits.slice(-9);
-  return `https://wa.me/51${digits}`;
+function waHref(value: any, e164?: any) {
+  const canonical = String(e164 ?? "").replace(/\D/g, "");
+  if (/^[1-9]\d{7,14}$/.test(canonical)) return `https://wa.me/${canonical}`;
+
+  const raw = String(value ?? "").trim();
+  const digits = raw.replace(/\D/g, "");
+  return raw.startsWith("+") && /^[1-9]\d{7,14}$/.test(digits)
+    ? `https://wa.me/${digits}`
+    : "";
 }
 
 function timeShort(value: any) {
@@ -426,13 +427,11 @@ export default async function ClienteDetallePage({
             <InfoItem
               label="WhatsApp"
               value={
-                whatsapp === "-" ? (
-                  whatsapp
-                ) : (
-                  <a href={waHref(whatsapp)} target="_blank" rel="noopener noreferrer" style={{ color: "var(--green)" }}>
+                waHref(whatsapp, cliente?.whatsapp_e164) ? (
+                  <a href={waHref(whatsapp, cliente?.whatsapp_e164)} target="_blank" rel="noopener noreferrer" style={{ color: "var(--green)" }}>
                     {whatsapp}
                   </a>
-                )
+                ) : whatsapp
               }
             />
             <InfoItem label="DNI" value={dni} />
