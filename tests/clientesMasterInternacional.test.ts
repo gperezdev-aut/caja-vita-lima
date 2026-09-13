@@ -17,3 +17,12 @@ test("el módulo Clientes consulta la vista maestra, no la vista operativa hered
     assert.match(source, /vista_clientes_crm_catalogo_master_v1/);
   }
 });
+
+test("los enlaces de WhatsApp usan E.164 y no fuerzan Perú", async () => {
+  for (const path of ["../app/clientes/page.tsx", "../app/clientes/[cliente_id]/page.tsx"]) {
+    const source = await readFile(new URL(path, import.meta.url), "utf8");
+    assert.match(source, /whatsapp_e164/);
+    assert.match(source, /https:\/\/wa\.me\/\$\{canonical\}/);
+    assert.doesNotMatch(source, /wa\.me\/51\$\{digits\}/);
+  }
+});
