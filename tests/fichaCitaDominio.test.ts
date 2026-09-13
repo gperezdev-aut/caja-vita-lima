@@ -165,6 +165,26 @@ test("acepta un teléfono extranjero E.164 válido", () => {
   });
 });
 
+test("normaliza Chile solo cuando el país fue declarado", () => {
+  assert.deepEqual(normalizarTelefonoE164("9 6123 4567", "CL"), {
+    ok: true, e164: "+56961234567", pais: "CL",
+  });
+});
+
+test("no infiere Perú ni crea identidad canónica sin país confiable", () => {
+  assert.deepEqual(normalizarTelefonoE164("987654321", ""), { ok: false });
+  assert.deepEqual(normalizarTelefonoE164("987654321", "ZZ"), { ok: false });
+  assert.deepEqual(normalizarTelefonoE164("123", "ES"), { ok: false });
+});
+
+test("dos formatos equivalentes producen la misma llave canónica", () => {
+  const local = normalizarTelefonoE164("987 654 321", "PE");
+  const internacional = normalizarTelefonoE164("+51 987654321", "PE");
+  assert.equal(local.ok, true);
+  assert.equal(internacional.ok, true);
+  if (local.ok && internacional.ok) assert.equal(local.e164, internacional.e164);
+});
+
 test("rechaza una hora que no cabe dentro del rango de la sede", () => {
   assert.equal(horarioDentroDeSede("14:30", 60, "15:00", "20:00"), false);
   assert.equal(horarioDentroDeSede("19:30", 60, "15:00", "20:00"), false);
