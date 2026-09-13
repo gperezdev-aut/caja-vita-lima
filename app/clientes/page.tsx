@@ -129,7 +129,7 @@ function getActividad(row: Row) {
   if (explicit) return explicit;
 
   const dias = Number(row.dias_sin_visita ?? 0);
-  if (!row.ultima_visita && !row.ultima_reserva) return "Sin fecha";
+  if (!row.ultima_visita_crm && !row.ultima_visita && !row.ultima_reserva_crm && !row.ultima_reserva) return "Sin actividad";
   if (dias > 60) return "Inactivo";
   return "Activo";
 }
@@ -211,7 +211,7 @@ function ClienteMobileCard({ row }: { row: Row }) {
       </div>
       <div className="mobileRecordMeta">
         <div className="mobileRecordHighlight"><span>WhatsApp</span><strong><WhatsappCell value={row.whatsapp} /></strong></div>
-        <div><span>Última visita</span><strong>{dateShort(row.ultima_visita ?? row.ultima_reserva)}</strong></div>
+        <div><span>Última visita</span><strong>{dateShort(row.ultima_visita_crm ?? row.ultima_visita ?? row.ultima_reserva_crm ?? row.ultima_reserva)}</strong></div>
         <div><span>Servicio relevante</span><strong>{short(getCatalogoNombre(row), 54)}</strong></div>
         <div><span>Sede</span><strong>{getSede(row)}</strong></div>
         <div><span>Visitas</span><strong>{numberFmt(row.total_visitas ?? row.total_reservas)}</strong></div>
@@ -326,7 +326,7 @@ export default async function ClientesPage({ searchParams }: { searchParams: Sea
   const sedesRows = list(config.data, "SEDES");
 
   const clientesResult = await supabaseSelectWhere<Row>(
-    "vista_clientes_crm_catalogo",
+    "vista_clientes_crm_catalogo_master_v1",
     ["select=*", "order=total_gastado.desc", "limit=1000"].join("&")
   );
 
@@ -649,7 +649,7 @@ export default async function ClientesPage({ searchParams }: { searchParams: Sea
                       </Link>
                     </td>
                     <td><WhatsappCell value={row.whatsapp} /></td>
-                    <td>{dateShort(row.ultima_visita ?? row.ultima_reserva)}</td>
+                    <td>{dateShort(row.ultima_visita_crm ?? row.ultima_visita ?? row.ultima_reserva_crm ?? row.ultima_reserva)}</td>
                     <td>{safe(row.dias_sin_visita)}</td>
                     <td>
                       <Badge tone={cardToneByEstado(getEstado(row))}>{getEstado(row)}</Badge>
@@ -718,7 +718,7 @@ export default async function ClientesPage({ searchParams }: { searchParams: Sea
                       </Link>
                     </td>
                     <td><WhatsappCell value={row.whatsapp} /></td>
-                    <td>{dateShort(row.ultima_visita ?? row.ultima_reserva)}</td>
+                    <td>{dateShort(row.ultima_visita_crm ?? row.ultima_visita ?? row.ultima_reserva_crm ?? row.ultima_reserva)}</td>
                     <td>
                       <Badge tone={cardToneByEstado(getEstado(row))}>{getEstado(row)}</Badge>
                     </td>
