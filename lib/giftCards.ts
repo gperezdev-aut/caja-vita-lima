@@ -47,8 +47,8 @@ export function validateGiftCardPayment(input: {
   return "";
 }
 
-export function whatsappGiftCardUrl(phone: string, code: string, viewUrl: string) {
+export function whatsappGiftCardUrl(phone: string, code: string) {
   const digits = phone.replace(/\D/g, "");
-  const message = `Tu Gift Card Vita Lima ${code} está lista: ${viewUrl}`;
+  const message = `Tu Gift Card Vita Lima ${code} está lista. Te enviamos el archivo a continuación.`;
   return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
 }

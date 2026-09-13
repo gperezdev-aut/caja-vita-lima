@@ -62,8 +62,7 @@ export function GiftCardsModule({
 
   if (state.ok && state.giftcardId && state.code) {
     const detailPath = `/gift-cards/${encodeURIComponent(state.giftcardId)}`;
-    const viewUrl = typeof window === "undefined" ? detailPath : `${window.location.origin}${detailPath}`;
-    const share = whatsappGiftCardUrl(beneficiaryPhone || buyerPhone, state.code, viewUrl);
+    const share = whatsappGiftCardUrl(beneficiaryPhone || buyerPhone, state.code);
     return <section className="panel giftCardSuccess" aria-live="polite"><span className="successMark">✓</span><p className="eyebrow">Gift Card emitida</p><h2>{state.code}</h2><p>Vigente hasta el {formatGiftCardDate(state.expiresAt || expiration)}.</p><div className="giftCardSuccessActions"><a className="primaryButton" href={`/api/gift-cards/${encodeURIComponent(state.giftcardId)}/download`}>Descargar Gift Card</a>{(beneficiaryPhone || buyerPhone) && <a className="ghostButton" href={share} target="_blank" rel="noreferrer">Compartir por WhatsApp</a>}<Link className="ghostButton" href={detailPath}>Ver Gift Card</Link><Link className="ghostButton" href="/gift-cards">Emitir otra</Link></div></section>;
   }
 

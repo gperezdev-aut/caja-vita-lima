@@ -118,7 +118,7 @@ test("wizard cubre servicio, monto, catálogo, listado y filtros", async () => {
 test("detalle cubre canje, saldo, anulación y descarga segura", async () => {
   const [detail,download] = await Promise.all([source("app/gift-cards/[giftcard_id]/page.tsx"),source("app/api/gift-cards/[giftcard_id]/download/route.ts")]);
   assert.match(detail, /CANJEAR GIFT CARD/); assert.match(detail, /Historial de usos/); assert.match(detail, /Confirmar anulación/);
-  assert.match(download, /image\/svg\+xml/); assert.match(download, /logo-vita-lima-orange\.png/); assert.match(download, /private, no-store/);
+  assert.match(download, /image\/svg\+xml/); assert.match(download, /gift-card-template-vita-lima\.png\.gz/); assert.match(download, /private, no-store/);
   assert.doesNotMatch(download, /movimiento_id|pago_id|request_id/);
 });
 
