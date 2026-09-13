@@ -100,32 +100,15 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section
-      style={{
-        border: "1px solid var(--line)",
-        borderRadius: "22px",
-        background: "white",
-        padding: "20px",
-      }}
-    >
-      <h2 style={{ margin: "0 0 16px", fontSize: "22px" }}>{title}</h2>
+    <section className="formSection">
+      <h2 className="formSectionHeading">{title}</h2>
       {children}
     </section>
   );
 }
 
 function FormGrid({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
-        gap: "14px",
-      }}
-    >
-      {children}
-    </div>
-  );
+  return <div className="formGrid">{children}</div>;
 }
 
 function safeDate(value: string | undefined, fallback: string) {
@@ -309,16 +292,7 @@ export default async function RegistrarSalidaPage({
 
         <form
           action={createSalidaAction}
-          style={{
-            background: "rgba(255, 250, 241, 0.9)",
-            border: "1px solid var(--line)",
-            borderRadius: "26px",
-            boxShadow: "var(--shadow)",
-            padding: "24px",
-            display: "grid",
-            gap: "22px",
-            marginBottom: "24px",
-          }}
+          className="formShell"
         >
           <Section title="Datos de la salida">
             <FormGrid>
@@ -419,38 +393,21 @@ export default async function RegistrarSalidaPage({
             </FormField>
           </Section>
 
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "flex-end",
-              gap: "12px",
-              flexWrap: "wrap",
-            }}
-          >
+          <div className="formActions">
             <a
               href="/citas-hoy"
+              className="ghostButton actionButton"
               style={{
-                background: "white",
-                color: "var(--green)",
-                border: "1px solid var(--line)",
-                borderRadius: "16px",
-                padding: "15px 18px",
-                fontWeight: 850,
-                textDecoration: "none",
+                display: "inline-flex",
               }}
             >
               Volver a citas
             </a>
 
             <SubmitButton
+              className="primaryButton actionButton"
               style={{
                 border: 0,
-                borderRadius: "16px",
-                padding: "15px 18px",
-                fontWeight: 850,
-                cursor: "pointer",
-                background: "var(--green)",
-                color: "white",
               }}
             >
               Guardar salida
@@ -473,7 +430,8 @@ export default async function RegistrarSalidaPage({
               No hay salidas registradas para la fecha y sede seleccionadas.
             </div>
           ) : (
-            <div className="tableWrap">
+            <>
+            <div className="tableWrap desktopData">
               <table>
                 <thead>
                   <tr>
@@ -497,12 +455,31 @@ export default async function RegistrarSalidaPage({
                       <td>{money(row.monto)}</td>
                       <td>{row.responsable || "-"}</td>
                       <td>{row.observacion || "-"}</td>
-                      <td>{row.salida_id}</td>
+                      <td><details className="technicalDetails"><summary>Ver ID</summary><code>{row.salida_id}</code></details></td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
+            <div className="mobileRecordList">
+              {salidas.data.map((row) => (
+                <article className="mobileRecordCard" key={`mobile-${row.salida_id}`}>
+                  <div className="mobileRecordHeader">
+                    <h3>{row.concepto}</h3>
+                    <strong>{money(row.monto)}</strong>
+                  </div>
+                  <div className="mobileRecordMeta">
+                    <div><span>Hora</span><strong>{String(row.hora ?? "-").slice(0, 5)}</strong></div>
+                    <div><span>Sede</span><strong>{row.sede}</strong></div>
+                    <div><span>Tipo</span><strong>{row.tipo_gasto}</strong></div>
+                    <div><span>Responsable</span><strong>{row.responsable || "-"}</strong></div>
+                    {row.observacion && <div><span>Observación</span><strong>{row.observacion}</strong></div>}
+                  </div>
+                  <details className="technicalDetails"><summary>Referencia interna</summary><code>{row.salida_id}</code></details>
+                </article>
+              ))}
+            </div>
+            </>
           )}
         </section>
       </section>

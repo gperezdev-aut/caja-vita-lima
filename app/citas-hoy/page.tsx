@@ -173,26 +173,29 @@ function CitaMobileCard({ cita }: { cita: CitaPresentation }) {
         </div>
       </div>
 
-      {row.whatsapp && (
-        <p className="citasHoyWhatsapp">
-          <span>WhatsApp</span>
-          <strong>
-            <a href={waHref(row.whatsapp)} target="_blank" rel="noopener noreferrer" style={{ color: "var(--green)" }}>
-              {row.whatsapp}
-            </a>
-          </strong>
-        </p>
-      )}
-
-      <small className="citasHoyMovement">Movimiento: {movimientoId}</small>
-      {puedeAtender && (
-        <a
-          className="citasHoyStartButton"
-          href={`/citas-hoy/${encodeURIComponent(movimientoId)}/atencion`}
-        >
-          {row.estado === "En atención" ? "Continuar atención" : "Iniciar atención"}
+      <div className="citasHoyCardActions">
+        {row.whatsapp && (
+          <a href={waHref(row.whatsapp)} target="_blank" rel="noopener noreferrer">
+            WhatsApp
+          </a>
+        )}
+        <a href={row.cliente_id ? `/clientes/${encodeURIComponent(String(row.cliente_id))}` : "/clientes"}>
+          Ver cliente
         </a>
-      )}
+        {puedeAtender && (
+          <a
+            className="citasHoyStartButton"
+            href={`/citas-hoy/${encodeURIComponent(movimientoId)}/atencion`}
+          >
+            {row.estado === "En atención" ? "Continuar atención" : "Iniciar atención"}
+          </a>
+        )}
+      </div>
+
+      <details className="technicalDetails">
+        <summary>Referencia interna</summary>
+        <code>{movimientoId}</code>
+      </details>
     </article>
   );
 }

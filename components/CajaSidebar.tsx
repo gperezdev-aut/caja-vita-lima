@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { logoutAction } from "@/app/actions";
 import type { CajaSession } from "@/lib/auth";
 import { getVisibleNavItems } from "@/lib/auth";
@@ -17,9 +18,16 @@ export function CajaSidebar({ session }: { session: CajaSession }) {
   return (
     <>
       <aside className="sidebar sidebarDesktop">
-        <div>
-          <p className="sidebarEyebrow">Vita Lima</p>
-          <h2>Caja</h2>
+        <div className="sidebarBrand">
+          <Image
+            className="sidebarLogo"
+            src="/brand/logo-vita-lima-orange.png"
+            alt="Vita Lima Spa"
+            width={133}
+            height={60}
+            priority
+          />
+          <span>Caja operativa</span>
         </div>
 
         <div
@@ -73,8 +81,15 @@ export function CajaSidebar({ session }: { session: CajaSession }) {
         <details className="mobileMenuDetails">
           <summary className="mobileMenuSummary">
             <span className="mobileMenuBrand">
-              <small>Vita Lima</small>
-              <strong>Caja</strong>
+              <Image
+                className="mobileMenuLogo"
+                src="/brand/logo-vita-lima-orange.png"
+                alt="Vita Lima Spa"
+                width={82}
+                height={37}
+                priority
+              />
+              <small>Caja</small>
             </span>
 
             <span className="mobileMenuIdentity">

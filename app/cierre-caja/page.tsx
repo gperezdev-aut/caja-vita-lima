@@ -13,6 +13,7 @@ import { FormField } from "@/components/FormField";
 import { Input } from "@/components/Input";
 import { Select } from "@/components/Select";
 import { Textarea } from "@/components/Textarea";
+import { Badge } from "@/components/Badge";
 import { createCierreCajaAction } from "./actions";
 
 type Row = Record<string, any>;
@@ -102,32 +103,15 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section
-      style={{
-        border: "1px solid var(--line)",
-        borderRadius: "22px",
-        background: "white",
-        padding: "20px",
-      }}
-    >
-      <h2 style={{ margin: "0 0 16px", fontSize: "22px" }}>{title}</h2>
+    <section className="formSection">
+      <h2 className="formSectionHeading">{title}</h2>
       {children}
     </section>
   );
 }
 
 function FormGrid({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
-        gap: "14px",
-      }}
-    >
-      {children}
-    </div>
-  );
+  return <div className="formGrid">{children}</div>;
 }
 
 function Card({
@@ -372,16 +356,7 @@ export default async function CierreCajaPage({
 
         <form
           action={createCierreCajaAction}
-          style={{
-            background: "rgba(255, 250, 241, 0.9)",
-            border: "1px solid var(--line)",
-            borderRadius: "26px",
-            boxShadow: "var(--shadow)",
-            padding: "24px",
-            display: "grid",
-            gap: "22px",
-            marginBottom: "24px",
-          }}
+          className="formShell"
         >
           <Section title="Datos del cierre">
             <FormGrid>
@@ -455,31 +430,21 @@ export default async function CierreCajaPage({
             </FormField>
           </Section>
 
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px", flexWrap: "wrap" }}>
+          <div className="formActions">
             <Link
               href="/"
+              className="ghostButton actionButton"
               style={{
-                background: "white",
-                color: "var(--green)",
-                border: "1px solid var(--line)",
-                borderRadius: "16px",
-                padding: "15px 18px",
-                fontWeight: 850,
-                textDecoration: "none",
+                display: "inline-flex",
               }}
             >
               Volver al dashboard
             </Link>
 
             <SubmitButton
+              className="primaryButton actionButton"
               style={{
                 border: 0,
-                borderRadius: "16px",
-                padding: "15px 18px",
-                fontWeight: 850,
-                cursor: "pointer",
-                background: "var(--green)",
-                color: "white",
               }}
             >
               Guardar cierre
@@ -500,7 +465,8 @@ export default async function CierreCajaPage({
               Todavía no hay cierres registrados para la fecha y sede seleccionadas.
             </div>
           ) : (
-            <div className="tableWrap">
+            <>
+            <div className="tableWrap desktopData">
               <table>
                 <thead>
                   <tr>
@@ -526,12 +492,31 @@ export default async function CierreCajaPage({
                       <td className="strong">{physicalMoney(row.diferencia)}</td>
                       <td>{row.responsable || "-"}</td>
                       <td>{row.estado || "-"}</td>
-                      <td>{row.cierre_id}</td>
+                      <td><details className="technicalDetails"><summary>Ver ID</summary><code>{row.cierre_id}</code></details></td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
+            <div className="mobileRecordList">
+              {cierres.data.map((row) => (
+                <article className="mobileRecordCard" key={`mobile-${row.cierre_id}`}>
+                  <div className="mobileRecordHeader">
+                    <h3>{row.fecha} · {row.sede}</h3>
+                    <Badge tone={String(row.estado).toUpperCase() === "CERRADO" ? "good" : "warn"}>{row.estado || "-"}</Badge>
+                  </div>
+                  <div className="mobileRecordMeta">
+                    <div className="mobileRecordHighlight"><span>Ingresos</span><strong>{money(row.total_ingresos)}</strong></div>
+                    <div><span>Salidas</span><strong>{money(row.total_salidas)}</strong></div>
+                    <div><span>Caja física esperada</span><strong>{physicalMoney(row.caja_esperada)}</strong></div>
+                    <div><span>Diferencia física</span><strong>{physicalMoney(row.diferencia)}</strong></div>
+                    <div><span>Responsable</span><strong>{row.responsable || "-"}</strong></div>
+                  </div>
+                  <details className="technicalDetails"><summary>Referencia interna</summary><code>{row.cierre_id}</code></details>
+                </article>
+              ))}
+            </div>
+            </>
           )}
         </section>
       </section>

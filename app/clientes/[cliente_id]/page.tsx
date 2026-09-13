@@ -707,7 +707,7 @@ export default async function ClienteDetallePage({
             </div>
           </div>
 
-          <div className="tableWrap">
+          <div className="tableWrap desktopData">
             <table>
               <thead>
                 <tr>
@@ -745,6 +745,24 @@ export default async function ClienteDetallePage({
               </tbody>
             </table>
           </div>
+          <div className="mobileRecordList">
+            {serviciosAgrupados.length === 0 ? (
+              <div className="mobileRecordCard">No hay servicios agrupados para este cliente.</div>
+            ) : (
+              serviciosAgrupados.map((row, index) => (
+                <article className="mobileRecordCard" key={`service-mobile-${row.servicio}-${index}`}>
+                  <div className="mobileRecordHeader"><h3>{short(row.servicio, 80)}</h3><Badge tone={badgeTone(row.tipo)}>{safe(row.tipo)}</Badge></div>
+                  <div className="mobileRecordMeta">
+                    <div><span>Grupo</span><strong>{safe(row.grupo)}</strong></div>
+                    <div><span>Visitas / pax</span><strong>{numberFmt(row.visitas)} / {numberFmt(row.pax)}</strong></div>
+                    <div className="mobileRecordHighlight"><span>Total pagado</span><strong>{money(row.total_pagado)}</strong></div>
+                    <div><span>Total cobrar</span><strong>{money(row.total_cobrar)}</strong></div>
+                    <div><span>Última venta</span><strong>{dateShort(row.ultima_fecha)}</strong></div>
+                  </div>
+                </article>
+              ))
+            )}
+          </div>
         </section>
 
         <section className="panel">
@@ -755,7 +773,7 @@ export default async function ClienteDetallePage({
             </div>
           </div>
 
-          <div className="tableWrap">
+          <div className="tableWrap desktopData">
             <table>
               <thead>
                 <tr>
@@ -804,6 +822,28 @@ export default async function ClienteDetallePage({
                 ))}
               </tbody>
             </table>
+          </div>
+          <div className="mobileRecordList">
+            {historial.length === 0 ? (
+              <div className="mobileRecordCard">No hay historial para este cliente.</div>
+            ) : (
+              historial.map((row, index) => (
+                <article className="mobileRecordCard" key={`history-mobile-${row.movimiento_id ?? index}`}>
+                  <div className="mobileRecordHeader"><h3>{short(row.catalogo_nombre ?? row.servicio_original, 72)}</h3><Badge tone={badgeTone(row.estado_boleta)}>{safe(row.estado_boleta)}</Badge></div>
+                  <div className="mobileRecordMeta">
+                    <div><span>Fecha y hora</span><strong>{dateShort(row.fecha)} · {timeShort(row.hora)}</strong></div>
+                    <div><span>Sede</span><strong>{safe(row.sede)}</strong></div>
+                    <div><span>Pax</span><strong>{numberFmt(row.n_pax)}</strong></div>
+                    <div><span>Total cobrar</span><strong>{money(row.total_cobrar)}</strong></div>
+                    <div className="mobileRecordHighlight"><span>Pagado</span><strong>{money(row.total_pagado)}</strong></div>
+                    <div><span>Pendiente</span><strong>{money(row.pendiente)}</strong></div>
+                    <div><span>Comprobante</span><strong>{safe(row.numero_comprobante_final ?? row.numero_boleta)}</strong></div>
+                    <div><span>Responsable</span><strong>{safe(row.responsable)}</strong></div>
+                    {row.observacion && <div><span>Observación</span><strong>{short(row.observacion, 80)}</strong></div>}
+                  </div>
+                </article>
+              ))
+            )}
           </div>
         </section>
       </section>

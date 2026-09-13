@@ -196,6 +196,32 @@ function Card({
   );
 }
 
+function ClienteMobileCard({ row }: { row: Row }) {
+  const alerta = safe(row.alerta_atencion ?? row.alerta ?? row.notas);
+
+  return (
+    <article className="mobileRecordCard">
+      <div className="mobileRecordHeader">
+        <h3>
+          <Link href={clienteHref(row)} className="crmLink">
+            {safe(row.cliente)}
+          </Link>
+        </h3>
+        <Badge tone={cardToneByEstado(getEstado(row))}>{getEstado(row)}</Badge>
+      </div>
+      <div className="mobileRecordMeta">
+        <div className="mobileRecordHighlight"><span>WhatsApp</span><strong><WhatsappCell value={row.whatsapp} /></strong></div>
+        <div><span>Última visita</span><strong>{dateShort(row.ultima_visita ?? row.ultima_reserva)}</strong></div>
+        <div><span>Servicio relevante</span><strong>{short(getCatalogoNombre(row), 54)}</strong></div>
+        <div><span>Sede</span><strong>{getSede(row)}</strong></div>
+        <div><span>Visitas</span><strong>{numberFmt(row.total_visitas ?? row.total_reservas)}</strong></div>
+        <div><span>Total gastado</span><strong>{money(row.total_gastado)}</strong></div>
+      </div>
+      {alerta !== "-" && <div className="clienteAlertaNotice">⚠ {short(alerta, 100)}</div>}
+    </article>
+  );
+}
+
 const buttonStyle: CSSProperties = {
   border: "0",
   borderRadius: "15px",
@@ -593,7 +619,7 @@ export default async function ClientesPage({ searchParams }: { searchParams: Sea
             </div>
           </div>
 
-          <div className="tableWrap">
+          <div className="tableWrap desktopData">
             <table>
               <thead>
                 <tr>
@@ -639,6 +665,15 @@ export default async function ClientesPage({ searchParams }: { searchParams: Sea
               </tbody>
             </table>
           </div>
+          <div className="mobileRecordList">
+            {clientesRecuperar.length === 0 ? (
+              <div className="mobileRecordCard">No hay clientes inactivos para este filtro.</div>
+            ) : (
+              clientesRecuperar.map((row, index) => (
+                <ClienteMobileCard key={`${row.cliente_id ?? row.cliente}-rec-mobile-${index}`} row={row} />
+              ))
+            )}
+          </div>
         </section>
 
         <section className="panel">
@@ -649,7 +684,7 @@ export default async function ClientesPage({ searchParams }: { searchParams: Sea
             </div>
           </div>
 
-          <div className="tableWrap">
+          <div className="tableWrap desktopData">
             <table>
               <thead>
                 <tr>
@@ -700,6 +735,15 @@ export default async function ClientesPage({ searchParams }: { searchParams: Sea
                 ))}
               </tbody>
             </table>
+          </div>
+          <div className="mobileRecordList">
+            {clientes.length === 0 ? (
+              <div className="mobileRecordCard">No hay clientes con los filtros seleccionados.</div>
+            ) : (
+              clientes.map((row, index) => (
+                <ClienteMobileCard key={`${row.cliente_id ?? row.cliente}-base-mobile-${index}`} row={row} />
+              ))
+            )}
           </div>
         </section>
       </section>
