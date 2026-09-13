@@ -52,7 +52,7 @@ function Card({
 }
 
 function AlertBox({ children }: { children: React.ReactNode }) {
-  return <div className="alert">{children}</div>;
+  return <div className="alert dashboardErrors">{children}</div>;
 }
 
 export default async function HomePage({
@@ -124,8 +124,8 @@ export default async function HomePage({
     <main className="appShell">
       <CajaSidebar session={session} />
 
-      <section className="page">
-        <section className="hero" id="dashboard">
+      <section className="page dashboardPage">
+        <section className="hero dashboardHero" id="dashboard">
           <div>
             <p className="eyebrow">Vita Lima Spa</p>
             <h1>Caja Vita Lima</h1>
@@ -152,7 +152,7 @@ export default async function HomePage({
           </AlertBox>
         )}
 
-        <section className="panel">
+        <section className="panel dashboardFilters">
           <div className="panelTitle">
             <div>
               <h2>Filtros del dashboard</h2>
@@ -165,12 +165,7 @@ export default async function HomePage({
 
           <form
             action="/"
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-              gap: "14px",
-              alignItems: "end",
-            }}
+            className="filterForm"
           >
             <FormField label="Desde">
               <Input name="desde" type="month" defaultValue={desde} />
@@ -191,17 +186,12 @@ export default async function HomePage({
               </Select>
             </FormField>
 
-            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+            <div className="filterActions">
               <button
                 type="submit"
+                className="primaryButton actionButton"
                 style={{
                   border: 0,
-                  borderRadius: "16px",
-                  padding: "15px 18px",
-                  fontWeight: 850,
-                  cursor: "pointer",
-                  background: "var(--green)",
-                  color: "white",
                 }}
               >
                 Aplicar filtros
@@ -209,16 +199,9 @@ export default async function HomePage({
 
               <Link
                 href="/"
+                className="ghostButton actionButton"
                 style={{
-                  background: "white",
-                  color: "var(--green)",
-                  border: "1px solid var(--line)",
-                  borderRadius: "16px",
-                  padding: "15px 18px",
-                  fontWeight: 850,
-                  textDecoration: "none",
                   display: "inline-flex",
-                  alignItems: "center",
                 }}
               >
                 Ver todo
@@ -226,16 +209,9 @@ export default async function HomePage({
 
               <a
                 href={`/api/dashboard/export?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}&sede=${encodeURIComponent(selectedSede)}`}
+                className="ghostButton actionButton"
                 style={{
-                  background: "white",
-                  color: "var(--green)",
-                  border: "1px solid var(--line)",
-                  borderRadius: "16px",
-                  padding: "15px 18px",
-                  fontWeight: 850,
-                  textDecoration: "none",
                   display: "inline-flex",
-                  alignItems: "center",
                 }}
               >
                 Descargar Excel
@@ -244,7 +220,7 @@ export default async function HomePage({
           </form>
         </section>
 
-        <section className="grid">
+        <section className="grid dashboardPrimaryKpis">
           <Card
             label="Ingresos confirmados"
             value={money(dashboardTotals.ingresos)}
@@ -254,7 +230,6 @@ export default async function HomePage({
           <Card
             label="Resultado neto"
             value={money(dashboardTotals.neto)}
-            tone="good"
           />
           <Card
             label="Pendientes migración"
@@ -341,7 +316,7 @@ export default async function HomePage({
             </div>
           </div>
 
-          <div className="tableWrap">
+          <div className="tableWrap desktopData">
             <table>
               <thead>
                 <tr>
@@ -382,6 +357,30 @@ export default async function HomePage({
                 )}
               </tbody>
             </table>
+          </div>
+
+          <div className="mobileRecordList">
+            {rowsForTable.length === 0 ? (
+              <div className="mobileRecordCard">No hay información para el filtro seleccionado.</div>
+            ) : (
+              rowsForTable.map((row) => (
+                <article className="mobileRecordCard" key={`mobile-${row.mes}-${row.sede}`}>
+                  <div className="mobileRecordHeader">
+                    <h3>{monthLabel(row.mes)} · {row.sede}</h3>
+                    <strong>{money(row["Resultado neto confirmado"])}</strong>
+                  </div>
+                  <div className="mobileRecordMeta">
+                    <div className="mobileRecordHighlight"><span>Ingresos</span><strong>{money(row["Total ingresos confirmados"])}</strong></div>
+                    <div><span>Salidas</span><strong>{money(row["Total salidas"])}</strong></div>
+                    <div><span>Servicios</span><strong>{money(row["Ingresos por servicios"])}</strong></div>
+                    <div><span>Gift Cards</span><strong>{money(row["Ingresos por Gift Cards"])}</strong></div>
+                    <div><span>Préstamos</span><strong>{money(row["Préstamos de caja"])}</strong></div>
+                    <div><span>Cuponidad</span><strong>{money(getCuponidadFromMonthlyRow(row))}</strong></div>
+                    <div><span>Pendientes</span><strong>{numberFmt(row["Filas pendientes de revisión"])}</strong></div>
+                  </div>
+                </article>
+              ))
+            )}
           </div>
         </section>
 

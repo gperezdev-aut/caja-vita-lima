@@ -66,17 +66,7 @@ function isPendingComprobante(row: Row) {
 }
 
 function FormGrid({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
-        gap: "12px",
-      }}
-    >
-      {children}
-    </div>
-  );
+  return <div className="formGrid">{children}</div>;
 }
 
 function ComprobanteCard({ row }: { row: Row }) {
@@ -89,33 +79,17 @@ function ComprobanteCard({ row }: { row: Row }) {
     : "warn";
 
   return (
-    <article
-      style={{
-        border: "1px solid var(--line)",
-        borderRadius: "22px",
-        background: "white",
-        padding: "18px",
-        display: "grid",
-        gap: "16px",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          gap: "14px",
-          flexWrap: "wrap",
-        }}
-      >
+    <article className="comprobanteCard">
+      <div className="comprobanteHeader">
         <div>
-          <h3 style={{ margin: "0 0 8px", fontSize: "20px" }}>
+          <h3>
             {row.cliente || "Cliente sin nombre"}
           </h3>
-          <p style={{ margin: 0, color: "var(--muted)", lineHeight: 1.5 }}>
+          <p>
             {dateLabel(row.fecha)} · {hourLabel(row.hora)} · {row.sede || "-"} ·{" "}
             {row.servicio || "-"}
           </p>
-          <p style={{ margin: "8px 0 0", color: "var(--muted)", lineHeight: 1.5 }}>
+          <p>
             WhatsApp:{" "}
             {row.whatsapp ? (
               <a href={waHref(row.whatsapp)} target="_blank" rel="noopener noreferrer" style={{ color: "var(--green)" }}>
@@ -123,19 +97,19 @@ function ComprobanteCard({ row }: { row: Row }) {
               </a>
             ) : (
               "-"
-            )}{" "}
-            · Movimiento: {movimientoId}
+            )}
           </p>
+          <details className="technicalDetails"><summary>Referencia interna</summary><code>{movimientoId}</code></details>
         </div>
 
-        <div style={{ display: "flex", gap: "8px", alignItems: "flex-start", flexWrap: "wrap" }}>
+        <div className="comprobanteBadges">
           <Badge tone={tone}>{estadoActual || "PENDIENTE"}</Badge>
           <Badge>{tipoActual || "POR_DEFINIR"}</Badge>
           <Badge tone="good">{money(row.total_cobrar)}</Badge>
         </div>
       </div>
 
-      <form action={updateComprobanteAction} style={{ display: "grid", gap: "14px" }}>
+      <form action={updateComprobanteAction} className="comprobanteForm">
         <input type="hidden" name="movimiento_id" value={movimientoId} />
 
         <FormGrid>
@@ -190,20 +164,15 @@ function ComprobanteCard({ row }: { row: Row }) {
             rows={3}
             defaultValue={row.observacion_comprobante ?? ""}
             placeholder="Ej. Falta número, boleta emitida, factura solicitada, no aplica, etc."
-            style={{ minHeight: "90px" }}
+            style={{ minHeight: "76px" }}
           />
         </FormField>
 
-        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <div className="formActions">
           <SubmitButton
+            className="primaryButton actionButton"
             style={{
               border: 0,
-              borderRadius: "16px",
-              padding: "13px 18px",
-              fontWeight: 850,
-              cursor: "pointer",
-              background: "var(--green)",
-              color: "white",
             }}
           >
             Guardar comprobante
@@ -341,7 +310,7 @@ export default async function ComprobantesPage({
               No hay comprobantes pendientes u observados para revisar.
             </div>
           ) : (
-            <div style={{ display: "grid", gap: "14px" }}>
+            <div className="comprobanteList">
               {pendientes.map((row) => (
                 <ComprobanteCard key={row.movimiento_id} row={row} />
               ))}

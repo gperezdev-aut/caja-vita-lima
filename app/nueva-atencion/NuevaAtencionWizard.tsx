@@ -510,7 +510,7 @@ export function NuevaAtencionWizard({
         <div className="reviewGrid">
           <div><span>Tipo</span><strong>{tipo === "RESERVA" ? "Reserva futura" : "Atención de hoy"}</strong></div>
           <div><span>Fecha y hora</span><strong>{fecha} · {hora}</strong></div>
-          <div className="reviewImportant"><span>Sede</span><strong>{sede}</strong></div>
+          <div className="reviewNeutral"><span>Sede</span><strong>{sede}</strong></div>
           <div><span>Cliente</span><strong>{cliente}</strong></div>
           <div><span>WhatsApp</span><strong>{whatsapp || "No registrado"}</strong></div>
           <div><span>Personas</span><strong>{pax}</strong></div>

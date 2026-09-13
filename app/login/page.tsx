@@ -1,6 +1,7 @@
 import { loginAction } from "@/app/actions";
 import { isLoggedIn } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import Image from "next/image";
 
 type LoginSearchParams = Promise<{
   error?: string;
@@ -70,11 +71,16 @@ export default async function LoginPage({
   return (
     <main className="loginPage">
       <section className="loginCard">
-        <p className="eyebrow">Vita Lima Spa</p>
-        <h1>Caja Vita Lima</h1>
-        <p className="subtitle">
-          Acceso interno por usuario y PIN para caja, reportes y operación.
-        </p>
+        <Image
+          className="loginLogo"
+          src="/brand/logo-vita-lima-orange.png"
+          alt="Vita Lima Spa"
+          width={166}
+          height={75}
+          priority
+        />
+        <h1>Caja</h1>
+        <p className="subtitle">Acceso interno para operación, reportes y gestión.</p>
 
         {message && (
           <div className={`loginMessage ${message.type}`}>{message.text}</div>

@@ -173,26 +173,29 @@ function CitaMobileCard({ cita }: { cita: CitaPresentation }) {
         </div>
       </div>
 
-      {row.whatsapp && (
-        <p className="citasHoyWhatsapp">
-          <span>WhatsApp</span>
-          <strong>
-            <a href={waHref(row.whatsapp)} target="_blank" rel="noopener noreferrer" style={{ color: "var(--green)" }}>
-              {row.whatsapp}
-            </a>
-          </strong>
-        </p>
-      )}
-
-      <small className="citasHoyMovement">Movimiento: {movimientoId}</small>
-      {puedeAtender && (
-        <a
-          className="citasHoyStartButton"
-          href={`/citas-hoy/${encodeURIComponent(movimientoId)}/atencion`}
-        >
-          {row.estado === "En atención" ? "Continuar atención" : "Iniciar atención"}
+      <div className="citasHoyCardActions">
+        {row.whatsapp && (
+          <a href={waHref(row.whatsapp)} target="_blank" rel="noopener noreferrer">
+            WhatsApp
+          </a>
+        )}
+        <a href={row.cliente_id ? `/clientes/${encodeURIComponent(String(row.cliente_id))}` : "/clientes"}>
+          Ver cliente
         </a>
-      )}
+        {puedeAtender && (
+          <a
+            className="citasHoyStartButton"
+            href={`/citas-hoy/${encodeURIComponent(movimientoId)}/atencion`}
+          >
+            {row.estado === "En atención" ? "Continuar atención" : "Iniciar atención"}
+          </a>
+        )}
+      </div>
+
+      <details className="technicalDetails">
+        <summary>Referencia interna</summary>
+        <code>{movimientoId}</code>
+      </details>
     </article>
   );
 }
@@ -417,8 +420,8 @@ export default async function CitasHoyPage({
                   padding: "14px 18px",
                   fontWeight: 850,
                   cursor: "pointer",
-                  background: "var(--green)",
-                  color: "white",
+                  background: "var(--brand-primary)",
+                  color: "var(--brand-primary-text)",
                 }}
               >
                 Aplicar filtros
@@ -429,7 +432,7 @@ export default async function CitasHoyPage({
                 href="/citas-hoy"
                 style={{
                   background: "white",
-                  color: "var(--green)",
+                  color: "var(--charcoal)",
                   border: "1px solid var(--line)",
                   borderRadius: "16px",
                   padding: "14px 18px",
@@ -492,8 +495,8 @@ export default async function CitasHoyPage({
                 href="/nueva-atencion"
                 style={{
                   alignSelf: "flex-start",
-                  background: "var(--green)",
-                  color: "white",
+                  background: "var(--brand-primary)",
+                  color: "var(--brand-primary-text)",
                   borderRadius: "16px",
                   padding: "13px 16px",
                   fontWeight: 850,
@@ -510,7 +513,7 @@ export default async function CitasHoyPage({
                 style={{
                   alignSelf: "flex-start",
                   background: "white",
-                  color: "var(--green)",
+                  color: "var(--charcoal)",
                   border: "1px solid var(--line)",
                   borderRadius: "16px",
                   padding: "13px 16px",
