@@ -1,12 +1,11 @@
 import { requireModuleAccess } from "@/lib/auth";
 import { CajaSidebar } from "@/components/CajaSidebar";
 import { supabaseSelect, supabaseSelectWhere } from "@/lib/supabaseServer";
-import { SubmitButton } from "@/components/SubmitButton";
 import { FormField } from "@/components/FormField";
 import { Input } from "@/components/Input";
 import { Select } from "@/components/Select";
-import { Textarea } from "@/components/Textarea";
 import { createSalidaAction } from "./actions";
+import { RegistrarSalidaWizard } from "./RegistrarSalidaWizard";
 
 type Row = Record<string, any>;
 
@@ -92,19 +91,8 @@ function Options({
   );
 }
 
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="formSection">
-      <h2 className="formSectionHeading">{title}</h2>
-      {children}
-    </section>
-  );
+function values(rows: Row[], fallback: string[]) {
+  return rows.length ? rows.map((row) => String(row.valor)) : fallback;
 }
 
 function FormGrid({ children }: { children: React.ReactNode }) {
@@ -154,6 +142,17 @@ export default async function RegistrarSalidaPage({
   const sedes = list(config.data, "SEDES");
   const responsables = list(config.data, "RESPONSABLES");
   const tiposGasto = list(config.data, "TIPOS_GASTO");
+  const sedeValues = values(sedes, ["Miraflores", "San Borja"]);
+  const responsableValues = values(responsables, ["Gerald", "Luis", "Naty", "Otro"]);
+  const tipoGastoValues = values(tiposGasto, [
+    "Movilidad",
+    "Insumos",
+    "Limpieza",
+    "Alquiler",
+    "Servicios",
+    "Apoyo Therapy",
+    "Otro",
+  ]);
 
   const totalSalidas = salidas.data.reduce(
     (sum, row) => sum + Number(row.monto ?? 0),
@@ -198,23 +197,6 @@ export default async function RegistrarSalidaPage({
             }}
           >
             Salida guardada correctamente. ID: <strong>{params.id}</strong>
-          </div>
-        )}
-
-        {params?.error && (
-          <div
-            role="alert"
-            style={{
-              borderRadius: "18px",
-              padding: "16px 18px",
-              marginBottom: "18px",
-              background: "var(--danger)",
-              color: "var(--danger-text)",
-              border: "1px solid rgba(163, 50, 37, 0.18)",
-              fontWeight: 800,
-            }}
-          >
-            <strong>No se pudo guardar:</strong> {params.error}
           </div>
         )}
 
@@ -290,130 +272,17 @@ export default async function RegistrarSalidaPage({
           </form>
         </section>
 
-        <form
+        <RegistrarSalidaWizard
           action={createSalidaAction}
-          className="formShell"
-        >
-          <Section title="Datos de la salida">
-            <FormGrid>
-              <FormField label="Fecha">
-                <Input
-                  name="fecha"
-                  type="date"
-                  defaultValue={selectedFecha}
-                  required
-                />
-              </FormField>
-
-              <FormField label="Hora">
-                <Input
-                  name="hora"
-                  type="time"
-                  defaultValue={nowInLima()}
-                  required
-                />
-              </FormField>
-
-              <FormField label="Sede">
-                <Select
-                  name="sede"
-                  defaultValue={selectedSede === "TODAS" ? "Miraflores" : selectedSede}
-                  required
-                >
-                  <Options rows={sedes} fallback={["Miraflores", "San Borja"]} />
-                </Select>
-              </FormField>
-
-              <FormField label="Tipo de gasto">
-                <Select name="tipo_gasto" required>
-                  <Options
-                    rows={tiposGasto}
-                    fallback={[
-                      "Movilidad",
-                      "Insumos",
-                      "Limpieza",
-                      "Alquiler",
-                      "Servicios",
-                      "Apoyo Therapy",
-                      "Otro",
-                    ]}
-                  />
-                </Select>
-              </FormField>
-            </FormGrid>
-          </Section>
-
-          <Section title="Detalle">
-            <FormGrid>
-              <FormField label="Concepto">
-                <Input
-                  name="concepto"
-                  placeholder="Ej. Compra de aceite, movilidad, limpieza, etc."
-                  required
-                />
-              </FormField>
-
-              <FormField label="Monto">
-                <Input
-                  name="monto"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  placeholder="0.00"
-                  required
-                />
-              </FormField>
-
-              <FormField label="Responsable">
-                <Select name="responsable" defaultValue="Gerald">
-                  <Options
-                    rows={responsables}
-                    fallback={["Gerald", "Luis", "Naty", "Otro"]}
-                  />
-                </Select>
-              </FormField>
-
-              <FormField label="Movimiento relacionado">
-                <Input
-                  name="source_movimiento_id"
-                  placeholder="Opcional. Ej. MOV-APP-..."
-                />
-              </FormField>
-            </FormGrid>
-          </Section>
-
-          <Section title="Observación">
-            <FormField label="Nota interna">
-              <Textarea
-                name="observacion"
-                placeholder="Ej. Gasto real, comprobante pendiente, diferencia explicada, etc."
-                rows={4}
-                style={{ minHeight: "110px" }}
-              />
-            </FormField>
-          </Section>
-
-          <div className="formActions">
-            <a
-              href="/citas-hoy"
-              className="ghostButton actionButton"
-              style={{
-                display: "inline-flex",
-              }}
-            >
-              Volver a citas
-            </a>
-
-            <SubmitButton
-              className="primaryButton actionButton"
-              style={{
-                border: 0,
-              }}
-            >
-              Guardar salida
-            </SubmitButton>
-          </div>
-        </form>
+          sedes={sedeValues}
+          tiposGasto={tipoGastoValues}
+          responsables={responsableValues}
+          defaultDate={selectedFecha}
+          defaultTime={nowInLima()}
+          defaultSede={selectedSede === "TODAS" ? sedeValues[0] ?? "Miraflores" : selectedSede}
+          serverError={params?.error}
+          errorStep={params?.error?.includes("monto") ? 2 : params?.error?.startsWith("Completa") ? 1 : 3}
+        />
 
         <section className="panel">
           <div className="panelTitle">
