@@ -528,3 +528,110 @@ body {
   color: var(--success);
 }
 .fichaSuccess .successMark { background-color: var(--success); color: white; }
+
+/* Fase B — wizards operativos compartidos */
+.operationalWizard {
+  width: min(100%, 880px);
+  margin-inline: auto;
+  margin-bottom: 18px;
+}
+.operationalStepper { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.operationalStepper3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.operationalStepper .wizardStep {
+  min-width: 0;
+  min-height: 46px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.operationalStepper .wizardStep.active { background: var(--brand-primary-soft); }
+.operationalStepper .wizardStep:disabled { cursor: not-allowed; opacity: .62; }
+.operationalWizard .wizardPanel { min-height: 0; }
+.operationalWizard .wizardError { margin-bottom: 14px; }
+.operationalWizardGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.operationalAdvanced {
+  margin-top: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--sand);
+}
+.operationalAdvanced summary {
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  padding: 10px 13px;
+  color: var(--charcoal);
+  font-weight: 850;
+  cursor: pointer;
+}
+.operationalAdvancedBody { padding: 0 13px 13px; }
+.operationalReview {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+.operationalReview > div {
+  min-width: 0;
+  padding: 12px 13px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: white;
+}
+.operationalReview span {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+.operationalReview strong { display: block; overflow-wrap: anywhere; }
+.operationalFinancialReview { margin-top: 10px; }
+.operationalObservation { margin-top: 14px; }
+.operationalObservation textarea { min-height: 88px; }
+.operationalExistingNotice,
+.operationalWarning,
+.operationalHint {
+  margin: 0 0 14px;
+  padding: 11px 13px;
+  border-radius: 13px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.operationalExistingNotice { border: 1px solid rgba(184,137,58,.3); background: var(--warn); color: #765819; font-weight: 800; }
+.operationalWarning { border: 1px solid rgba(184,137,58,.3); background: var(--warn); color: #765819; font-weight: 850; }
+.operationalHint { margin-top: 13px; margin-bottom: 0; background: var(--sand); color: var(--muted); }
+.operationalWizardActions { align-items: center; }
+.operationalWizardActions button,
+.operationalWizardActions a { min-height: 46px; display: inline-flex; align-items: center; justify-content: center; }
+
+@media(max-width:760px) {
+  .operationalWizard { padding: 12px; }
+  .operationalStepper { gap: 5px; overflow: visible; padding: 0; }
+  .operationalStepper .wizardStep { justify-content: center; padding-inline: 5px; }
+  .operationalStepper .wizardStep small { display: none; }
+  .operationalWizardGrid,
+  .operationalReview { grid-template-columns: 1fr; }
+  .operationalReview .reviewWide { grid-column: auto; }
+  .operationalWizardActions {
+    position: sticky;
+    z-index: 4;
+    bottom: max(8px, env(safe-area-inset-bottom));
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 10px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-card);
+    background: rgba(255,250,244,.97);
+    box-shadow: 0 -8px 24px rgba(31,45,62,.10);
+    backdrop-filter: blur(10px);
+  }
+  .operationalWizardActions > * { width: 100%; min-width: 0; }
+}
+
+@media(max-width:390px) {
+  .operationalWizard { padding-inline: 9px; }
+  .operationalWizard .wizardPanel { padding-inline: 13px; }
+}
