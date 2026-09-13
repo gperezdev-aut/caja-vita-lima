@@ -1,16 +1,7 @@
--- Patch Gift Cards v1: califica pgcrypto para Supabase (esquema extensions).
--- Aplicar después de 023 cuando esa migración ya fue ejecutada.
--- Idempotente: solo actualiza defaults y reemplaza las RPC afectadas.
+-- Patch Gift Cards v1: evita RECORD de catálogo sin asignar en emisiones por monto.
+-- Aplicar después de 024 cuando 023 y 024 ya fueron ejecutadas.
+-- Idempotente: reemplaza únicamente la RPC de emisión.
 begin;
-
-alter table public.gift_cards
-  alter column id set default extensions.gen_random_uuid();
-
-alter table public.gift_card_usos
-  alter column uso_id set default extensions.gen_random_uuid();
-
-alter table public.gift_card_eventos
-  alter column evento_id set default extensions.gen_random_uuid();
 
 create or replace function public.emitir_gift_card_v1(p_payload jsonb)
 returns jsonb language plpgsql security definer set search_path=public,pg_temp as $$
@@ -84,50 +75,12 @@ begin
   return jsonb_build_object('ok',true,'reutilizado',false,'giftcard_id',v_giftcard_id,'codigo',v_codigo,'fecha_emision',v_fecha,'fecha_vencimiento',v_vence,'movimiento_id',v_mov,'pago_id',v_pago);
 end $$;
 
-create or replace function public.canjear_gift_card_v1(p_payload jsonb)
-returns jsonb language plpgsql security definer set search_path=public,pg_temp as $$
-declare
-  v_request uuid; v_fingerprint text; v_replay public.gift_card_usos%rowtype; v_gift public.gift_cards%rowtype;
-  v_monto numeric(12,2); v_usado numeric(12,2); v_saldo numeric(12,2); v_nuevo text;
-  v_responsable text:=btrim(coalesce(p_payload->>'responsable','')); v_ahora timestamp:=(now() at time zone 'America/Lima');
-begin
-  begin v_request:=(p_payload->>'request_id')::uuid; exception when others then raise exception using errcode='22023',message='REQUEST_ID_INVALIDO'; end;
-  if v_request is null then raise exception using errcode='22023',message='REQUEST_ID_REQUERIDO'; end if;
-  v_fingerprint:=encode(extensions.digest((p_payload-'request_id')::text,'sha256'),'hex');
-  perform pg_advisory_xact_lock(hashtextextended(v_request::text,23002));
-  select * into v_replay from public.gift_card_usos where request_id=v_request;
-  if found then if v_replay.request_fingerprint<>v_fingerprint then raise exception using errcode='23505',message='REQUEST_ID_PAYLOAD_CONFLICTO'; end if; return jsonb_build_object('ok',true,'reutilizado',true,'uso_id',v_replay.uso_id,'giftcard_id',v_replay.giftcard_id); end if;
-  select * into v_gift from public.gift_cards where codigo=upper(btrim(coalesce(p_payload->>'codigo',''))) for update;
-  if not found then raise exception using errcode='P0002',message='GIFT_CARD_NO_EXISTE'; end if;
-  if v_gift.estado='ANULADA' then raise exception using errcode='22023',message='GIFT_CARD_ANULADA'; end if;
-  if v_gift.estado='USADA' then raise exception using errcode='22023',message='GIFT_CARD_USADA'; end if;
-  if v_gift.fecha_vencimiento<v_ahora::date then raise exception using errcode='22023',message='GIFT_CARD_VENCIDA'; end if;
-  if v_responsable='' then raise exception using errcode='22023',message='RESPONSABLE_REQUERIDO'; end if;
-  if nullif(btrim(coalesce(p_payload->>'movimiento_id','')),'') is not null and not exists(select 1 from public.caja_movimientos where movimiento_id=p_payload->>'movimiento_id') then raise exception using errcode='22023',message='MOVIMIENTO_ASOCIADO_INVALIDO'; end if;
-  if nullif(btrim(coalesce(p_payload->>'reserva_id','')),'') is not null and not exists(select 1 from public.citas_reservadas where reserva_id=p_payload->>'reserva_id') then raise exception using errcode='22023',message='RESERVA_ASOCIADA_INVALIDA'; end if;
-  if nullif(btrim(coalesce(p_payload->>'atencion_movimiento_id','')),'') is not null and not exists(select 1 from public.caja_movimientos where movimiento_id=p_payload->>'atencion_movimiento_id' and tipo_movimiento in ('ATENCION_APP','ATENCION_HISTORICA')) then raise exception using errcode='22023',message='ATENCION_ASOCIADA_INVALIDA'; end if;
-  select coalesce(sum(monto_usado),0) into v_usado from public.gift_card_usos where giftcard_id=v_gift.giftcard_id;
-  v_saldo:=greatest(v_gift.monto-v_usado,0);
-  if v_gift.tipo='SERVICIO' then v_monto:=v_gift.monto; else begin v_monto:=(p_payload->>'monto_usado')::numeric; exception when others then raise exception using errcode='22023',message='MONTO_CANJE_INVALIDO'; end; end if;
-  if v_monto<=0 or v_monto<>round(v_monto,2) or v_monto>v_saldo then raise exception using errcode='22023',message='SALDO_INSUFICIENTE'; end if;
-  v_nuevo:=case when v_monto=v_saldo then 'USADA' else 'PARCIALMENTE_USADA' end;
-  insert into public.gift_card_usos(giftcard_id,monto_usado,service_code,fecha_uso,hora_uso,responsable,movimiento_id,reserva_id,atencion_movimiento_id,observacion,request_id,request_fingerprint)
-  values(v_gift.giftcard_id,v_monto,v_gift.service_code,v_ahora::date,v_ahora::time,v_responsable,nullif(btrim(coalesce(p_payload->>'movimiento_id','')),''),nullif(btrim(coalesce(p_payload->>'reserva_id','')),''),nullif(btrim(coalesce(p_payload->>'atencion_movimiento_id','')),''),nullif(btrim(coalesce(p_payload->>'observacion','')),''),v_request,v_fingerprint)
-  returning * into v_replay;
-  update public.gift_cards set estado=v_nuevo,fecha_uso=case when v_nuevo='USADA' then v_ahora::date else fecha_uso end,updated_at=clock_timestamp() where giftcard_id=v_gift.giftcard_id;
-  insert into public.gift_card_eventos(giftcard_id,evento,estado_anterior,estado_nuevo,responsable,referencia_id,metadata)
-  values(v_gift.giftcard_id,'CANJE',v_gift.estado,v_nuevo,v_responsable,v_replay.uso_id::text,jsonb_build_object('monto_usado',v_monto,'saldo_restante',v_saldo-v_monto));
-  return jsonb_build_object('ok',true,'reutilizado',false,'uso_id',v_replay.uso_id,'giftcard_id',v_gift.giftcard_id,'estado',v_nuevo,'saldo_restante',v_saldo-v_monto);
-end $$;
-
-revoke all on function public.emitir_gift_card_v1(jsonb), public.canjear_gift_card_v1(jsonb)
+revoke all on function public.emitir_gift_card_v1(jsonb)
   from public, anon, authenticated;
-grant execute on function public.emitir_gift_card_v1(jsonb), public.canjear_gift_card_v1(jsonb)
+grant execute on function public.emitir_gift_card_v1(jsonb)
   to service_role;
 
 comment on function public.emitir_gift_card_v1(jsonb) is
-  'Emisión atómica Gift Cards v1; pgcrypto se resuelve explícitamente desde extensions.';
-comment on function public.canjear_gift_card_v1(jsonb) is
-  'Canje auditable Gift Cards v1; digest se resuelve explícitamente desde extensions.';
+  'Emisión atómica Gift Cards v1 con catálogo escalar opcional y pgcrypto calificado.';
 
 commit;

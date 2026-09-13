@@ -59,6 +59,28 @@ test("pgcrypto se califica sin ampliar el search_path y 024 reemplaza las RPC af
   assert.doesNotMatch(patch, /create or replace function public\.anular_gift_card_v1/);
 });
 
+test("emisión por monto no depende de un record de catálogo sin asignar", async () => {
+  const [base, pgcryptoPatch, catalogPatch, harness] = await Promise.all([
+    source("sql/023_gift_cards_v1.sql"),
+    source("sql/024_gift_cards_pgcrypto_schema_patch.sql"),
+    source("sql/025_gift_cards_catalog_record_patch.sql"),
+    source("sql/tests/023_gift_cards_v1_rollback.sql"),
+  ]);
+  for (const sql of [base, pgcryptoPatch, catalogPatch]) {
+    assert.doesNotMatch(sql, /v_catalog\s+record/i);
+    assert.doesNotMatch(sql, /v_catalog\./);
+    assert.match(sql, /v_catalog_service_code public\.caja_catalog_services\.service_code%type/);
+    assert.match(sql, /into v_catalog_service_code,v_catalog_name,v_catalog_duration_min,v_catalog_price,v_catalog_release_id,v_catalog_price_version/);
+  }
+  assert.match(catalogPatch, /create or replace function public\.emitir_gift_card_v1/);
+  assert.doesNotMatch(catalogPatch, /create or replace function public\.(canjear|anular)_gift_card_v1/);
+  assert.match(catalogPatch, /security definer set search_path=public,pg_temp/);
+  assert.match(catalogPatch, /extensions\.digest/);
+  assert.match(catalogPatch, /extensions\.gen_random_bytes/);
+  assert.match(catalogPatch, /extensions\.gen_random_uuid/);
+  assert.match(harness, /-- B\. Emisión por monto\.[\s\S]*"tipo":"MONTO"/);
+});
+
 test("canje conserva historial, saldo parcial y locking sin nuevo pago", async () => {
   const sql = await source("sql/023_gift_cards_v1.sql");
   const redeem = sql.slice(sql.indexOf("create or replace function public.canjear_gift_card_v1"), sql.indexOf("create or replace function public.anular_gift_card_v1"));
