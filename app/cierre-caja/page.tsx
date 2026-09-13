@@ -3,18 +3,17 @@ import { CajaSidebar } from "@/components/CajaSidebar";
 import { supabaseSelect, supabaseSelectAllWhere, supabaseSelectWhere } from "@/lib/supabaseServer";
 import {
   METODOS_CIERRE,
+  cajaFisicaNoCalculable,
   resumirMovimientosOperativos,
   resumirPagosCierre,
   sumarSalidas,
 } from "@/lib/cierreCaja";
-import Link from "next/link";
-import { SubmitButton } from "@/components/SubmitButton";
 import { FormField } from "@/components/FormField";
 import { Input } from "@/components/Input";
 import { Select } from "@/components/Select";
-import { Textarea } from "@/components/Textarea";
 import { Badge } from "@/components/Badge";
 import { createCierreCajaAction } from "./actions";
+import { CierreCajaWizard } from "./CierreCajaWizard";
 
 type Row = Record<string, any>;
 
@@ -95,19 +94,8 @@ function Options({
   );
 }
 
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="formSection">
-      <h2 className="formSectionHeading">{title}</h2>
-      {children}
-    </section>
-  );
+function values(rows: Row[], fallback: string[]) {
+  return rows.length ? rows.map((row) => String(row.valor)) : fallback;
 }
 
 function FormGrid({ children }: { children: React.ReactNode }) {
@@ -195,12 +183,14 @@ export default async function CierreCajaPage({
 
   const sedes = list(config.data, "SEDES");
   const responsables = list(config.data, "RESPONSABLES");
+  const responsableValues = values(responsables, ["Gerald", "Luis", "Naty", "Otro"]);
 
   const errors = [config.error, pagos.error, movimientos.error, salidas.error, cierres.error].filter(Boolean);
   const resumenPagos = resumirPagosCierre(pagos.data);
   const totalIngresos = resumenPagos.total;
   const totalSalidas = sumarSalidas(salidas.data);
   const { paxTotal, boletasPendientes } = resumirMovimientosOperativos(movimientos.data);
+  const { cajaEsperada, diferencia } = cajaFisicaNoCalculable();
 
   return (
     <main className="appShell">
@@ -237,23 +227,6 @@ export default async function CierreCajaPage({
             }}
           >
             Cierre guardado correctamente. ID: <strong>{params.id}</strong>
-          </div>
-        )}
-
-        {params?.error && (
-          <div
-            role="alert"
-            style={{
-              borderRadius: "18px",
-              padding: "16px 18px",
-              marginBottom: "18px",
-              background: "var(--danger)",
-              color: "var(--danger-text)",
-              border: "1px solid rgba(163, 50, 37, 0.18)",
-              fontWeight: 800,
-            }}
-          >
-            <strong>No se pudo guardar:</strong> {params.error}
           </div>
         )}
 
@@ -328,6 +301,25 @@ export default async function CierreCajaPage({
           </form>
         </section>
 
+        <CierreCajaWizard
+          action={createCierreCajaAction}
+          fecha={selectedFecha}
+          sede={selectedSede}
+          responsables={responsableValues}
+          totalIngresos={totalIngresos}
+          totalSalidas={totalSalidas}
+          efectivoRecibido={resumenPagos.efectivo}
+          pagosDigitales={resumenPagos.digital}
+          pagosPorMetodo={resumenPagos.porMetodo}
+          paxTotal={paxTotal}
+          boletasPendientes={boletasPendientes}
+          cajaEsperada={cajaEsperada}
+          diferencia={diferencia}
+          cierresExistentes={cierres.data.length}
+          serverError={params?.error}
+          errorStep={params?.error?.includes("montos") ? 2 : params?.error?.startsWith("Completa") ? 1 : 4}
+        />
+
         <section className="grid secondary">
           <Card label="Ingresos" value={money(totalIngresos)} tone="good" />
           <Card label="Efectivo recibido" value={money(resumenPagos.efectivo)} tone="good" />
@@ -353,104 +345,6 @@ export default async function CierreCajaPage({
             ))}
           </div>
         </section>
-
-        <form
-          action={createCierreCajaAction}
-          className="formShell"
-        >
-          <Section title="Datos del cierre">
-            <FormGrid>
-              <FormField label="Fecha">
-                <Input name="fecha" type="date" defaultValue={selectedFecha} required />
-              </FormField>
-
-              <FormField label="Sede">
-                <Select name="sede" defaultValue={selectedSede} required>
-                  <Options rows={sedes} fallback={["Miraflores", "San Borja"]} />
-                </Select>
-              </FormField>
-
-              <FormField label="Responsable">
-                <Select name="responsable" defaultValue="Gerald">
-                  <Options rows={responsables} fallback={["Gerald", "Luis", "Naty", "Otro"]} />
-                </Select>
-              </FormField>
-
-              <FormField label="Estado">
-                <Input value="CERRADO" readOnly />
-              </FormField>
-            </FormGrid>
-          </Section>
-
-          <Section title="Montos">
-            <FormGrid>
-              <FormField label="Caja inicial">
-                <Input name="caja_inicial" type="number" step="0.01" min="0" defaultValue="0.00" required />
-              </FormField>
-
-              <FormField label="Efectivo contado">
-                <Input name="efectivo_contado" type="number" step="0.01" min="0" defaultValue="0.00" required />
-              </FormField>
-
-              <FormField label="Pozo / fondo">
-                <Input name="pozo_fondo" type="number" step="0.01" min="0" defaultValue="0.00" required />
-              </FormField>
-
-              <FormField label="Total ingresos">
-                <Input name="total_ingresos" type="number" step="0.01" min="0" value={totalIngresos.toFixed(2)} readOnly />
-              </FormField>
-
-              <FormField label="Total salidas">
-                <Input name="total_salidas" type="number" step="0.01" min="0" value={totalSalidas.toFixed(2)} readOnly />
-              </FormField>
-
-              <FormField label="Pax total">
-                <Input name="pax_total" type="number" min="0" value={String(paxTotal)} readOnly />
-              </FormField>
-
-              <FormField label="Boletas pendientes">
-                <Input name="boletas_pendientes" type="number" min="0" value={String(boletasPendientes)} readOnly />
-              </FormField>
-            </FormGrid>
-            <p className="subtitle" style={{ marginTop: "16px" }}>
-              La tabla actual no indica si una salida fue en efectivo o digital. Por eso
-              el saldo esperado guardado sigue siendo operativo y no debe interpretarse
-              como caja física hasta definir y registrar el método de cada salida.
-            </p>
-          </Section>
-
-          <Section title="Observación">
-            <FormField label="Nota interna">
-              <Textarea
-                name="observacion"
-                placeholder="Ej. Cierre de prueba, faltó efectivo, boleta pendiente, diferencia explicada, etc."
-                rows={4}
-                style={{ minHeight: "110px" }}
-              />
-            </FormField>
-          </Section>
-
-          <div className="formActions">
-            <Link
-              href="/"
-              className="ghostButton actionButton"
-              style={{
-                display: "inline-flex",
-              }}
-            >
-              Volver al dashboard
-            </Link>
-
-            <SubmitButton
-              className="primaryButton actionButton"
-              style={{
-                border: 0,
-              }}
-            >
-              Guardar cierre
-            </SubmitButton>
-          </div>
-        </form>
 
         <section className="panel">
           <div className="panelTitle">
