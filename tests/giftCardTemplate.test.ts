@@ -7,7 +7,9 @@ import {
   fitGiftCardText,
   normalizeGiftCardPresentationText,
   renderGiftCardSvg,
+  splitGiftCardServiceName,
 } from "../lib/giftCardTemplate.ts";
+import { renderGiftCardPng } from "../lib/giftCardPng.ts";
 import { whatsappGiftCardUrl } from "../lib/giftCards.ts";
 
 const root = process.cwd();
@@ -15,7 +17,9 @@ const source = (path: string) => readFile(`${root}/${path}`, "utf8");
 const unzip = promisify(gunzip);
 
 test("el molde real conserva su archivo original y dimensiones", async () => {
-  const compressed = await readFile(`${root}/public/gift-cards/gift-card-template-vita-lima.png.gz`);
+  const compressed = await readFile(
+    `${root}/public/gift-cards/gift-card-template-vita-lima.png.gz`,
+  );
   const png = await unzip(compressed);
   assert.deepEqual([...png.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
   assert.equal(png.readUInt32BE(16), 1645);
@@ -23,16 +27,20 @@ test("el molde real conserva su archivo original y dimensiones", async () => {
 });
 
 test("descarga por servicio renderiza fecha, código, beneficiario, duración y dedicatoria", () => {
-  const svg = renderGiftCardSvg({
-    code: "GC-VITA-A1B2C3D4",
-    beneficiary: "María Peña",
-    type: "SERVICIO",
-    serviceName: "✨ Masaje relajante",
-    durationMinutes: 65,
-    amount: 120,
-    dedication: "Disfruta tu día",
-    expirationDate: "2027-06-15",
-  }, "VEVNUExBVEU=");
+  const svg = renderGiftCardSvg(
+    {
+      code: "GC-VITA-A1B2C3D4",
+      beneficiary: "María Peña",
+      type: "SERVICIO",
+      serviceName: "✨ Masaje relajante",
+      serviceDescription: "Masaje relajante + reflexología y aromaterapia",
+      durationMinutes: 65,
+      amount: 120,
+      dedication: "Disfruta tu día",
+      expirationDate: "2027-06-15",
+    },
+    "VEVNUExBVEU=",
+  );
 
   assert.match(svg, /^<\?xml version="1\.0" encoding="UTF-8"\?>/);
   assert.match(svg, /<svg[\s\S]*<\/svg>$/);
@@ -41,19 +49,23 @@ test("descarga por servicio renderiza fecha, código, beneficiario, duración y 
   assert.match(svg, /CÓDIGO: GC-VITA-A1B2C3D4/);
   assert.match(svg, /MARÍA PEÑA/);
   assert.match(svg, /✨ MASAJE RELAJANTE/);
+  assert.match(svg, /Masaje relajante \+ reflexología y aromaterapia/);
   assert.match(svg, /65 MINUTOS/);
   assert.match(svg, /“Disfruta tu día”/);
 });
 
 test("descarga por monto usa el importe, omite duración y omite dedicatoria vacía", () => {
-  const svg = renderGiftCardSvg({
-    code: "GC-VITA-1234ABCD",
-    beneficiary: "José Núñez",
-    type: "MONTO",
-    amount: 150,
-    dedication: "   ",
-    expirationDate: "2027-09-13",
-  }, "VEVNUExBVEU=");
+  const svg = renderGiftCardSvg(
+    {
+      code: "GC-VITA-1234ABCD",
+      beneficiary: "José Núñez",
+      type: "MONTO",
+      amount: 150,
+      dedication: "   ",
+      expirationDate: "2027-09-13",
+    },
+    "VEVNUExBVEU=",
+  );
 
   assert.match(svg, /GIFT CARD POR S\/ 150\.00/);
   assert.match(svg, /JOSÉ NÚÑEZ/);
@@ -62,9 +74,45 @@ test("descarga por monto usa el importe, omite duración y omite dedicatoria vac
 });
 
 test("normalización visual repara mojibake y preserva UTF-8 válido", () => {
-  assert.equal(normalizeGiftCardPresentationText("âœ¨ Facial Glow Premium"), "✨ Facial Glow Premium");
-  assert.equal(normalizeGiftCardPresentationText("Masaje para mamÃ¡"), "Masaje para mamá");
-  assert.equal(normalizeGiftCardPresentationText("Niñez, armonía y ✨"), "Niñez, armonía y ✨");
+  assert.equal(
+    normalizeGiftCardPresentationText("âœ¨ Facial Glow Premium"),
+    "✨ Facial Glow Premium",
+  );
+  assert.equal(
+    normalizeGiftCardPresentationText("Masaje para mamÃ¡"),
+    "Masaje para mamá",
+  );
+  assert.equal(normalizeGiftCardPresentationText("ðŸ‘‘ Royale"), "👑 Royale");
+  assert.equal(normalizeGiftCardPresentationText("Ã¢Å“Â¨ Facial"), "✨ Facial");
+  assert.equal(
+    normalizeGiftCardPresentationText("Niñez, armonía y ✨"),
+    "Niñez, armonía y ✨",
+  );
+});
+
+test("emoji inicial conserva su grafema y se convierte en recurso embebido para PNG", async () => {
+  assert.deepEqual(splitGiftCardServiceName("ðŸ‘‘ Royale"), {
+    emoji: "👑",
+    emojiKey: "1f451",
+    label: "Royale",
+  });
+  const emoji = await readFile(`${root}/public/gift-cards/emoji/1f451.png`);
+  const svg = renderGiftCardSvg(
+    {
+      code: "GC-VITA-EMOJI001",
+      beneficiary: "María",
+      type: "SERVICIO",
+      serviceName: "ðŸ‘‘ Royale",
+      serviceEmojiBase64: emoji.toString("base64"),
+      durationMinutes: 90,
+      amount: 180,
+      expirationDate: "2027-09-13",
+    },
+    "VEVNUExBVEU=",
+  );
+  assert.match(svg, /data:image\/png;base64,/);
+  assert.match(svg, />ROYALE</);
+  assert.doesNotMatch(svg, /ðŸ|👑 ROYALE/);
 });
 
 test("textos razonablemente largos se ajustan sin elipsis ni invasión de zonas fijas", () => {
@@ -83,19 +131,57 @@ test("textos razonablemente largos se ajustan sin elipsis ni invasión de zonas 
 });
 
 test("la descarga no expone identificadores internos y conserva autenticación", async () => {
-  const route = await source("app/api/gift-cards/[giftcard_id]/download/route.ts");
-  const svg = renderGiftCardSvg({
-    code: "GC-VITA-ABCDEF12",
-    beneficiary: "Cliente",
-    type: "MONTO",
-    amount: 100,
-    expirationDate: "2027-09-13",
-  }, "VEVNUExBVEU=");
+  const route = await source(
+    "app/api/gift-cards/[giftcard_id]/download/route.ts",
+  );
+  const svg = renderGiftCardSvg(
+    {
+      code: "GC-VITA-ABCDEF12",
+      beneficiary: "Cliente",
+      type: "MONTO",
+      amount: 100,
+      expirationDate: "2027-09-13",
+    },
+    "VEVNUExBVEU=",
+  );
 
   assert.match(route, /await requireModuleAccess\("gift-cards"\)/);
   assert.match(route, /Content-Disposition/);
+  assert.match(route, /"Content-Type": "image\/png"/);
+  assert.match(route, /filename="gift-card-\$\{code\}\.png"/);
   assert.match(route, /private, no-store/);
-  assert.doesNotMatch(svg, /giftcard_id|request_id|movimiento_id|release_id|price_version|pago_id/);
+  assert.match(route, /await readCanonicalCatalog\(\)/);
+  assert.match(route, /service\.service_code === serviceCode/);
+  assert.match(route, /service\.release_id === releaseId/);
+  assert.match(route, /service\.price_version === priceVersion/);
+  assert.doesNotMatch(
+    svg,
+    /giftcard_id|request_id|movimiento_id|release_id|price_version|pago_id/,
+  );
+});
+
+test("PNG final es válido, conserva 1645 × 1379 y usa el mismo SVG del preview", async () => {
+  const compressed = await readFile(
+    `${root}/public/gift-cards/gift-card-template-vita-lima.png.gz`,
+  );
+  const template = await unzip(compressed);
+  const svg = renderGiftCardSvg(
+    {
+      code: "GC-VITA-PNG00001",
+      beneficiary: "María Peña",
+      type: "SERVICIO",
+      serviceName: "👑 Royale",
+      serviceDescription: "Masaje + piedras calientes + reflexología",
+      durationMinutes: 90,
+      amount: 180,
+      expirationDate: "2027-09-13",
+    },
+    template.toString("base64"),
+  );
+  const png = renderGiftCardPng(svg);
+  assert.deepEqual([...png.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
+  assert.equal(png.readUInt32BE(16), 1645);
+  assert.equal(png.readUInt32BE(20), 1379);
 });
 
 test("WhatsApp prepara el mensaje sin publicar un enlace interno de Caja", () => {
@@ -109,14 +195,17 @@ test("WhatsApp prepara el mensaje sin publicar un enlace interno de Caja", () =>
 test("Gift Cards consume el catálogo canónico completo sin filtro adicional", async () => {
   const page = await source("app/gift-cards/page.tsx");
   const giftCardsModule = await source("app/gift-cards/GiftCardsModule.tsx");
-  assert.match(page, /catalog\.services\.map/);
+  assert.match(page, /catalog\.services\s*\.map/);
   assert.doesNotMatch(page, /catalog\.services\.filter/);
-  assert.match(giftCardsModule, /services\.map/);
+  assert.match(giftCardsModule, /serviceMatches\.results\.map/);
 });
 
 test("el wizard conserva cuatro pasos y una única persistencia final", async () => {
   const wizard = await source("app/gift-cards/GiftCardsModule.tsx");
-  assert.match(wizard, /const steps = \["Personas", "Regalo", "Pago", "Confirmar"\]/);
+  assert.match(
+    wizard,
+    /const steps = \["Personas", "Regalo", "Pago", "Confirmar"\]/,
+  );
   assert.equal((wizard.match(/type="submit"/g) ?? []).length, 1);
   assert.match(wizard, /EMITIR GIFT CARD/);
   assert.match(wizard, /step === 3/);

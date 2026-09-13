@@ -15,6 +15,7 @@
     "test:sql": "node tests/run-catalog-snapshot-postgres-validation.mjs && node tests/run-pagos-ledger-postgres-validation.mjs && node tests/run-reserva-atencion-postgres-validation.mjs"
   },
   "dependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "@types/node": "26.1.1",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
