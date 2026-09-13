@@ -34,6 +34,15 @@ function rankMatch(fields: string[], query: string) {
   return 3;
 }
 
+const categorySearchLabels: Record<string, string> = {
+  INDIVIDUAL: "Individual",
+  PACKAGE_TWO: "Pareja",
+  HOME: "Domicilio",
+  PROGRAM: "Programa",
+  BEAUTY: "Belleza",
+  FACIAL: "Facial",
+};
+
 export function findGiftCardClients(
   clients: GiftCardClientOption[],
   query: string,
@@ -87,14 +96,17 @@ export function findGiftCardServices(
   services: GiftCardServiceOption[],
   query: string,
   limit = 8,
+  category = "",
 ) {
   const text = searchable(query);
   const matches = services
     .map((service, index) => {
+      if (category && service.category !== category) return null;
       const fields = [
         service.name,
         service.code,
         service.category,
+        categorySearchLabels[service.category] ?? service.category,
         service.description ?? "",
       ];
       const normalizedFields = fields.map(searchable);

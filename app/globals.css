@@ -658,3 +658,8 @@ body {
   .operationalWizard { padding-inline: 9px; }
   .operationalWizard .wizardPanel { padding-inline: 13px; }
 }
+
+.giftCardCategoryChips{display:flex;gap:7px;overflow-x:auto;padding:1px 1px 4px;scrollbar-width:thin}.giftCardCategoryChips button{flex:0 0 auto;min-height:38px;padding:7px 11px;border:1px solid var(--line);border-radius:999px;background:white;color:var(--muted);font-weight:800}.giftCardCategoryChips button.selected{border-color:var(--brand-primary);background:var(--brand-primary-soft);color:var(--brand-primary)}.giftCardShareControl{display:grid;gap:6px}.giftCardShareControl>button{min-height:46px}.giftCardShareControl .formMessage{max-width:320px}.giftCardSuccessActions .giftCardShareControl,.giftCardDetailActions .giftCardShareControl{align-self:stretch}.giftCardSuccessActions .giftCardShareControl>button,.giftCardDetailActions .giftCardShareControl>button{height:100%}
+.giftCardSubmitFeedback,.giftCardSubmitReady{margin:0;padding:11px 13px;border-radius:13px}.giftCardSubmitFeedback{display:grid;gap:3px;border:1px solid rgba(173,48,48,.24);background:var(--danger);color:var(--danger-text)}.giftCardSubmitReady{background:var(--success-soft);color:var(--success);font-weight:800}
+
+@media(max-width:760px){.giftCardShareControl,.giftCardShareControl>button{width:100%}}

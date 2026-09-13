@@ -7,6 +7,8 @@
   },
   "scripts": {
     "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test tests/*.test.ts",
+    "test:gift-card-render": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test tests/giftCardPngRender.test.ts",
+    "qa:gift-card-png": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/render-gift-card-png-qa.ts",
     "dev": "next dev --webpack",
     "build": "next build --webpack",
     "start": "next start",

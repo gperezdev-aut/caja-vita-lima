@@ -84,6 +84,30 @@ test("buscador limita y encuentra servicios por nombre, código y categoría", (
   assert.equal(findGiftCardServices(services, "beauty").total, 2);
 });
 
+test("buscador consulta los 50 servicios antes de limitar a ocho", () => {
+  const services = Array.from({ length: 50 }, (_, index) => ({
+    code: `SVC_${String(index + 1).padStart(3, "0")}`,
+    name: index === 49 ? "Servicio escondido Relax" : `Servicio ${index + 1}`,
+    duration: 60,
+    price: 100,
+    category: index === 49 ? "PACKAGE_TWO" : "INDIVIDUAL",
+  }));
+
+  const initial = findGiftCardServices(services, "");
+  assert.equal(initial.results.length, 8);
+  assert.equal(initial.total, 50);
+  assert.equal(
+    findGiftCardServices(services, "SVC_050").results[0]?.code,
+    "SVC_050",
+  );
+  assert.equal(
+    findGiftCardServices(services, "relax").results[0]?.code,
+    "SVC_050",
+  );
+  assert.equal(findGiftCardServices(services, "pareja").total, 1);
+  assert.equal(findGiftCardServices(services, "", 8, "PACKAGE_TWO").total, 1);
+});
+
 test("historial distingue WhatsApp de beneficiario y comprador", async () => {
   const page = await source("app/gift-cards/page.tsx");
   assert.match(page, /whatsapp_beneficiario=ilike/);
@@ -117,7 +141,7 @@ test("tarjeta emitida conserva la jerarquía de acciones solicitada", async () =
   const labels = [
     "Descargar Gift Card",
     "Ver Gift Card",
-    "Compartir por WhatsApp",
+    "GiftCardShareButton",
     "Emitir otra",
   ];
   let previous = -1;
@@ -129,6 +153,34 @@ test("tarjeta emitida conserva la jerarquía de acciones solicitada", async () =
     );
     previous = position;
   }
+});
+
+test("compartir usa Web Share con el PNG autenticado y conserva WhatsApp como fallback", async () => {
+  const share = await source("app/gift-cards/GiftCardShareButton.tsx");
+  assert.match(share, /fetch\(/);
+  assert.match(share, /credentials: "same-origin"/);
+  assert.match(share, /new File\(\[blob\], `gift-card-\$\{code\}\.png`/);
+  assert.match(share, /navigator\.canShare\(shareData\)/);
+  assert.match(share, /navigator\.share\(shareData\)/);
+  assert.match(share, /window\.location\.href = fallbackUrl/);
+  assert.match(share, /Compartir Gift Card/);
+});
+
+test("confirmación explica bloqueos, muestra errores y mantiene estado pendiente", async () => {
+  const wizard = await source("app/gift-cards/GiftCardsModule.tsx");
+  for (const field of [
+    "comprador",
+    "beneficiario",
+    "servicio",
+    "sede",
+    "método de pago",
+    "monto recibido completo",
+    "número de operación",
+  ])
+    assert.match(wizard, new RegExp(field));
+  assert.match(wizard, /No se puede emitir todavía/);
+  assert.match(wizard, /No se pudo emitir: \{state\.error\}/);
+  assert.match(wizard, /pending \? "Emitiendo…"/);
 });
 
 test("los 50 servicios canónicos son activos, comerciales y no son componentes internos", async () => {

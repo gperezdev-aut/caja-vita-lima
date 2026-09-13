@@ -7,11 +7,11 @@ import {
   addOneCalendarYear,
   formatGiftCardDate,
   validateGiftCardPayment,
-  whatsappGiftCardUrl,
 } from "@/lib/giftCards";
 import { normalizeGiftCardPresentationText } from "@/lib/giftCardTemplate";
 import { findGiftCardClients, findGiftCardServices } from "@/lib/giftCardUx";
 import { emitirGiftCardAction, type GiftCardActionState } from "./actions";
+import { GiftCardShareButton } from "./GiftCardShareButton";
 
 type Service = {
   code: string;
@@ -24,6 +24,14 @@ type Service = {
 type Client = { id: string; name: string; whatsapp: string };
 const initialState: GiftCardActionState = { ok: false };
 const steps = ["Personas", "Regalo", "Pago", "Confirmar"];
+const serviceCategories = [
+  "INDIVIDUAL",
+  "PACKAGE_TWO",
+  "HOME",
+  "PROGRAM",
+  "BEAUTY",
+  "FACIAL",
+];
 
 function money(value: number) {
   return `S/ ${Number(value || 0).toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -91,6 +99,7 @@ export function GiftCardsModule({
   const [stepError, setStepError] = useState("");
   const [buyerResultsOpen, setBuyerResultsOpen] = useState(false);
   const [serviceQuery, setServiceQuery] = useState("");
+  const [serviceCategory, setServiceCategory] = useState("");
   const [serviceResultsOpen, setServiceResultsOpen] = useState(true);
   const selectedService = services.find((item) => item.code === serviceCode);
   const value =
@@ -105,8 +114,8 @@ export function GiftCardsModule({
     [buyer, clients],
   );
   const serviceMatches = useMemo(
-    () => findGiftCardServices(services, serviceQuery),
-    [services, serviceQuery],
+    () => findGiftCardServices(services, serviceQuery, 8, serviceCategory),
+    [services, serviceQuery, serviceCategory],
   );
 
   function changeBuyer(name: string) {
@@ -165,30 +174,33 @@ export function GiftCardsModule({
     setType(nextType);
     setServiceCode("");
     setServiceQuery("");
+    setServiceCategory("");
     setServiceResultsOpen(true);
     setAmount("");
     setReceived("");
     setStepError("");
   }
-  const canSubmit = Boolean(
-    buyer.trim() &&
-    beneficiary.trim() &&
-    value > 0 &&
-    branch &&
-    !validateGiftCardPayment({
-      value,
-      received: Number(received || 0),
-      method,
-      operation,
-    }),
-  );
+  const missingSubmitFields: string[] = [];
+  if (!buyer.trim()) missingSubmitFields.push("comprador");
+  if (!beneficiary.trim()) missingSubmitFields.push("beneficiario");
+  if (type === "SERVICIO" && !selectedService)
+    missingSubmitFields.push("servicio");
+  if (type === "MONTO" && (!Number.isFinite(value) || value <= 0))
+    missingSubmitFields.push("monto de la Gift Card");
+  if (!branch) missingSubmitFields.push("sede");
+  if (!method) missingSubmitFields.push("método de pago");
+  if (!received || Number(received) !== value)
+    missingSubmitFields.push(`monto recibido completo (${money(value)})`);
+  if (
+    method &&
+    method.toUpperCase() !== "EFECTIVO" &&
+    !operation.trim()
+  )
+    missingSubmitFields.push("número de operación");
+  const canSubmit = missingSubmitFields.length === 0;
 
   if (state.ok && state.giftcardId && state.code) {
     const detailPath = `/gift-cards/${encodeURIComponent(state.giftcardId)}`;
-    const share = whatsappGiftCardUrl(
-      beneficiaryPhone || buyerPhone,
-      state.code,
-    );
     return (
       <section className="panel giftCardSuccess" aria-live="polite">
         <span className="successMark">✓</span>
@@ -208,14 +220,11 @@ export function GiftCardsModule({
             Ver Gift Card
           </Link>
           {(beneficiaryPhone || buyerPhone) && (
-            <a
-              className="ghostButton"
-              href={share}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Compartir por WhatsApp
-            </a>
+            <GiftCardShareButton
+              giftcardId={state.giftcardId}
+              code={state.code}
+              phone={beneficiaryPhone || buyerPhone}
+            />
           )}
           <Link className="textButton" href="/gift-cards">
             Emitir otra
@@ -418,6 +427,37 @@ export function GiftCardsModule({
                   <label htmlFor="gift-card-service-search">
                     Buscar servicio
                   </label>
+                  <div
+                    className="giftCardCategoryChips"
+                    aria-label="Filtrar por categoría"
+                  >
+                    <button
+                      type="button"
+                      className={!serviceCategory ? "selected" : ""}
+                      aria-pressed={!serviceCategory}
+                      onClick={() => {
+                        setServiceCategory("");
+                        setServiceResultsOpen(true);
+                      }}
+                    >
+                      Todos
+                    </button>
+                    {serviceCategories.map((category) => (
+                      <button
+                        type="button"
+                        key={category}
+                        className={serviceCategory === category ? "selected" : ""}
+                        aria-pressed={serviceCategory === category}
+                        onClick={() => {
+                          setServiceCategory(category);
+                          setServiceCode("");
+                          setServiceResultsOpen(true);
+                        }}
+                      >
+                        {categoryLabel(category)}
+                      </button>
+                    ))}
+                  </div>
                   <input
                     id="gift-card-service-search"
                     type="search"
@@ -472,12 +512,11 @@ export function GiftCardsModule({
                           No hay servicios que coincidan con la búsqueda.
                         </p>
                       )}
-                      {serviceMatches.total > serviceMatches.results.length && (
-                        <small className="giftCardServiceMore">
-                          {serviceMatches.total} coincidencias. Escribe más para
-                          acotar.
-                        </small>
-                      )}
+                      <small className="giftCardServiceMore" aria-live="polite">
+                        {serviceQuery.trim() || serviceCategory
+                          ? `Mostrando ${serviceMatches.results.length} de ${serviceMatches.total} coincidencias (${services.length} servicios)`
+                          : `Mostrando ${serviceMatches.results.length} de ${services.length} servicios`}
+                      </small>
                     </div>
                   )}
                 </div>
@@ -659,6 +698,24 @@ export function GiftCardsModule({
                 </div>
               )}
             </div>
+            {state.error && (
+              <div className="formMessage error" role="alert">
+                No se pudo emitir: {state.error}
+              </div>
+            )}
+            {!canSubmit && (
+              <div className="giftCardSubmitFeedback" role="status">
+                <strong>No se puede emitir todavía.</strong>
+                <span>
+                  Falta completar: {missingSubmitFields.join(", ")}.
+                </span>
+              </div>
+            )}
+            {canSubmit && (
+              <p className="giftCardSubmitReady" role="status">
+                Todo listo para emitir la Gift Card.
+              </p>
+            )}
             <SubmitGiftCard disabled={!canSubmit} />
           </section>
         )}
