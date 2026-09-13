@@ -1,4 +1,4 @@
--- Harness transaccional Gift Cards v1. Requiere migraciones 001..023 y catálogo activo.
+-- Harness transaccional Gift Cards v1. Requiere migraciones 001..024 y catálogo activo.
 begin;
 
 do $$

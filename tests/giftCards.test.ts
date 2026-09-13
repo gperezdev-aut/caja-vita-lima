@@ -43,6 +43,22 @@ test("emisión es atómica, server-side e idempotente", async () => {
   assert.match(sql, /insert into public\.caja_pagos[\s\S]*'GIFT_CARD_VENTA'/);
 });
 
+test("pgcrypto se califica sin ampliar el search_path y 024 reemplaza las RPC afectadas", async () => {
+  const [base, patch] = await Promise.all([
+    source("sql/023_gift_cards_v1.sql"),
+    source("sql/024_gift_cards_pgcrypto_schema_patch.sql"),
+  ]);
+  for (const sql of [base, patch]) {
+    assert.doesNotMatch(sql, /(?<!extensions\.)\bdigest\s*\(/);
+    assert.doesNotMatch(sql, /(?<!extensions\.)\bgen_random_bytes\s*\(/);
+    assert.doesNotMatch(sql, /(?<!extensions\.)\bgen_random_uuid\s*\(/);
+    assert.doesNotMatch(sql, /search_path\s*=\s*[^\n]*extensions/i);
+  }
+  assert.match(patch, /create or replace function public\.emitir_gift_card_v1/);
+  assert.match(patch, /create or replace function public\.canjear_gift_card_v1/);
+  assert.doesNotMatch(patch, /create or replace function public\.anular_gift_card_v1/);
+});
+
 test("canje conserva historial, saldo parcial y locking sin nuevo pago", async () => {
   const sql = await source("sql/023_gift_cards_v1.sql");
   const redeem = sql.slice(sql.indexOf("create or replace function public.canjear_gift_card_v1"), sql.indexOf("create or replace function public.anular_gift_card_v1"));

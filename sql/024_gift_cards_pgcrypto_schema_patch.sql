@@ -1,117 +1,16 @@
--- Gift Cards v1: emisión, ledger compartido, canje y anulación auditables.
--- Aplicación manual. Este archivo no ejecuta cambios remotos por sí solo.
+-- Patch Gift Cards v1: califica pgcrypto para Supabase (esquema extensions).
+-- Aplicar después de 023 cuando esa migración ya fue ejecutada.
+-- Idempotente: solo actualiza defaults y reemplaza las RPC afectadas.
 begin;
 
 alter table public.gift_cards
-  add column if not exists id uuid default extensions.gen_random_uuid(),
-  add column if not exists codigo text,
-  add column if not exists tipo text,
-  add column if not exists comprador_cliente_id text,
-  add column if not exists whatsapp_beneficiario text,
-  add column if not exists dedicatoria text,
-  add column if not exists service_code text,
-  add column if not exists service_name_snapshot text,
-  add column if not exists service_duration_min integer,
-  add column if not exists service_price_pen numeric(12,2),
-  add column if not exists catalog_release_id text,
-  add column if not exists catalog_price_version text,
-  add column if not exists fecha_emision date,
-  add column if not exists fecha_vencimiento date,
-  add column if not exists movimiento_id text,
-  add column if not exists pago_id text,
-  add column if not exists request_id uuid,
-  add column if not exists request_fingerprint text,
-  add column if not exists emitida_por text,
-  add column if not exists anulada_at timestamptz,
-  add column if not exists anulada_por text,
-  add column if not exists motivo_anulacion text;
+  alter column id set default extensions.gen_random_uuid();
 
-update public.gift_cards
-set fecha_emision = coalesce(fecha_emision, fecha_venta),
-    fecha_vencimiento = coalesce(fecha_vencimiento, (fecha_venta + interval '1 year')::date),
-    tipo = coalesce(tipo, case when nullif(btrim(servicio), '') is null then 'MONTO' else 'SERVICIO' end),
-    service_name_snapshot = coalesce(service_name_snapshot, nullif(btrim(servicio), '')),
-    service_duration_min = coalesce(service_duration_min, nullif(regexp_replace(coalesce(duracion, ''), '[^0-9]', '', 'g'), '')::integer),
-    service_price_pen = coalesce(service_price_pen, monto),
-    codigo = coalesce(codigo, 'GC-LEGACY-' || upper(substr(md5(giftcard_id), 1, 8))),
-    estado = case upper(coalesce(estado, ''))
-      when 'USADA' then 'USADA'
-      when 'CANJEADA' then 'USADA'
-      when 'VENCIDA' then 'VENCIDA'
-      when 'ANULADA' then 'ANULADA'
-      else 'EMITIDA'
-    end
-where fecha_emision is null or fecha_vencimiento is null or tipo is null or codigo is null
-   or estado not in ('EMITIDA','PARCIALMENTE_USADA','USADA','VENCIDA','ANULADA');
+alter table public.gift_card_usos
+  alter column uso_id set default extensions.gen_random_uuid();
 
-create unique index if not exists gift_cards_id_unique on public.gift_cards(id);
-create unique index if not exists gift_cards_codigo_unique on public.gift_cards(codigo);
-create unique index if not exists gift_cards_request_id_unique on public.gift_cards(request_id) where request_id is not null;
-create index if not exists gift_cards_beneficiario_idx on public.gift_cards(lower(destinatario));
-create index if not exists gift_cards_beneficiario_whatsapp_idx on public.gift_cards(whatsapp_beneficiario);
-create index if not exists gift_cards_emision_tipo_idx on public.gift_cards(fecha_emision desc, tipo);
-
-alter table public.gift_cards alter column estado set default 'EMITIDA';
-
-do $$ begin
-  if not exists (select 1 from pg_constraint where conname = 'gift_cards_tipo_v1_check') then
-    alter table public.gift_cards add constraint gift_cards_tipo_v1_check
-      check (tipo is null or tipo in ('SERVICIO','MONTO')) not valid;
-  end if;
-  if not exists (select 1 from pg_constraint where conname = 'gift_cards_estado_v1_check') then
-    alter table public.gift_cards add constraint gift_cards_estado_v1_check
-      check (estado in ('EMITIDA','PARCIALMENTE_USADA','USADA','VENCIDA','ANULADA')) not valid;
-  end if;
-  if not exists (select 1 from pg_constraint where conname = 'gift_cards_codigo_v1_check') then
-    alter table public.gift_cards add constraint gift_cards_codigo_v1_check
-      check (codigo is null or codigo ~ '^GC-(VITA|LEGACY)-[A-Z0-9]{8}$') not valid;
-  end if;
-end $$;
-
-create table if not exists public.gift_card_usos (
-  uso_id uuid primary key default extensions.gen_random_uuid(),
-  giftcard_id text not null references public.gift_cards(giftcard_id) on delete restrict,
-  monto_usado numeric(12,2) not null check (monto_usado > 0),
-  service_code text,
-  fecha_uso date not null,
-  hora_uso time not null,
-  responsable text not null check (btrim(responsable) <> ''),
-  movimiento_id text,
-  reserva_id text,
-  atencion_movimiento_id text,
-  observacion text,
-  request_id uuid not null unique,
-  request_fingerprint text not null,
-  created_at timestamptz not null default clock_timestamp()
-);
-create index if not exists gift_card_usos_giftcard_idx on public.gift_card_usos(giftcard_id, created_at);
-
-create table if not exists public.gift_card_eventos (
-  evento_id uuid primary key default extensions.gen_random_uuid(),
-  giftcard_id text not null references public.gift_cards(giftcard_id) on delete restrict,
-  evento text not null check (evento in ('EMISION','CANJE','ANULACION','VENCIMIENTO_REGISTRADO')),
-  estado_anterior text,
-  estado_nuevo text not null,
-  responsable text not null,
-  motivo text,
-  referencia_id text,
-  metadata jsonb not null default '{}'::jsonb,
-  created_at timestamptz not null default clock_timestamp()
-);
-create index if not exists gift_card_eventos_giftcard_idx on public.gift_card_eventos(giftcard_id, created_at);
-
-create or replace view public.vista_gift_cards_operativa as
-select g.*,
-  case when g.estado not in ('ANULADA','USADA') and g.fecha_vencimiento < (now() at time zone 'America/Lima')::date
-    then 'VENCIDA' else g.estado end as estado_efectivo,
-  greatest(coalesce(g.monto, 0) - coalesce(u.total_usado, 0), 0)::numeric(12,2) as saldo_restante,
-  coalesce(u.total_usado, 0)::numeric(12,2) as total_usado,
-  coalesce(u.cantidad_usos, 0)::integer as cantidad_usos
-from public.gift_cards g
-left join lateral (
-  select sum(monto_usado) total_usado, count(*) cantidad_usos
-  from public.gift_card_usos where giftcard_id = g.giftcard_id
-) u on true;
+alter table public.gift_card_eventos
+  alter column evento_id set default extensions.gen_random_uuid();
 
 create or replace function public.emitir_gift_card_v1(p_payload jsonb)
 returns jsonb language plpgsql security definer set search_path=public,pg_temp as $$
@@ -214,33 +113,14 @@ begin
   return jsonb_build_object('ok',true,'reutilizado',false,'uso_id',v_replay.uso_id,'giftcard_id',v_gift.giftcard_id,'estado',v_nuevo,'saldo_restante',v_saldo-v_monto);
 end $$;
 
-create or replace function public.anular_gift_card_v1(p_payload jsonb)
-returns jsonb language plpgsql security definer set search_path=public,pg_temp as $$
-declare v_gift public.gift_cards%rowtype; v_motivo text:=btrim(coalesce(p_payload->>'motivo','')); v_responsable text:=btrim(coalesce(p_payload->>'responsable',''));
-begin
-  select * into v_gift from public.gift_cards where codigo=upper(btrim(coalesce(p_payload->>'codigo',''))) for update;
-  if not found then raise exception using errcode='P0002',message='GIFT_CARD_NO_EXISTE'; end if;
-  if v_motivo='' or v_responsable='' then raise exception using errcode='22023',message='ANULACION_REQUIERE_MOTIVO_Y_RESPONSABLE'; end if;
-  if v_gift.estado='ANULADA' then return jsonb_build_object('ok',true,'reutilizado',true,'giftcard_id',v_gift.giftcard_id); end if;
-  if v_gift.estado='USADA' then raise exception using errcode='22023',message='GIFT_CARD_USADA_NO_ANULABLE'; end if;
-  update public.gift_cards set estado='ANULADA',anulada_at=clock_timestamp(),anulada_por=v_responsable,motivo_anulacion=v_motivo,updated_at=clock_timestamp() where giftcard_id=v_gift.giftcard_id;
-  insert into public.gift_card_eventos(giftcard_id,evento,estado_anterior,estado_nuevo,responsable,motivo)
-  values(v_gift.giftcard_id,'ANULACION',v_gift.estado,'ANULADA',v_responsable,v_motivo);
-  return jsonb_build_object('ok',true,'reutilizado',false,'giftcard_id',v_gift.giftcard_id,'estado','ANULADA','reembolso_automatico',false);
-end $$;
+revoke all on function public.emitir_gift_card_v1(jsonb), public.canjear_gift_card_v1(jsonb)
+  from public, anon, authenticated;
+grant execute on function public.emitir_gift_card_v1(jsonb), public.canjear_gift_card_v1(jsonb)
+  to service_role;
 
-alter table public.gift_cards enable row level security;
-alter table public.gift_card_usos enable row level security;
-alter table public.gift_card_eventos enable row level security;
-revoke all on table public.gift_cards,public.gift_card_usos,public.gift_card_eventos from public,anon,authenticated;
-grant select,insert,update on table public.gift_cards,public.gift_card_usos,public.gift_card_eventos to service_role;
-revoke all on table public.vista_gift_cards_operativa from public,anon,authenticated;
-grant select on table public.vista_gift_cards_operativa to service_role;
-revoke all on function public.emitir_gift_card_v1(jsonb),public.canjear_gift_card_v1(jsonb),public.anular_gift_card_v1(jsonb) from public,anon,authenticated;
-grant execute on function public.emitir_gift_card_v1(jsonb),public.canjear_gift_card_v1(jsonb),public.anular_gift_card_v1(jsonb) to service_role;
-
-comment on table public.gift_card_usos is 'Historial inmutable de consumos; el saldo se reconstruye como monto emitido menos usos.';
-comment on column public.gift_cards.movimiento_id is 'Movimiento GIFT_CARD_VENTA que clasifica la venta; el canje no crea un segundo ingreso.';
-comment on function public.anular_gift_card_v1(jsonb) is 'Anulación administrativa auditable. No genera devolución financiera automática.';
+comment on function public.emitir_gift_card_v1(jsonb) is
+  'Emisión atómica Gift Cards v1; pgcrypto se resuelve explícitamente desde extensions.';
+comment on function public.canjear_gift_card_v1(jsonb) is
+  'Canje auditable Gift Cards v1; digest se resuelve explícitamente desde extensions.';
 
 commit;
