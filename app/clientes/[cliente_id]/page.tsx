@@ -101,7 +101,7 @@ function getActividad(row: Row) {
   if (explicit) return explicit;
 
   const dias = Number(row.dias_sin_visita ?? 0);
-  if (!row.ultima_visita && !row.ultima_reserva) return "Sin fecha";
+  if (!row.ultima_visita_crm && !row.ultima_visita && !row.ultima_reserva_crm && !row.ultima_reserva) return "Sin actividad";
   if (dias > 60) return "Inactivo";
   return "Activo";
 }
@@ -246,7 +246,7 @@ export default async function ClienteDetallePage({
   const clienteId = decodeURIComponent(cliente_id);
 
   const clienteResult = await supabaseSelectWhere<Row>(
-    "vista_clientes_crm_catalogo",
+    "vista_clientes_crm_catalogo_master_v1",
     [
       "select=*",
       `cliente_id=eq.${encodeURIComponent(clienteId)}`,
@@ -438,7 +438,7 @@ export default async function ClienteDetallePage({
             <InfoItem label="DNI" value={dni} />
             <InfoItem label="Email" value={email} />
             <InfoItem label="Primera visita" value={dateShort(cliente?.primera_visita)} />
-            <InfoItem label="Última visita" value={dateShort(cliente?.ultima_visita)} />
+            <InfoItem label="Última visita" value={dateShort(cliente?.ultima_visita_crm ?? cliente?.ultima_visita ?? cliente?.ultima_reserva_crm ?? cliente?.ultima_reserva)} />
             <InfoItem label="Sede frecuente" value={safe(cliente?.sede_frecuente ?? cliente?.ultima_sede)} />
             <InfoItem label="Contacto CRM" value={getContacto(cliente ?? {})} />
             <InfoItem
