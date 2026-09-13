@@ -49,22 +49,25 @@ function safe(value: any) {
   return text || "-";
 }
 
-function waHref(value: any) {
-  let digits = String(value ?? "").replace(/\D/g, "");
-  if (!digits) return "";
-  if (digits.length > 9 && digits.startsWith("51")) {
-    digits = digits.slice(2);
-  }
-  digits = digits.slice(-9);
-  return `https://wa.me/51${digits}`;
+function waHref(value: any, e164?: any) {
+  const canonical = String(e164 ?? "").replace(/\D/g, "");
+  if (/^[1-9]\d{7,14}$/.test(canonical)) return `https://wa.me/${canonical}`;
+
+  const raw = String(value ?? "").trim();
+  const digits = raw.replace(/\D/g, "");
+  return raw.startsWith("+") && /^[1-9]\d{7,14}$/.test(digits)
+    ? `https://wa.me/${digits}`
+    : "";
 }
 
-function WhatsappCell({ value }: { value: any }) {
+function WhatsappCell({ value, e164 }: { value: any; e164?: any }) {
   const text = safe(value);
   if (text === "-") return <>{text}</>;
+  const href = waHref(value, e164);
+  if (!href) return <>{text}</>;
 
   return (
-    <a href={waHref(value)} target="_blank" rel="noopener noreferrer" style={{ color: "var(--green)" }}>
+    <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: "var(--green)" }}>
       {text}
     </a>
   );
@@ -210,7 +213,7 @@ function ClienteMobileCard({ row }: { row: Row }) {
         <Badge tone={cardToneByEstado(getEstado(row))}>{getEstado(row)}</Badge>
       </div>
       <div className="mobileRecordMeta">
-        <div className="mobileRecordHighlight"><span>WhatsApp</span><strong><WhatsappCell value={row.whatsapp} /></strong></div>
+        <div className="mobileRecordHighlight"><span>WhatsApp</span><strong><WhatsappCell value={row.whatsapp} e164={row.whatsapp_e164} /></strong></div>
         <div><span>Última visita</span><strong>{dateShort(row.ultima_visita_crm ?? row.ultima_visita ?? row.ultima_reserva_crm ?? row.ultima_reserva)}</strong></div>
         <div><span>Servicio relevante</span><strong>{short(getCatalogoNombre(row), 54)}</strong></div>
         <div><span>Sede</span><strong>{getSede(row)}</strong></div>
@@ -648,7 +651,7 @@ export default async function ClientesPage({ searchParams }: { searchParams: Sea
                         {safe(row.cliente)}
                       </Link>
                     </td>
-                    <td><WhatsappCell value={row.whatsapp} /></td>
+                    <td><WhatsappCell value={row.whatsapp} e164={row.whatsapp_e164} /></td>
                     <td>{dateShort(row.ultima_visita_crm ?? row.ultima_visita ?? row.ultima_reserva_crm ?? row.ultima_reserva)}</td>
                     <td>{safe(row.dias_sin_visita)}</td>
                     <td>
@@ -717,7 +720,7 @@ export default async function ClientesPage({ searchParams }: { searchParams: Sea
                         {safe(row.cliente)}
                       </Link>
                     </td>
-                    <td><WhatsappCell value={row.whatsapp} /></td>
+                    <td><WhatsappCell value={row.whatsapp} e164={row.whatsapp_e164} /></td>
                     <td>{dateShort(row.ultima_visita_crm ?? row.ultima_visita ?? row.ultima_reserva_crm ?? row.ultima_reserva)}</td>
                     <td>
                       <Badge tone={cardToneByEstado(getEstado(row))}>{getEstado(row)}</Badge>
