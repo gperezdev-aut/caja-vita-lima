@@ -3,6 +3,7 @@ import { CajaSidebar } from "@/components/CajaSidebar";
 import { supabaseSelect } from "@/lib/supabaseServer";
 import { createAtencionAction } from "./actions";
 import { NuevaAtencionWizard } from "./NuevaAtencionWizard";
+import { getCountries, getCountryCallingCode } from "libphonenumber-js/max";
 
 type Row = Record<string, unknown>;
 
@@ -141,6 +142,10 @@ export default async function NuevaAtencionPage({
 
   const services = normalizeServices(catalog.data);
   const promotions = normalizePromotions(promotionsResult.data);
+  const regionNames = new Intl.DisplayNames(["es"], { type: "region" });
+  const countries = getCountries()
+    .map((code) => ({ code, name: regionNames.of(code) ?? code, callingCode: getCountryCallingCode(code) }))
+    .sort((a, b) => (a.code === "PE" ? -1 : b.code === "PE" ? 1 : a.name.localeCompare(b.name, "es")));
 
   return (
     <main className="appShell">
@@ -189,6 +194,7 @@ export default async function NuevaAtencionPage({
             terapistas={list(config.data, "TERAPISTAS", ["Rossana", "Maria E", "Melissa", "Cecilia", "Otro"])}
             estadosBoleta={list(config.data, "ESTADO_BOLETA", ["Emitida", "Pendiente", "No aplica", "Anulada"])}
             responsables={list(config.data, "RESPONSABLES", ["Gerald", "Luis", "Naty", "Otro"])}
+            countries={countries}
             defaultDate={todayInLima()}
             defaultTime={currentTimeInLima()}
             canSaveCatalog={canSaveServices(session)}
