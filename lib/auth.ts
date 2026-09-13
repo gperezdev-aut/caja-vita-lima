@@ -35,11 +35,12 @@ export type CajaNavItem = {
 
 const NAV_ITEMS: CajaNavItem[] = [
   { key: "dashboard", label: "Dashboard", href: "/" },
-  { key: "clientes", label: "Clientes", href: "/clientes" },
   { key: "citas-hoy", label: "Citas de hoy", href: "/citas-hoy" },
   { key: "preparar-cita", label: "Preparar cita", href: "/preparar-cita" },
   { key: "nueva-atencion", label: "Nueva atención", href: "/nueva-atencion" },
+  { key: "clientes", label: "Clientes", href: "/clientes" },
   { key: "registrar-salida", label: "Registrar salida", href: "/registrar-salida" },
+  // Gift Cards ocupará esta posición cuando exista como módulo funcional.
   { key: "comprobantes", label: "Comprobantes", href: "/comprobantes" },
   { key: "cierre-caja", label: "Cierre de caja", href: "/cierre-caja" },
   { key: "alertas", label: "Alertas", href: "/#alertas" },
