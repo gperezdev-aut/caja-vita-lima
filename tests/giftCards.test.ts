@@ -111,7 +111,7 @@ test("wizard tiene cuatro pasos y persiste solo en confirmación", async () => {
 test("wizard cubre servicio, monto, catálogo, listado y filtros", async () => {
   const [ui,page] = await Promise.all([source("app/gift-cards/GiftCardsModule.tsx"),source("app/gift-cards/page.tsx")]);
   assert.match(ui, /Por servicio/); assert.match(ui, /Por monto/); assert.match(ui, /services\.map/);
-  for (const field of ["codigo","estado","tipo","desde","hasta","beneficiario","whatsapp"]) assert.match(page, new RegExp(`name=\\"${field}\\"`));
+  for (const field of ["codigo","estado","tipo","desde","hasta","beneficiario","whatsapp_beneficiario","whatsapp_comprador"]) assert.match(page, new RegExp(`name=\\"${field}\\"`));
   assert.match(page, /desktopData/); assert.match(page, /giftCardMobileList/);
 });
 

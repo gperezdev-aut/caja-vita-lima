@@ -4,6 +4,7 @@ import { promisify } from "node:util";
 import test from "node:test";
 import { gunzip } from "node:zlib";
 import {
+  fitGiftCardText,
   normalizeGiftCardPresentationText,
   renderGiftCardSvg,
 } from "../lib/giftCardTemplate.ts";
@@ -64,6 +65,21 @@ test("normalización visual repara mojibake y preserva UTF-8 válido", () => {
   assert.equal(normalizeGiftCardPresentationText("âœ¨ Facial Glow Premium"), "✨ Facial Glow Premium");
   assert.equal(normalizeGiftCardPresentationText("Masaje para mamÃ¡"), "Masaje para mamá");
   assert.equal(normalizeGiftCardPresentationText("Niñez, armonía y ✨"), "Niñez, armonía y ✨");
+});
+
+test("textos razonablemente largos se ajustan sin elipsis ni invasión de zonas fijas", () => {
+  const beneficiary = fitGiftCardText(
+    "María Fernanda de los Ángeles Rodríguez Peña y José Antonio Núñez Salazar",
+    { baseCharacters: 29, maxLines: 3, baseFontSize: 48, minFontSize: 28 },
+  );
+  const dedication = fitGiftCardText(
+    "Con mucho cariño para que disfrutes una pausa especial, recuperes energía y recuerdes cuánto te queremos en este día tan importante.",
+    { baseCharacters: 48, maxLines: 4, baseFontSize: 27, minFontSize: 18 },
+  );
+  assert.ok(beneficiary.lines.length <= 3);
+  assert.ok(dedication.lines.length <= 4);
+  assert.doesNotMatch(beneficiary.lines.join(" "), /…/);
+  assert.doesNotMatch(dedication.lines.join(" "), /…/);
 });
 
 test("la descarga no expone identificadores internos y conserva autenticación", async () => {

@@ -68,13 +68,20 @@ export function escapeGiftCardXml(value: unknown) {
   );
 }
 
-export function wrapGiftCardText(value: string, maxCharacters: number, maxLines: number) {
+export function wrapGiftCardText(value: string, maxCharacters: number) {
   const words = value.trim().replace(/\s+/g, " ").split(" ").filter(Boolean);
   const lines: string[] = [];
   let current = "";
 
-  while (words.length && lines.length < maxLines) {
-    const word = words.shift()!;
+  while (words.length) {
+    let word = words.shift()!;
+    if (Array.from(word).length > maxCharacters) {
+      if (current) { lines.push(current); current = ""; }
+      const characters = Array.from(word);
+      while (characters.length > maxCharacters) lines.push(characters.splice(0, maxCharacters).join(""));
+      word = characters.join("");
+      if (!word) continue;
+    }
     const candidate = current ? `${current} ${word}` : word;
     if (Array.from(candidate).length <= maxCharacters) {
       current = candidate;
@@ -83,14 +90,21 @@ export function wrapGiftCardText(value: string, maxCharacters: number, maxLines:
     if (current) lines.push(current);
     current = word;
   }
-  if (current && lines.length < maxLines) lines.push(current);
-
-  if (words.length && lines.length) {
-    const last = lines.length - 1;
-    const room = Math.max(1, maxCharacters - 1);
-    lines[last] = `${Array.from(lines[last]).slice(0, room).join("").trimEnd()}…`;
-  }
+  if (current) lines.push(current);
   return lines;
+}
+
+export function fitGiftCardText(
+  value: string,
+  options: { baseCharacters: number; maxLines: number; baseFontSize: number; minFontSize: number },
+) {
+  for (let fontSize = options.baseFontSize; fontSize >= options.minFontSize; fontSize -= 2) {
+    const maxCharacters = Math.floor(options.baseCharacters * options.baseFontSize / fontSize);
+    const lines = wrapGiftCardText(value, maxCharacters);
+    if (lines.length <= options.maxLines) return { lines, fontSize };
+  }
+  const maxCharacters = Math.ceil(Array.from(value).length / options.maxLines);
+  return { lines: wrapGiftCardText(value, maxCharacters), fontSize: options.minFontSize };
 }
 
 function textLines(
@@ -98,7 +112,7 @@ function textLines(
   options: { x: number; y: number; lineHeight: number; fontSize: number; weight?: number; style?: string },
 ) {
   const { x, y, lineHeight, fontSize, weight = 400, style = "" } = options;
-  return `<text x="${x}" y="${y}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="${fontSize}" font-weight="${weight}" fill="${BROWN}" ${style}>${lines
+  return `<text x="${x}" y="${y}" text-anchor="middle" font-family="Arial, Helvetica, 'Apple Color Emoji', 'Segoe UI Emoji', sans-serif" font-size="${fontSize}" font-weight="${weight}" fill="${BROWN}" ${style}>${lines
     .map((line, index) => `<tspan x="${x}" dy="${index === 0 ? 0 : lineHeight}">${escapeGiftCardXml(line)}</tspan>`)
     .join("")}</text>`;
 }
@@ -107,19 +121,18 @@ export function renderGiftCardSvg(data: GiftCardTemplateData, templateBase64: st
   const beneficiary = normalizeGiftCardPresentationText(data.beneficiary).toLocaleUpperCase("es-PE");
   const serviceName = normalizeGiftCardPresentationText(data.serviceName).toLocaleUpperCase("es-PE");
   const dedication = normalizeGiftCardPresentationText(data.dedication).trim();
-  const beneficiaryLines = wrapGiftCardText(beneficiary, 29, 3);
+  const beneficiaryLayout = fitGiftCardText(beneficiary, { baseCharacters: 29, maxLines: 3, baseFontSize: 48, minFontSize: 28 });
   const expiration = formatGiftCardDate(data.expirationDate);
   const isService = data.type === "SERVICIO";
-  const giftLines = isService
-    ? wrapGiftCardText(serviceName, 34, 5)
-    : [`GIFT CARD POR S/ ${Number(data.amount).toFixed(2)}`];
-  const dedicationLines = dedication
-    ? wrapGiftCardText(`“${dedication}”`, 48, 2)
-    : [];
+  const giftLayout = isService
+    ? fitGiftCardText(serviceName, { baseCharacters: 34, maxLines: 5, baseFontSize: 43, minFontSize: 25 })
+    : { lines: [`GIFT CARD POR S/ ${Number(data.amount).toFixed(2)}`], fontSize: 48 };
+  const dedicationLayout = dedication
+    ? fitGiftCardText(`“${dedication}”`, { baseCharacters: 48, maxLines: 4, baseFontSize: 27, minFontSize: 18 })
+    : { lines: [], fontSize: 27 };
   const giftStartY = isService ? 585 : 625;
-  const giftFontSize = isService ? (giftLines.length >= 4 ? 37 : 43) : 48;
   const dedicationY = isService
-    ? Math.min(900, giftStartY + giftLines.length * 52 + 42)
+    ? Math.min(875, giftStartY + giftLayout.lines.length * 48 + 34)
     : 755;
 
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -131,10 +144,10 @@ export function renderGiftCardSvg(data: GiftCardTemplateData, templateBase64: st
   <rect x="48" y="45" width="410" height="112" rx="4" fill="#ffffff"/>
   <text x="245" y="91" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="29" fill="${BROWN}">EXPIRA: ${escapeGiftCardXml(expiration)}</text>
   <text x="245" y="132" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="27" fill="${BROWN}">CÓDIGO: ${escapeGiftCardXml(data.code)}</text>
-  ${textLines(beneficiaryLines, { x: 1142, y: 392, lineHeight: 58, fontSize: beneficiaryLines.length > 2 ? 42 : 48, weight: 500 })}
+  ${textLines(beneficiaryLayout.lines, { x: 1142, y: 392, lineHeight: Math.round(beneficiaryLayout.fontSize * 1.2), fontSize: beneficiaryLayout.fontSize, weight: 500 })}
   <text x="1142" y="540" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="32" fill="${BROWN}">${isService ? "SERVICIO" : "REGALO"}</text>
-  ${textLines(giftLines, { x: 1142, y: giftStartY, lineHeight: 52, fontSize: giftFontSize, weight: 500 })}
-  ${dedicationLines.length ? textLines(dedicationLines, { x: 1142, y: dedicationY, lineHeight: 38, fontSize: 27, style: 'font-style="italic"' }) : ""}
+  ${textLines(giftLayout.lines, { x: 1142, y: giftStartY, lineHeight: Math.round(giftLayout.fontSize * 1.22), fontSize: giftLayout.fontSize, weight: 500 })}
+  ${dedicationLayout.lines.length ? textLines(dedicationLayout.lines, { x: 1142, y: dedicationY, lineHeight: Math.round(dedicationLayout.fontSize * 1.32), fontSize: dedicationLayout.fontSize, style: 'font-style="italic"' }) : ""}
   ${isService ? `<text x="1280" y="1010" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="36" fill="${BROWN}">${escapeGiftCardXml(Number(data.durationMinutes ?? 0))} MINUTOS</text>` : ""}
 </svg>`;
 }
