@@ -50,7 +50,7 @@ export function CajaSidebar({ session }: { session: CajaSession }) {
             Usuario
           </span>
           <strong style={{ display: "block" }}>{session.nombre}</strong>
-          <small style={{ color: "var(--green)", fontWeight: 850 }}>
+          <small style={{ color: "var(--muted)", fontWeight: 850 }}>
             {roleLabel(session.rol)}
           </small>
         </div>

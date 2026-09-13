@@ -79,11 +79,8 @@ export default async function LoginPage({
           height={75}
           priority
         />
-        <p className="eyebrow">Acceso interno</p>
-        <h1>Caja Vita Lima</h1>
-        <p className="subtitle">
-          Acceso interno por usuario y PIN para caja, reportes y operación.
-        </p>
+        <h1>Caja</h1>
+        <p className="subtitle">Acceso interno para operación, reportes y gestión.</p>
 
         {message && (
           <div className={`loginMessage ${message.type}`}>{message.text}</div>

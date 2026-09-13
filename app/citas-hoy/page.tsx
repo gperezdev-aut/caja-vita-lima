@@ -420,8 +420,8 @@ export default async function CitasHoyPage({
                   padding: "14px 18px",
                   fontWeight: 850,
                   cursor: "pointer",
-                  background: "var(--green)",
-                  color: "white",
+                  background: "var(--brand-primary)",
+                  color: "var(--brand-primary-text)",
                 }}
               >
                 Aplicar filtros
@@ -432,7 +432,7 @@ export default async function CitasHoyPage({
                 href="/citas-hoy"
                 style={{
                   background: "white",
-                  color: "var(--green)",
+                  color: "var(--charcoal)",
                   border: "1px solid var(--line)",
                   borderRadius: "16px",
                   padding: "14px 18px",
@@ -495,8 +495,8 @@ export default async function CitasHoyPage({
                 href="/nueva-atencion"
                 style={{
                   alignSelf: "flex-start",
-                  background: "var(--green)",
-                  color: "white",
+                  background: "var(--brand-primary)",
+                  color: "var(--brand-primary-text)",
                   borderRadius: "16px",
                   padding: "13px 16px",
                   fontWeight: 850,
@@ -513,7 +513,7 @@ export default async function CitasHoyPage({
                 style={{
                   alignSelf: "flex-start",
                   background: "white",
-                  color: "var(--green)",
+                  color: "var(--charcoal)",
                   border: "1px solid var(--line)",
                   borderRadius: "16px",
                   padding: "13px 16px",

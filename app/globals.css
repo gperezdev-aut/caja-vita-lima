@@ -225,10 +225,25 @@ textarea.formControl{resize:vertical}
 
 /* Fase A — densidad operativa y branding mínimo */
 :root {
-  --charcoal: #26322b;
-  --ivory: #fffaf1;
-  --sand: #f6f2ea;
-  --brand-orange: #d96b32;
+  --charcoal: #334158;
+  --charcoal-deep: #1f2d3e;
+  --ivory: #f4f0ea;
+  --sand: #e4d7c8;
+  --brand-primary: #f18e17;
+  --brand-primary-hover: #dd7f0d;
+  --brand-primary-text: #1f2d3e;
+  --brand-primary-ink: #8a4a00;
+  --brand-primary-soft: #fff0dc;
+  --brand-accent: #ffdc6d;
+  --success: #1f6b4f;
+  --success-hover: #277a5b;
+  --success-soft: #e5f1eb;
+  --bg: var(--ivory);
+  --panel: #fffaf4;
+  --text: #263346;
+  --muted: #53606e;
+  --line: #b8c3cf;
+  --gold: var(--brand-accent);
   --radius-control: 13px;
   --radius-card: 18px;
   --control-height: 46px;
@@ -369,3 +384,147 @@ h1 { font-size: clamp(34px, 5vw, 58px); }
   .mobileMenuIdentity { display: none; }
   .mobileMenuSummary { grid-template-columns: minmax(0,1fr) auto; }
 }
+
+/* Fase A — identidad de acción separada de estados semánticos */
+body {
+  background: radial-gradient(circle at top left, rgba(241,142,23,.10), transparent 28rem), var(--bg);
+}
+
+.sidebar,
+.sidebarMobile { background-color: rgba(244,240,234,.96); }
+.loginCard,
+.card,
+.panel,
+.alert,
+.formShell { background-color: rgba(255,250,244,.92); }
+.eyebrow,
+.sidebarEyebrow,
+.formSectionTitle,
+.formSectionHeading,
+.wizardIntro .stepKicker,
+.mobileMenuBrand small,
+.mobileMenuIdentity small,
+.mobileMenuLabel { color: var(--brand-primary-ink); }
+.badge { background: var(--charcoal-deep); color: white; }
+.strong,
+.mobileRecordHeader h3,
+.citasHoyCardHour,
+.citasHoyCardIdentity h3 { color: var(--charcoal-deep); }
+
+.loginForm input:focus,
+.formControl:focus,
+.atencionField input:focus,
+.atencionField select:focus,
+.atencionReservadaFields input:focus,
+.atencionReservadaFields select:focus,
+.atencionReservadaFields textarea:focus {
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 4px rgba(241,142,23,.14);
+}
+.loginForm button,
+.primaryButton,
+.mobileSummaryBar button,
+.citasHoyStartButton,
+.citasHoyTableAction,
+.citasHoyCardActions .citasHoyStartButton,
+.atencionReservadaSticky button,
+.atencionReservadaPrimary {
+  border-color: var(--brand-primary);
+  background: var(--brand-primary);
+  color: var(--brand-primary-text);
+}
+.loginForm button:hover,
+.primaryButton:hover,
+.citasHoyStartButton:hover,
+.citasHoyTableAction:hover,
+.atencionReservadaSticky button:hover,
+.atencionReservadaPrimary:hover { background: var(--brand-primary-hover); }
+.logoutButton { border: 1px solid var(--charcoal); background: transparent; color: var(--charcoal); }
+.logoutButton:hover { background: var(--charcoal); color: white; }
+.ghostButton,
+.atencionReservadaSticky a,
+.citasHoyCardActions a { border-color: var(--line); background: white; color: var(--charcoal); }
+
+.wizardStep.active { color: var(--brand-primary-ink); }
+.wizardStep.active span {
+  border-color: var(--brand-primary);
+  background: var(--brand-primary);
+  color: var(--brand-primary-text);
+}
+.wizardStep.done { color: var(--success); }
+.wizardStep.done span {
+  border-color: rgba(31,107,79,.2);
+  background: var(--success-soft);
+  color: var(--success);
+}
+.prepararStepper button.active { background: var(--brand-primary-soft); color: var(--brand-primary-ink); }
+.prepararStepper button.active span {
+  border-color: var(--brand-primary);
+  background: var(--brand-primary);
+  color: var(--brand-primary-text);
+}
+.prepararStepper button.done { color: var(--success); }
+.prepararStepper button.done span {
+  border-color: rgba(31,107,79,.2);
+  background: var(--success-soft);
+  color: var(--success);
+}
+.prepararStepper button:focus-visible,
+.appointmentTypeGrid button:focus-visible,
+.categoryChips button:focus-visible,
+.serviceCardList button:focus-visible,
+.timeChips button:focus-visible,
+.desktopContinueButton:focus-visible,
+.backButton:focus-visible,
+.alternateServiceMode:focus-visible { outline-color: rgba(241,142,23,.42); }
+
+.appointmentTypeGrid button.selected,
+.appointmentTypeGrid button:hover,
+.serviceCardList > button.selected {
+  border-color: var(--brand-primary);
+  background: var(--brand-primary-soft);
+}
+.serviceCardList > button.selected { box-shadow: inset 4px 0 0 var(--brand-primary); }
+.serviceCardList b,
+.timeChips button,
+.peoplePicker button,
+.modePicker button,
+.categoryChips button,
+.personalizedPerson h3,
+.mobilityNotice strong,
+.confirmationCheck,
+.summaryBalance strong,
+.backButton,
+.alternateServiceMode { color: var(--brand-primary-ink); }
+.timeChips button.active,
+.peoplePicker button.selected,
+.modePicker button.selected,
+.categoryChips button.active {
+  border-color: var(--charcoal);
+  background: var(--charcoal);
+  color: white;
+}
+.timeChips button:hover { border-color: var(--brand-primary); }
+.alternateServiceMode,
+.confirmationCheck,
+.catalogCheckbox,
+.requiredPayment,
+.mobilityNotice { border-color: rgba(241,142,23,.28); background: var(--brand-primary-soft); }
+.reviewNeutral { border-color: var(--line) !important; background: var(--sand) !important; }
+.reviewNeutral strong { color: var(--charcoal-deep); font-size: 18px; }
+
+.citasHoyCardTherapist,
+.atencionReservadaTherapist,
+.finalSummary .finalClient,
+.summaryBalance { border-color: var(--line); background: var(--sand); color: var(--text); }
+.card.good,
+.paymentSummary.paid,
+.formMessage.ok,
+.loginMessage.ok,
+.atencionReservadaMoney .complete,
+.atencionReservadaSuccess > span,
+.fichaSuccess .successMark {
+  background-color: var(--success-soft);
+  color: var(--success);
+}
+.fichaSuccess .successMark { background-color: var(--success); color: white; }

@@ -226,8 +226,8 @@ const buttonStyle: CSSProperties = {
   border: "0",
   borderRadius: "15px",
   padding: "13px 16px",
-  background: "var(--green)",
-  color: "white",
+  background: "var(--brand-primary)",
+  color: "var(--brand-primary-text)",
   fontWeight: 900,
   cursor: "pointer",
   textDecoration: "none",
@@ -242,7 +242,7 @@ const ghostButtonStyle: CSSProperties = {
   borderRadius: "15px",
   padding: "13px 16px",
   background: "white",
-  color: "var(--green)",
+  color: "var(--charcoal)",
   fontWeight: 900,
   cursor: "pointer",
   textDecoration: "none",
@@ -751,7 +751,7 @@ export default async function ClientesPage({ searchParams }: { searchParams: Sea
       <style>
         {`
           .crmLink {
-            color: var(--green);
+            color: var(--brand-primary-ink);
             font-weight: 950;
             text-decoration: none;
           }

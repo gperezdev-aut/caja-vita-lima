@@ -230,7 +230,6 @@ export default async function HomePage({
           <Card
             label="Resultado neto"
             value={money(dashboardTotals.neto)}
-            tone="good"
           />
           <Card
             label="Pendientes migración"

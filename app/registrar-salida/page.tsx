@@ -264,8 +264,8 @@ export default async function RegistrarSalidaPage({
                     padding: "14px 18px",
                     fontWeight: 850,
                     cursor: "pointer",
-                    background: "var(--green)",
-                    color: "white",
+                    background: "var(--brand-primary)",
+                    color: "var(--brand-primary-text)",
                   }}
                 >
                   Aplicar filtros
@@ -275,7 +275,7 @@ export default async function RegistrarSalidaPage({
                   href="/registrar-salida"
                   style={{
                     background: "white",
-                    color: "var(--green)",
+                    color: "var(--charcoal)",
                     border: "1px solid var(--line)",
                     borderRadius: "16px",
                     padding: "14px 18px",
