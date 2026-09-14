@@ -186,6 +186,8 @@ left join servicio_favorito sf on sf.cliente_id = c.cliente_id;
 -- top y recuperación. p_limit se acota para impedir que la UI vuelva a traer
 -- miles de maestros en una petición; p_offset permite paginar más allá de
 -- 1,000/2,000/10,000 filas sin depender del límite por defecto de PostgREST.
+-- Un offset posterior al final se resuelve atómicamente a la última página
+-- existente; nunca devuelve una página vacía que la interfaz presente como válida.
 create or replace function public.caja_clientes_crm_catalogo_paginado_v1(
   p_q text default null,
   p_estado text default 'TODOS',
@@ -282,6 +284,7 @@ filtrados as (
       or n.fila->>'dni' ilike '%' || p.busqueda || '%'
       or n.fila->>'servicio_mas_comprado' ilike '%' || p.busqueda || '%'
       or n.fila->>'servicio_mas_comprado_catalogo_nombre' ilike '%' || p.busqueda || '%'
+      or n.fila->>'ultimo_servicio' ilike '%' || p.busqueda || '%'
     )
     and (p.estado = 'TODOS' or n.estado_crm = p.estado)
     and (p.actividad = 'TODOS' or n.actividad_crm = p.actividad)
@@ -307,14 +310,31 @@ resumen as (
     count(*) filter (where catalogo_tipo in ('SERVICIO_HISTORICO', 'PROMO_HISTORICA'))::integer as historicos
   from filtrados
 ),
+paginacion as (
+  select
+    p.limite,
+    case
+      when r.total_clientes = 0 then 0
+      else least(
+        p.desplazamiento,
+        ((r.total_clientes - 1) / p.limite) * p.limite
+      )
+    end as desplazamiento_resuelto,
+    case
+      when r.total_clientes = 0 then 1
+      else ((r.total_clientes - 1) / p.limite) + 1
+    end as total_paginas
+  from parametros p
+  cross join resumen r
+),
 ordenados as (
   select * from filtrados order by total_gastado desc, cliente_id
 ),
 pagina as (
   select o.*
   from ordenados o
-  cross join parametros p
-  limit p.limite offset p.desplazamiento
+  cross join paginacion p
+  limit p.limite offset p.desplazamiento_resuelto
 ),
 top_clientes as (
   select * from ordenados limit 8
@@ -328,6 +348,11 @@ clientes_recuperar as (
 select jsonb_build_object(
   'clientes', coalesce((select jsonb_agg(fila order by total_gastado desc, cliente_id) from pagina), '[]'::jsonb),
   'resumen', (select to_jsonb(resumen) from resumen),
+  'paginacion', (select jsonb_build_object(
+    'offset', desplazamiento_resuelto,
+    'limite', limite,
+    'total_paginas', total_paginas
+  ) from paginacion),
   'top', coalesce((select jsonb_agg(fila order by total_gastado desc, cliente_id) from top_clientes), '[]'::jsonb),
   'recuperar', coalesce((select jsonb_agg(fila order by total_gastado desc, cliente_id) from clientes_recuperar), '[]'::jsonb)
 );
