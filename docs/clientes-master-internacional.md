@@ -55,7 +55,11 @@ máximo de 100 filas por solicitud; la pantalla usa 50. Por ello 2,500, 5,000 o
 10,000 clientes no dependen de un `limit=1000`, y la búsqueda, DNI, WhatsApp,
 servicio y filtros CRM se resuelven antes de devolver la página. Top clientes y
 recuperación siguen calculándose sobre todo el resultado filtrado, no solo sobre
-la página visible.
+la página visible. Si la URL solicita una página posterior a la última, la
+función resuelve el offset a la última página válida en la misma consulta; no
+devuelve una tabla vacía. La búsqueda por servicio incluye también
+`ultimo_servicio`, para encontrar maestros importados que todavía no tienen fila
+CRM.
 
 Antes de aplicar la migración en staging hay que ejecutar las dos consultas
 read-only incluidas para guardar `pg_get_viewdef(...)` y la lista ordenada de
