@@ -39,15 +39,17 @@ Contacts.
 
 ## Lista Clientes de Caja
 
-`/clientes` y el detalle consultan
-`vista_clientes_crm_catalogo_master_v1`. La vista parte exclusivamente de
+`vista_clientes_crm_catalogo_master_v1` parte exclusivamente de
 `public.clientes`; movimientos y reservas se agregan con `LEFT JOIN`.
-Por ello un cliente maestro recién importado, sin actividad moderna, aparece con
-`total_visitas = 0`, `total_gastado = 0`, fechas de actividad nulas,
-`estado_actividad_crm = SIN_ACTIVIDAD` y la segmentación propia que tenga en
-`clientes`.
 
-La vista anterior `vista_clientes_crm_catalogo` no tiene definición versionada
-en el repositorio, por lo que no se reemplaza sin inspección en el entorno de
-base de datos. La migración incluye una consulta de validación que demuestra que
-ningún `cliente_id` maestro quedó excluido.
+La interfaz conserva por ahora el contrato completo de
+`vista_clientes_crm_catalogo`, cuya definición no está versionada: lee esa vista
+y agrega solamente los maestros ausentes desde `public.clientes`. Así no se
+degradan sus campos CRM/catálogo conocidos. El maestro añadido recibe solo datos
+seguros: visitas/gasto en cero, fechas nulas y `SIN_ACTIVIDAD`; los campos de
+catálogo desconocidos no se inventan.
+
+Antes de aplicar la migración en staging hay que ejecutar las dos consultas
+read-only incluidas para guardar `pg_get_viewdef(...)` y la lista ordenada de
+columnas de la vista heredada. Recién con ese contrato se podrá decidir si la
+vista maestra puede reemplazarla completamente.
