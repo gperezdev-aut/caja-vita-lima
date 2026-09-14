@@ -184,6 +184,17 @@ test("PNG final es válido, conserva 1645 × 1379 y usa el mismo SVG del preview
   assert.equal(png.readUInt32BE(20), 1379);
 });
 
+test("Docker instala DejaVu y bloquea el build si Resvg no pinta texto", async () => {
+  const [dockerfile, packageJson] = await Promise.all([
+    source("Dockerfile"),
+    source("package.json"),
+  ]);
+  assert.match(dockerfile, /apk add --no-cache libc6-compat font-dejavu/);
+  assert.match(dockerfile, /apk add --no-cache font-dejavu/);
+  assert.match(dockerfile, /RUN npm run test:gift-card-render/);
+  assert.match(packageJson, /"test:gift-card-render"/);
+});
+
 test("WhatsApp prepara el mensaje sin publicar un enlace interno de Caja", () => {
   const url = whatsappGiftCardUrl("+51 987 654 321", "GC-VITA-A1B2C3D4");
   const message = new URL(url).searchParams.get("text") ?? "";

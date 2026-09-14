@@ -4,10 +4,11 @@ import { notFound } from "next/navigation";
 import { randomUUID } from "crypto";
 import { CajaSidebar } from "@/components/CajaSidebar";
 import { requireModuleAccess } from "@/lib/auth";
-import { formatGiftCardDate, whatsappGiftCardUrl } from "@/lib/giftCards";
+import { formatGiftCardDate } from "@/lib/giftCards";
 import { normalizeGiftCardPresentationText } from "@/lib/giftCardTemplate";
 import { supabaseSelectWhere } from "@/lib/supabaseServer";
 import { anularGiftCardAction, canjearGiftCardAction } from "../actions";
+import { GiftCardShareButton } from "../GiftCardShareButton";
 
 type Row = Record<string, unknown>;
 function money(value: unknown) {
@@ -51,7 +52,6 @@ export default async function GiftCardDetailPage({
   );
   const beneficiary = normalizeGiftCardPresentationText(card.destinatario);
   const buyer = normalizeGiftCardPresentationText(card.comprador);
-  const shareUrl = whatsappGiftCardUrl(phone, code);
   return (
     <main className="appShell">
       <CajaSidebar session={session} />
@@ -81,14 +81,11 @@ export default async function GiftCardDetailPage({
             Descargar Gift Card
           </a>
           {phone && (
-            <a
-              className="ghostButton"
-              href={shareUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Compartir por WhatsApp
-            </a>
+            <GiftCardShareButton
+              giftcardId={giftcardId}
+              code={code}
+              phone={phone}
+            />
           )}
         </div>
         <section className="giftCardDetailGrid">
