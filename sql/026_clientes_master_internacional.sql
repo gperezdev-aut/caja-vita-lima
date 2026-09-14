@@ -159,7 +159,11 @@ select
   coalesce(sf.servicio_mas_comprado, m.ultimo_servicio_operativo, c.ultimo_servicio) as servicio_mas_comprado,
   case
     when m.ultima_visita_operativa is null and r.ultima_reserva_operativa is null then 'SIN_ACTIVIDAD'
-    when coalesce(m.ultima_visita_operativa, r.ultima_reserva_operativa) < current_date - 60 then 'INACTIVO'
+    when case
+      when m.ultima_visita_operativa is null then r.ultima_reserva_operativa
+      when r.ultima_reserva_operativa is null then m.ultima_visita_operativa
+      else greatest(m.ultima_visita_operativa, r.ultima_reserva_operativa)
+    end < current_date - 60 then 'INACTIVO'
     else 'ACTIVO'
   end as estado_actividad_crm,
   case
@@ -178,6 +182,17 @@ select c.cliente_id
 from public.clientes c
 left join public.vista_clientes_crm_catalogo_master_v1 v on v.cliente_id = c.cliente_id
 where v.cliente_id is null;
+
+-- STAGING READ-ONLY: antes de aplicar 026, guardar la definición y el
+-- contrato real heredado. La aplicación conserva esa vista y solo añade los
+-- maestros que esta no devuelva, hasta que ambos contratos sean comparables.
+select pg_get_viewdef('public.vista_clientes_crm_catalogo'::regclass, true) as definicion_sql;
+
+select column_name, data_type, is_nullable, ordinal_position
+from information_schema.columns
+where table_schema = 'public'
+  and table_name = 'vista_clientes_crm_catalogo'
+order by ordinal_position;
 
 -- VALIDACIÓN POSTERIOR: las nuevas filas canónicas deben conservar los tres
 -- componentes de identidad. Las filas legacy con estado NULL se revisan aparte.
