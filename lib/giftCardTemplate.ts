@@ -210,52 +210,56 @@ export function renderGiftCardSvg(
   ).trim();
   const dedication = normalizeGiftCardPresentationText(data.dedication).trim();
   const beneficiaryLayout = fitGiftCardText(beneficiary, {
-    baseCharacters: 28,
+    baseCharacters: 25,
     maxLines: 3,
-    baseFontSize: 48,
-    minFontSize: 28,
+    baseFontSize: 56,
+    minFontSize: 34,
   });
   const expiration = formatGiftCardDate(data.expirationDate);
   const isService = data.type === "SERVICIO";
   const giftLayout = isService
     ? fitGiftCardText(serviceName, {
-        baseCharacters: 32,
+        baseCharacters: 28,
         maxLines: 3,
-        baseFontSize: 43,
-        minFontSize: 25,
+        baseFontSize: 54,
+        minFontSize: 30,
       })
     : {
         lines: [`GIFT CARD POR S/ ${Number(data.amount).toFixed(2)}`],
-        fontSize: 48,
+        fontSize: 60,
       };
   const descriptionLayout =
     isService && serviceDescription
       ? fitGiftCardText(serviceDescription, {
-          baseCharacters: 56,
+          baseCharacters: 44,
           maxLines: 4,
-          baseFontSize: 24,
-          minFontSize: 16,
+          baseFontSize: 30,
+          minFontSize: 20,
         })
-      : { lines: [], fontSize: 24 };
+      : { lines: [], fontSize: 30 };
   const dedicationLayout = dedication
     ? fitGiftCardText(`“${dedication}”`, {
-        baseCharacters: 62,
-        maxLines: 4,
-        baseFontSize: 20,
-        minFontSize: 14,
+        baseCharacters: 50,
+        maxLines: 3,
+        baseFontSize: 27,
+        minFontSize: 18,
       })
-    : { lines: [], fontSize: 20 };
-  const giftStartY = isService ? (data.serviceEmojiBase64 ? 615 : 570) : 610;
-  const giftLineHeight = Math.round(giftLayout.fontSize * 1.18);
+    : { lines: [], fontSize: 27 };
+
+  const beneficiaryStartY = 360;
+  const beneficiaryLineHeight = Math.round(beneficiaryLayout.fontSize * 1.16);
+  const giftStartY = isService ? 610 : 615;
+  const giftLineHeight = Math.round(giftLayout.fontSize * 1.14);
   const giftEndY =
     giftStartY + Math.max(0, giftLayout.lines.length - 1) * giftLineHeight;
-  const descriptionY = giftEndY + 48;
-  const descriptionLineHeight = Math.round(descriptionLayout.fontSize * 1.3);
+  const descriptionY = giftEndY + 46;
+  const descriptionLineHeight = Math.round(descriptionLayout.fontSize * 1.27);
   const descriptionEndY = descriptionLayout.lines.length
     ? descriptionY +
       (descriptionLayout.lines.length - 1) * descriptionLineHeight
     : giftEndY;
-  const dedicationY = isService ? descriptionEndY + 48 : 735;
+  const dedicationY = isService ? descriptionEndY + 50 : 755;
+  const dedicationLineHeight = Math.round(dedicationLayout.fontSize * 1.3);
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}" role="img" aria-labelledby="gift-card-title gift-card-description">
@@ -266,13 +270,13 @@ export function renderGiftCardSvg(
   <rect x="48" y="45" width="410" height="112" rx="4" fill="#ffffff"/>
   <text x="245" y="91" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="29" fill="${BROWN}">EXPIRA: ${escapeGiftCardXml(expiration)}</text>
   <text x="245" y="132" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="27" fill="${BROWN}">CÓDIGO: ${escapeGiftCardXml(data.code)}</text>
-  <text x="1142" y="315" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="25" letter-spacing="4" fill="${BROWN}">PARA</text>
-  ${textLines(beneficiaryLayout.lines, { x: 1142, y: 365, lineHeight: Math.round(beneficiaryLayout.fontSize * 1.18), fontSize: beneficiaryLayout.fontSize, weight: 500 })}
-  <text x="1142" y="525" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="25" letter-spacing="3" fill="${BROWN}">${isService ? "SERVICIO" : "REGALO"}</text>
-  ${isService && data.serviceEmojiBase64 ? `<image href="data:image/png;base64,${data.serviceEmojiBase64}" x="1120" y="545" width="44" height="44" preserveAspectRatio="xMidYMid meet"/>` : ""}
-  ${textLines(giftLayout.lines, { x: 1142, y: giftStartY, lineHeight: giftLineHeight, fontSize: giftLayout.fontSize, weight: 500 })}
-  ${descriptionLayout.lines.length ? textLines(descriptionLayout.lines, { x: 1142, y: descriptionY, lineHeight: descriptionLineHeight, fontSize: descriptionLayout.fontSize }) : ""}
-  ${dedicationLayout.lines.length ? textLines(dedicationLayout.lines, { x: 1142, y: dedicationY, lineHeight: Math.round(dedicationLayout.fontSize * 1.32), fontSize: dedicationLayout.fontSize, style: 'font-style="italic"' }) : ""}
-  ${isService ? `<text x="1280" y="1025" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="34" fill="${BROWN}">${escapeGiftCardXml(Number(data.durationMinutes ?? 0))} MINUTOS</text>` : ""}
+  <text x="1142" y="300" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="27" letter-spacing="4" fill="${BROWN}">PARA</text>
+  ${textLines(beneficiaryLayout.lines, { x: 1142, y: beneficiaryStartY, lineHeight: beneficiaryLineHeight, fontSize: beneficiaryLayout.fontSize, weight: 600 })}
+  <text x="1142" y="535" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="27" letter-spacing="3" fill="${BROWN}">${isService ? "SERVICIO" : "REGALO"}</text>
+  ${isService && data.serviceEmojiBase64 ? `<image href="data:image/png;base64,${data.serviceEmojiBase64}" x="820" y="565" width="54" height="54" preserveAspectRatio="xMidYMid meet"/>` : ""}
+  ${textLines(giftLayout.lines, { x: 1142, y: giftStartY, lineHeight: giftLineHeight, fontSize: giftLayout.fontSize, weight: 600 })}
+  ${descriptionLayout.lines.length ? textLines(descriptionLayout.lines, { x: 1142, y: descriptionY, lineHeight: descriptionLineHeight, fontSize: descriptionLayout.fontSize, weight: 400 }) : ""}
+  ${dedicationLayout.lines.length ? textLines(dedicationLayout.lines, { x: 1142, y: dedicationY, lineHeight: dedicationLineHeight, fontSize: dedicationLayout.fontSize, weight: 400, style: 'font-style="italic"' }) : ""}
+  ${isService ? `<text x="1142" y="1030" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="44" font-weight="600" fill="${BROWN}">${escapeGiftCardXml(Number(data.durationMinutes ?? 0))} MINUTOS</text>` : ""}
 </svg>`;
 }
