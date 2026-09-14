@@ -11,6 +11,7 @@ import { Input } from "@/components/Input";
 import { Select } from "@/components/Select";
 import { Textarea } from "@/components/Textarea";
 import { updateClienteCrmAction } from "./actions";
+import { clienteMaestroSinActividad } from "@/lib/clientesCrmCompat";
 
 type Row = Record<string, any>;
 
@@ -246,14 +247,20 @@ export default async function ClienteDetallePage({
   const uiParams = await searchParams;
   const clienteId = decodeURIComponent(cliente_id);
 
-  const clienteResult = await supabaseSelectWhere<Row>(
-    "vista_clientes_crm_catalogo_master_v1",
+  const [clienteCrmResult, maestroResult] = await Promise.all([
+    supabaseSelectWhere<Row>(
+    "vista_clientes_crm_catalogo",
     [
       "select=*",
       `cliente_id=eq.${encodeURIComponent(clienteId)}`,
       "limit=1",
     ].join("&")
-  );
+    ),
+    supabaseSelectWhere<Row>(
+      "clientes",
+      ["select=*", `cliente_id=eq.${encodeURIComponent(clienteId)}`, "limit=1"].join("&")
+    ),
+  ]);
 
   const historialResult = await supabaseSelectWhere<Row>(
     "vista_cliente_historial_crm",
@@ -265,14 +272,14 @@ export default async function ClienteDetallePage({
     ].join("&")
   );
 
-  const cliente = clienteResult.data?.[0];
+  const cliente = clienteCrmResult.data?.[0] ?? (maestroResult.data?.[0] ? clienteMaestroSinActividad(maestroResult.data[0]) : undefined);
 
-  if (!cliente && !clienteResult.error) {
+  if (!cliente && !clienteCrmResult.error && !maestroResult.error) {
     notFound();
   }
 
   const historial = historialResult.data ?? [];
-  const errors = [clienteResult.error, historialResult.error].filter(Boolean);
+  const errors = [clienteCrmResult.error, maestroResult.error, historialResult.error].filter(Boolean);
 
   const totalCobrarHistorial = historial.reduce(
     (sum, row) => sum + Number(row.total_cobrar ?? 0),
