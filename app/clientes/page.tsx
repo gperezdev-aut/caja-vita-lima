@@ -7,6 +7,7 @@ import { Badge } from "@/components/Badge";
 import { FormField } from "@/components/FormField";
 import { Input } from "@/components/Input";
 import { Select } from "@/components/Select";
+import { combinarClientesCrm } from "@/lib/clientesCrmCompat";
 
 type Row = Record<string, any>;
 
@@ -328,19 +329,22 @@ export default async function ClientesPage({ searchParams }: { searchParams: Sea
   const sedeFallback = ["Miraflores", "San Borja"];
   const sedesRows = list(config.data, "SEDES");
 
-  const clientesResult = await supabaseSelectWhere<Row>(
-    "vista_clientes_crm_catalogo_master_v1",
+  const [clientesCrmResult, maestrosResult] = await Promise.all([
+    supabaseSelectWhere<Row>(
+    "vista_clientes_crm_catalogo",
     ["select=*", "order=total_gastado.desc", "limit=1000"].join("&")
-  );
+    ),
+    supabaseSelectWhere<Row>("clientes", ["select=*", "order=updated_at.desc", "limit=1000"].join("&")),
+  ]);
 
   const serviciosResult = await supabaseSelectWhere<Row>(
     "vista_servicios_crm_catalogo",
     ["select=*", "order=total_ingresado.desc", "limit=300"].join("&")
   );
 
-  const errors = [config.error, clientesResult.error, serviciosResult.error].filter(Boolean);
+  const errors = [config.error, clientesCrmResult.error, maestrosResult.error, serviciosResult.error].filter(Boolean);
 
-  let clientes = clientesResult.data ?? [];
+  let clientes = combinarClientesCrm(clientesCrmResult.data ?? [], maestrosResult.data ?? []) as Row[];
 
   if (q) {
     const query = norm(q);
