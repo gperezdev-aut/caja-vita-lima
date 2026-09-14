@@ -176,6 +176,163 @@ left join movimientos m on m.cliente_id = c.cliente_id
 left join reservas r on r.cliente_id = c.cliente_id
 left join servicio_favorito sf on sf.cliente_id = c.cliente_id;
 
+-- LISTADO ESCALABLE DE CLIENTES
+-- La vista CRM heredada no se sustituye ni se intenta reconstruir con columnas
+-- supuestas. Esta función parte exclusivamente de clientes y conserva cada
+-- campo heredado como JSONB al enriquecer por cliente_id. Así el contrato CRM
+-- existente se mantiene incluso si incorpora columnas todavía no versionadas.
+--
+-- Devuelve una sola carga con: página, métricas de TODO el conjunto filtrado,
+-- top y recuperación. p_limit se acota para impedir que la UI vuelva a traer
+-- miles de maestros en una petición; p_offset permite paginar más allá de
+-- 1,000/2,000/10,000 filas sin depender del límite por defecto de PostgREST.
+create or replace function public.caja_clientes_crm_catalogo_paginado_v1(
+  p_q text default null,
+  p_estado text default 'TODOS',
+  p_actividad text default 'TODOS',
+  p_contacto text default 'TODOS',
+  p_sede text default 'TODAS',
+  p_tipo text default 'TODOS',
+  p_limit integer default 50,
+  p_offset integer default 0
+)
+returns table(payload jsonb)
+language sql
+stable
+set search_path = public
+as $$
+with parametros as (
+  select
+    nullif(btrim(p_q), '') as busqueda,
+    coalesce(nullif(btrim(p_estado), ''), 'TODOS') as estado,
+    coalesce(nullif(btrim(p_actividad), ''), 'TODOS') as actividad,
+    coalesce(nullif(btrim(p_contacto), ''), 'TODOS') as contacto,
+    coalesce(nullif(btrim(p_sede), ''), 'TODAS') as sede,
+    coalesce(nullif(btrim(p_tipo), ''), 'TODOS') as tipo,
+    least(greatest(coalesce(p_limit, 50), 1), 100) as limite,
+    greatest(coalesce(p_offset, 0), 0) as desplazamiento
+),
+maestros as (
+  select
+    c.cliente_id,
+    -- Los valores seguros se aplican solo si la vista heredada no los aporta.
+    -- El último || deja que la vista conserve íntegro su contrato conocido.
+    to_jsonb(c)
+      || jsonb_build_object(
+        'total_visitas', 0,
+        'total_gastado', 0,
+        'total_reservas', coalesce(c.total_reservas, 0),
+        'estado_actividad_crm', 'SIN_ACTIVIDAD',
+        'calidad_contacto_crm', case
+          when nullif(btrim(c.whatsapp), '') is not null then 'CON_WHATSAPP'
+          when nullif(btrim(c.email), '') is not null or nullif(btrim(c.dni), '') is not null then 'CON_DATO_PARCIAL'
+          else 'SIN_CONTACTO'
+        end
+      )
+      || coalesce(to_jsonb(v), '{}'::jsonb) as fila
+  from public.clientes c
+  left join public.vista_clientes_crm_catalogo v on v.cliente_id = c.cliente_id
+),
+normalizados as (
+  select
+    cliente_id,
+    fila,
+    coalesce(nullif(fila->>'estado_cliente_crm', ''), nullif(fila->>'nivel_cliente_crm', ''), nullif(fila->>'segmento_cliente', ''), '-') as estado_crm,
+    case upper(coalesce(nullif(fila->>'calidad_contacto_crm', ''), ''))
+      when 'CON_WHATSAPP' then 'Con WhatsApp'
+      when 'CON_DATO_PARCIAL' then 'Con dato parcial'
+      when 'HISTORICO_SIN_CONTACTO' then 'Histórico sin contacto'
+      when 'SIN_CONTACTO' then 'Sin contacto'
+      else coalesce(nullif(fila->>'calidad_contacto_crm', ''), case
+        when nullif(fila->>'whatsapp', '') is not null then 'Con WhatsApp'
+        when nullif(fila->>'dni', '') is not null or nullif(fila->>'email', '') is not null then 'Con dato parcial'
+        else 'Sin contacto'
+      end)
+    end as contacto_crm,
+    coalesce(nullif(fila->>'sede_frecuente', ''), nullif(fila->>'ultima_sede', ''), '-') as sede_crm,
+    coalesce(nullif(fila->>'servicio_mas_comprado_catalogo_tipo', ''), '') as catalogo_tipo,
+    coalesce(nullif(fila->>'servicio_mas_comprado_menu_group', ''), '') as menu_group,
+    nullif(coalesce(fila->>'ultima_visita_crm', fila->>'ultima_visita'), '')::date as ultima_visita,
+    nullif(coalesce(fila->>'ultima_reserva_crm', fila->>'ultima_reserva'), '')::date as ultima_reserva,
+    coalesce(nullif(fila->>'total_gastado', ''), '0')::numeric as total_gastado,
+    coalesce(nullif(fila->>'total_visitas', ''), nullif(fila->>'total_reservas', ''), '0')::integer as total_visitas
+  from maestros
+),
+con_actividad as (
+  select *,
+    case
+      when ultima_visita is null and ultima_reserva is null then 'Sin fecha'
+      when case
+        when ultima_visita is null then ultima_reserva
+        when ultima_reserva is null then ultima_visita
+        else greatest(ultima_visita, ultima_reserva)
+      end < current_date - 60 then 'Inactivo'
+      else 'Activo'
+    end as actividad_crm
+  from normalizados
+),
+filtrados as (
+  select n.*
+  from con_actividad n
+  cross join parametros p
+  where (
+      p.busqueda is null
+      or n.fila->>'cliente' ilike '%' || p.busqueda || '%'
+      or n.fila->>'whatsapp' ilike '%' || p.busqueda || '%'
+      or n.fila->>'dni' ilike '%' || p.busqueda || '%'
+      or n.fila->>'servicio_mas_comprado' ilike '%' || p.busqueda || '%'
+      or n.fila->>'servicio_mas_comprado_catalogo_nombre' ilike '%' || p.busqueda || '%'
+    )
+    and (p.estado = 'TODOS' or n.estado_crm = p.estado)
+    and (p.actividad = 'TODOS' or n.actividad_crm = p.actividad)
+    and (p.contacto = 'TODOS' or n.contacto_crm = p.contacto)
+    and (p.sede = 'TODAS' or n.sede_crm = p.sede)
+    and (
+      p.tipo = 'TODOS'
+      or (p.tipo = 'CATALOGO' and n.catalogo_tipo = 'SERVICIO')
+      or (p.tipo = 'HISTORICO' and n.catalogo_tipo in ('SERVICIO_HISTORICO', 'PROMO_HISTORICA'))
+      or (p.tipo = 'PACK_2P' and n.menu_group = 'PACK_2P')
+      or (p.tipo = 'PROMOS_1P' and n.menu_group = 'PROMOS_1P')
+      or (p.tipo = 'SESSIONS' and n.menu_group = 'SESSIONS')
+      or (p.tipo = 'GIFT_CARD' and n.catalogo_tipo = 'GIFT_CARD')
+    )
+),
+resumen as (
+  select
+    count(*)::integer as total_clientes,
+    coalesce(sum(total_gastado), 0)::numeric as total_gastado,
+    coalesce(sum(total_visitas), 0)::integer as total_visitas,
+    count(*) filter (where contacto_crm = 'Con WhatsApp')::integer as con_whatsapp,
+    count(*) filter (where estado_crm = 'VIP' and actividad_crm = 'Inactivo')::integer as vip_inactivos,
+    count(*) filter (where catalogo_tipo in ('SERVICIO_HISTORICO', 'PROMO_HISTORICA'))::integer as historicos
+  from filtrados
+),
+ordenados as (
+  select * from filtrados order by total_gastado desc, cliente_id
+),
+pagina as (
+  select o.*
+  from ordenados o
+  cross join parametros p
+  limit p.limite offset p.desplazamiento
+),
+top_clientes as (
+  select * from ordenados limit 8
+),
+clientes_recuperar as (
+  select *
+  from ordenados
+  where actividad_crm = 'Inactivo' or estado_crm = 'Inactivo'
+  limit 10
+)
+select jsonb_build_object(
+  'clientes', coalesce((select jsonb_agg(fila order by total_gastado desc, cliente_id) from pagina), '[]'::jsonb),
+  'resumen', (select to_jsonb(resumen) from resumen),
+  'top', coalesce((select jsonb_agg(fila order by total_gastado desc, cliente_id) from top_clientes), '[]'::jsonb),
+  'recuperar', coalesce((select jsonb_agg(fila order by total_gastado desc, cliente_id) from clientes_recuperar), '[]'::jsonb)
+);
+$$;
+
 -- VALIDACIÓN: debe devolver cero filas. Si devuelve una, la vista dejó fuera
 -- un cliente maestro y no debe usarse para la importación histórica.
 select c.cliente_id
