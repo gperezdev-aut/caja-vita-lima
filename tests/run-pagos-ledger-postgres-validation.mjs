@@ -31,8 +31,9 @@ const migrations = Array.from({ length: 21 }, (_, index) =>
     "pagos_fecha_real_ledger",
   ][index]}.sql`)
 );
+const fixture = resolve(root, "sql/tests/catalog_snapshot_active_fixture.sql");
 const contract = resolve(root, "sql/tests/021_pagos_fecha_real_ledger_rollback.sql");
-const files = [...migrations, contract];
+const files = [...migrations, fixture, contract];
 
 function fail(message) {
   throw new Error(message);
