@@ -26,7 +26,7 @@ test("el molde real conserva su archivo original y dimensiones", async () => {
   assert.equal(png.readUInt32BE(20), 1379);
 });
 
-test("descarga por servicio renderiza fecha, código, beneficiario, duración y dedicatoria", () => {
+test("descarga por servicio renderiza fecha, código, beneficiario, incluidos, duración y dedicatoria", () => {
   const svg = renderGiftCardSvg(
     {
       code: "GC-VITA-A1B2C3D4",
@@ -52,6 +52,9 @@ test("descarga por servicio renderiza fecha, código, beneficiario, duración y 
   assert.match(svg, /Masaje relajante \+ reflexología y aromaterapia/);
   assert.match(svg, /65 MINUTOS/);
   assert.match(svg, /“Disfruta tu día”/);
+  assert.match(svg, /font-size="56" font-weight="600"/);
+  assert.match(svg, /font-size="54" font-weight="600"/);
+  assert.match(svg, /font-size="44" font-weight="600"/);
 });
 
 test("descarga por monto usa el importe, omite duración y omite dedicatoria vacía", () => {
@@ -68,6 +71,7 @@ test("descarga por monto usa el importe, omite duración y omite dedicatoria vac
   );
 
   assert.match(svg, /GIFT CARD POR S\/ 150\.00/);
+  assert.match(svg, /font-size="60" font-weight="600"/);
   assert.match(svg, /JOSÉ NÚÑEZ/);
   assert.doesNotMatch(svg, /MINUTOS/);
   assert.doesNotMatch(svg, /font-style="italic"/);
@@ -118,19 +122,33 @@ test("emoji inicial conserva su grafema y se convierte en recurso embebido para 
 test("textos razonablemente largos se ajustan sin elipsis ni invasión de zonas fijas", () => {
   const beneficiary = fitGiftCardText(
     "María Fernanda de los Ángeles Rodríguez Peña y José Antonio Núñez Salazar",
-    { baseCharacters: 29, maxLines: 3, baseFontSize: 48, minFontSize: 28 },
+    { baseCharacters: 25, maxLines: 3, baseFontSize: 56, minFontSize: 34 },
+  );
+  const service = fitGiftCardText(
+    "Ritual relajante premium de cuerpo completo para recuperación profunda",
+    { baseCharacters: 28, maxLines: 3, baseFontSize: 54, minFontSize: 30 },
+  );
+  const description = fitGiftCardText(
+    "Masaje relajante de cuerpo completo, reflexología, aromaterapia, piedras calientes y una pausa final de respiración consciente.",
+    { baseCharacters: 44, maxLines: 4, baseFontSize: 30, minFontSize: 20 },
   );
   const dedication = fitGiftCardText(
     "Con mucho cariño para que disfrutes una pausa especial, recuperes energía y recuerdes cuánto te queremos en este día tan importante.",
-    { baseCharacters: 48, maxLines: 4, baseFontSize: 27, minFontSize: 18 },
+    { baseCharacters: 50, maxLines: 3, baseFontSize: 27, minFontSize: 18 },
   );
   assert.ok(beneficiary.lines.length <= 3);
-  assert.ok(dedication.lines.length <= 4);
-  assert.doesNotMatch(beneficiary.lines.join(" "), /…/);
-  assert.doesNotMatch(dedication.lines.join(" "), /…/);
+  assert.ok(service.lines.length <= 3);
+  assert.ok(description.lines.length <= 4);
+  assert.ok(dedication.lines.length <= 3);
+  assert.doesNotMatch(
+    [beneficiary, service, description, dedication]
+      .flatMap((layout) => layout.lines)
+      .join(" "),
+    /…/,
+  );
 });
 
-test("la descarga no expone identificadores internos y conserva autenticación", async () => {
+test("la descarga usa incluidos solo con match exacto del snapshot local y conserva autenticación", async () => {
   const route = await source(
     "app/api/gift-cards/[giftcard_id]/download/route.ts",
   );
@@ -150,10 +168,12 @@ test("la descarga no expone identificadores internos y conserva autenticación",
   assert.match(route, /"Content-Type": "image\/png"/);
   assert.match(route, /filename="gift-card-\$\{code\}\.png"/);
   assert.match(route, /private, no-store/);
-  assert.match(route, /await readCanonicalCatalog\(\)/);
-  assert.match(route, /service\.service_code === serviceCode/);
-  assert.match(route, /service\.release_id === releaseId/);
-  assert.match(route, /service\.price_version === priceVersion/);
+  assert.match(route, /"caja_catalog_services"/);
+  assert.match(route, /select=included_es/);
+  assert.match(route, /service_code=eq\.\$\{encodeURIComponent\(serviceCode\)\}/);
+  assert.match(route, /release_id=eq\.\$\{encodeURIComponent\(releaseId\)\}/);
+  assert.match(route, /price_version=eq\.\$\{encodeURIComponent\(priceVersion\)\}/);
+  assert.doesNotMatch(route, /readCanonicalCatalog/);
   assert.doesNotMatch(
     svg,
     /giftcard_id|request_id|movimiento_id|release_id|price_version|pago_id/,
