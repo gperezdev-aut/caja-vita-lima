@@ -42,12 +42,20 @@ Contacts.
 `vista_clientes_crm_catalogo_master_v1` parte exclusivamente de
 `public.clientes`; movimientos y reservas se agregan con `LEFT JOIN`.
 
-La interfaz conserva por ahora el contrato completo de
-`vista_clientes_crm_catalogo`, cuya definición no está versionada: lee esa vista
-y agrega solamente los maestros ausentes desde `public.clientes`. Así no se
-degradan sus campos CRM/catálogo conocidos. El maestro añadido recibe solo datos
-seguros: visitas/gasto en cero, fechas nulas y `SIN_ACTIVIDAD`; los campos de
-catálogo desconocidos no se inventan.
+La interfaz usa la función paginada
+`caja_clientes_crm_catalogo_paginado_v1`. Esta parte de `public.clientes` y
+enriquece cada fila mediante `LEFT JOIN` por `cliente_id` a
+`vista_clientes_crm_catalogo`. La vista se conserva como JSONB, de modo que sus
+campos CRM/catálogo —incluidos los que aún no están versionados— se mantienen sin
+inventar ni truncar columnas. Un maestro sin fila CRM recibe únicamente valores
+seguros: visitas/gasto en cero, fechas nulas y `SIN_ACTIVIDAD`.
+
+La función filtra, calcula métricas globales y pagina en la base de datos con un
+máximo de 100 filas por solicitud; la pantalla usa 50. Por ello 2,500, 5,000 o
+10,000 clientes no dependen de un `limit=1000`, y la búsqueda, DNI, WhatsApp,
+servicio y filtros CRM se resuelven antes de devolver la página. Top clientes y
+recuperación siguen calculándose sobre todo el resultado filtrado, no solo sobre
+la página visible.
 
 Antes de aplicar la migración en staging hay que ejecutar las dos consultas
 read-only incluidas para guardar `pg_get_viewdef(...)` y la lista ordenada de
