@@ -2,12 +2,11 @@ import type { CSSProperties } from "react";
 import Link from "next/link";
 import { requireModuleAccess } from "@/lib/auth";
 import { CajaSidebar } from "@/components/CajaSidebar";
-import { supabaseSelect, supabaseSelectWhere } from "@/lib/supabaseServer";
+import { supabaseRpc, supabaseSelect, supabaseSelectWhere } from "@/lib/supabaseServer";
 import { Badge } from "@/components/Badge";
 import { FormField } from "@/components/FormField";
 import { Input } from "@/components/Input";
 import { Select } from "@/components/Select";
-import { combinarClientesCrm } from "@/lib/clientesCrmCompat";
 
 type Row = Record<string, any>;
 
@@ -18,7 +17,24 @@ type SearchParams = Promise<{
   contacto?: string;
   sede?: string;
   tipo?: string;
+  pagina?: string;
 }>;
+
+type ClientesCatalogoPayload = {
+  clientes?: Row[];
+  resumen?: {
+    total_clientes?: number;
+    total_gastado?: number;
+    total_visitas?: number;
+    con_whatsapp?: number;
+    vip_inactivos?: number;
+    historicos?: number;
+  };
+  top?: Row[];
+  recuperar?: Row[];
+};
+
+const CLIENTES_POR_PAGINA = 50;
 
 function money(value: any) {
   const numberValue = Number(value ?? 0);
@@ -130,6 +146,9 @@ function getEstado(row: Row) {
 
 function getActividad(row: Row) {
   const explicit = String(row.estado_actividad_crm ?? "").trim();
+  if (explicit === "ACTIVO") return "Activo";
+  if (explicit === "INACTIVO") return "Inactivo";
+  if (explicit === "SIN_ACTIVIDAD") return "Sin fecha";
   if (explicit) return explicit;
 
   const dias = Number(row.dias_sin_visita ?? 0);
@@ -140,6 +159,10 @@ function getActividad(row: Row) {
 
 function getContacto(row: Row) {
   const explicit = String(row.calidad_contacto_crm ?? "").trim();
+  if (explicit === "CON_WHATSAPP") return "Con WhatsApp";
+  if (explicit === "CON_DATO_PARCIAL") return "Con dato parcial";
+  if (explicit === "HISTORICO_SIN_CONTACTO") return "Histórico sin contacto";
+  if (explicit === "SIN_CONTACTO") return "Sin contacto";
   if (explicit) return explicit;
 
   if (String(row.whatsapp ?? "").trim()) return "Con WhatsApp";
@@ -256,24 +279,6 @@ const ghostButtonStyle: CSSProperties = {
   minHeight: "48px",
 };
 
-function matchesTipo(row: Row, tipo: string) {
-  if (tipo === "TODOS") return true;
-
-  const catalogoTipo = String(row.servicio_mas_comprado_catalogo_tipo ?? "");
-  const menuGroup = String(row.servicio_mas_comprado_menu_group ?? "");
-
-  if (tipo === "CATALOGO") return catalogoTipo === "SERVICIO";
-  if (tipo === "HISTORICO") {
-    return catalogoTipo === "SERVICIO_HISTORICO" || catalogoTipo === "PROMO_HISTORICA";
-  }
-  if (tipo === "PACK_2P") return menuGroup === "PACK_2P";
-  if (tipo === "PROMOS_1P") return menuGroup === "PROMOS_1P";
-  if (tipo === "SESSIONS") return menuGroup === "SESSIONS";
-  if (tipo === "GIFT_CARD") return catalogoTipo === "GIFT_CARD";
-
-  return true;
-}
-
 function groupServices(rows: Row[]) {
   const groups = new Map<string, Row>();
 
@@ -314,6 +319,27 @@ function groupServices(rows: Row[]) {
   );
 }
 
+function paginaSegura(value: string | undefined) {
+  const pagina = Number.parseInt(String(value ?? "1"), 10);
+  return Number.isSafeInteger(pagina) && pagina > 0 ? pagina : 1;
+}
+
+function hrefPagina(
+  params: { q: string; estado: string; actividad: string; contacto: string; sede: string; tipo: string },
+  pagina: number
+) {
+  const query = new URLSearchParams();
+  if (params.q) query.set("q", params.q);
+  if (params.estado !== "TODOS") query.set("estado", params.estado);
+  if (params.actividad !== "TODOS") query.set("actividad", params.actividad);
+  if (params.contacto !== "TODOS") query.set("contacto", params.contacto);
+  if (params.sede !== "TODAS") query.set("sede", params.sede);
+  if (params.tipo !== "TODOS") query.set("tipo", params.tipo);
+  if (pagina > 1) query.set("pagina", String(pagina));
+  const serialized = query.toString();
+  return serialized ? `/clientes?${serialized}` : "/clientes";
+}
+
 export default async function ClientesPage({ searchParams }: { searchParams: SearchParams }) {
   const session = await requireModuleAccess("clientes");
   const params = await searchParams;
@@ -324,60 +350,33 @@ export default async function ClientesPage({ searchParams }: { searchParams: Sea
   const contacto = String(params.contacto ?? "TODOS");
   const sede = String(params.sede ?? "TODAS");
   const tipo = String(params.tipo ?? "TODOS");
+  const paginaActual = paginaSegura(params.pagina);
+  const offset = (paginaActual - 1) * CLIENTES_POR_PAGINA;
 
   const config = await supabaseSelect<Row>("config_listas");
   const sedeFallback = ["Miraflores", "San Borja"];
   const sedesRows = list(config.data, "SEDES");
 
-  const [clientesCrmResult, maestrosResult] = await Promise.all([
+  const [clientesCatalogoResult, serviciosResult] = await Promise.all([
+    supabaseRpc<{ payload: ClientesCatalogoPayload }[]>("caja_clientes_crm_catalogo_paginado_v1", {
+      p_q: q || null,
+      p_estado: estado,
+      p_actividad: actividad,
+      p_contacto: contacto,
+      p_sede: sede,
+      p_tipo: tipo,
+      p_limit: CLIENTES_POR_PAGINA,
+      p_offset: offset,
+    }),
     supabaseSelectWhere<Row>(
-    "vista_clientes_crm_catalogo",
-    ["select=*", "order=total_gastado.desc", "limit=1000"].join("&")
+      "vista_servicios_crm_catalogo",
+      ["select=*", "order=total_ingresado.desc", "limit=300"].join("&")
     ),
-    supabaseSelectWhere<Row>("clientes", ["select=*", "order=updated_at.desc", "limit=1000"].join("&")),
   ]);
 
-  const serviciosResult = await supabaseSelectWhere<Row>(
-    "vista_servicios_crm_catalogo",
-    ["select=*", "order=total_ingresado.desc", "limit=300"].join("&")
-  );
-
-  const errors = [config.error, clientesCrmResult.error, maestrosResult.error, serviciosResult.error].filter(Boolean);
-
-  let clientes = combinarClientesCrm(clientesCrmResult.data ?? [], maestrosResult.data ?? []) as Row[];
-
-  if (q) {
-    const query = norm(q);
-    clientes = clientes.filter((row) => {
-      return (
-        norm(row.cliente).includes(query) ||
-        norm(row.whatsapp).includes(query) ||
-        norm(row.dni).includes(query) ||
-        norm(row.servicio_mas_comprado).includes(query) ||
-        norm(row.servicio_mas_comprado_catalogo_nombre).includes(query)
-      );
-    });
-  }
-
-  if (estado !== "TODOS") {
-    clientes = clientes.filter((row) => getEstado(row) === estado);
-  }
-
-  if (actividad !== "TODOS") {
-    clientes = clientes.filter((row) => getActividad(row) === actividad);
-  }
-
-  if (contacto !== "TODOS") {
-    clientes = clientes.filter((row) => getContacto(row) === contacto);
-  }
-
-  if (sede !== "TODAS") {
-    clientes = clientes.filter((row) => getSede(row) === sede);
-  }
-
-  if (tipo !== "TODOS") {
-    clientes = clientes.filter((row) => matchesTipo(row, tipo));
-  }
+  const errors = [config.error, clientesCatalogoResult.error, serviciosResult.error].filter(Boolean);
+  const catalogo = clientesCatalogoResult.data?.[0]?.payload;
+  const clientes = (catalogo?.clientes ?? []) as Row[];
 
   const serviciosBase = (serviciosResult.data ?? []).filter((row) => {
     if (sede !== "TODAS" && String(row.sede ?? "") !== sede) return false;
@@ -393,33 +392,17 @@ export default async function ClientesPage({ searchParams }: { searchParams: Sea
 
   const serviciosAgrupados = groupServices(serviciosBase);
 
-  const totalClientes = clientes.length;
-  const totalGastado = clientes.reduce(
-    (sum, row) => sum + Number(row.total_gastado ?? 0),
-    0
-  );
-  const totalVisitas = clientes.reduce(
-    (sum, row) => sum + Number(row.total_visitas ?? row.total_reservas ?? 0),
-    0
-  );
-  const conWhatsapp = clientes.filter((row) => getContacto(row) === "Con WhatsApp").length;
-  const vipInactivos = clientes.filter(
-    (row) => getEstado(row) === "VIP" && getActividad(row) === "Inactivo"
-  ).length;
-  const historicos = clientes.filter(
-    (row) =>
-      getCatalogoTipo(row) === "SERVICIO_HISTORICO" ||
-      getCatalogoTipo(row) === "PROMO_HISTORICA"
-  ).length;
-
-  const clientesTop = [...clientes]
-    .sort((a, b) => Number(b.total_gastado ?? 0) - Number(a.total_gastado ?? 0))
-    .slice(0, 8);
-
-  const clientesRecuperar = [...clientes]
-    .filter((row) => getActividad(row) === "Inactivo" || getEstado(row) === "Inactivo")
-    .sort((a, b) => Number(b.total_gastado ?? 0) - Number(a.total_gastado ?? 0))
-    .slice(0, 10);
+  const totalClientes = Number(catalogo?.resumen?.total_clientes ?? 0);
+  const totalGastado = Number(catalogo?.resumen?.total_gastado ?? 0);
+  const totalVisitas = Number(catalogo?.resumen?.total_visitas ?? 0);
+  const conWhatsapp = Number(catalogo?.resumen?.con_whatsapp ?? 0);
+  const vipInactivos = Number(catalogo?.resumen?.vip_inactivos ?? 0);
+  const historicos = Number(catalogo?.resumen?.historicos ?? 0);
+  const clientesTop = (catalogo?.top ?? []) as Row[];
+  const clientesRecuperar = (catalogo?.recuperar ?? []) as Row[];
+  const totalPaginas = Math.max(1, Math.ceil(totalClientes / CLIENTES_POR_PAGINA));
+  const paginaMostrada = Math.min(paginaActual, totalPaginas);
+  const filtrosPagina = { q, estado, actividad, contacto, sede, tipo };
 
   const serviciosTop = serviciosAgrupados.slice(0, 10);
 
@@ -687,8 +670,25 @@ export default async function ClientesPage({ searchParams }: { searchParams: Sea
           <div className="panelTitle">
             <div>
               <h2>Base de clientes</h2>
-              <p>Resumen CRM general cruzado con catálogo.</p>
+              <p>
+                Mostrando {totalClientes === 0 ? 0 : offset + 1}–{Math.min(offset + clientes.length, totalClientes)} de {numberFmt(totalClientes)} clientes.
+              </p>
             </div>
+            {totalClientes > CLIENTES_POR_PAGINA && (
+              <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+                {paginaMostrada > 1 && (
+                  <Link href={hrefPagina(filtrosPagina, paginaMostrada - 1)} style={ghostButtonStyle}>
+                    ← Anterior
+                  </Link>
+                )}
+                <span style={{ fontWeight: 850 }}>Página {paginaMostrada} de {totalPaginas}</span>
+                {paginaMostrada < totalPaginas && (
+                  <Link href={hrefPagina(filtrosPagina, paginaMostrada + 1)} style={ghostButtonStyle}>
+                    Siguiente →
+                  </Link>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="tableWrap desktopData">
