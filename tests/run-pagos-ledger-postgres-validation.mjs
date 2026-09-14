@@ -32,8 +32,9 @@ const migrations = Array.from({ length: 21 }, (_, index) =>
   ][index]}.sql`)
 );
 const fixture = resolve(root, "sql/tests/catalog_snapshot_active_fixture.sql");
+const ledgerViewFix = resolve(root, "sql/027_ledger_full_join_nullsafe.sql");
 const contract = resolve(root, "sql/tests/021_pagos_fecha_real_ledger_rollback.sql");
-const files = [...migrations, fixture, contract];
+const files = [...migrations, fixture, ledgerViewFix, contract];
 
 function fail(message) {
   throw new Error(message);
