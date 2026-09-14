@@ -16,6 +16,9 @@ export type GiftCardTemplateData = {
 const WIDTH = 1645;
 const HEIGHT = 1379;
 const BROWN = "#572817";
+// The safe region is 885 px wide. The inset absorbs italic/bold glyph overhangs
+// that are not represented by a font's advance width.
+const TEXT_MAX_WIDTH = 850;
 
 export function splitGiftCardServiceName(value: unknown) {
   const normalized = normalizeGiftCardPresentationText(value).trim();
@@ -145,6 +148,112 @@ export function wrapGiftCardText(value: string, maxCharacters: number) {
   return lines;
 }
 
+// DejaVu Sans Bold advance widths in em. Bold is the widest font weight used
+// by the dynamic content and provides a conservative envelope for regular text.
+const LATIN_UPPERCASE = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const LATIN_UPPERCASE_EM = [
+  0.774, 0.762, 0.734, 0.83, 0.683, 0.683, 0.821, 0.837, 0.372, 0.372,
+  0.775, 0.637, 0.995, 0.837, 0.85, 0.733, 0.85, 0.77, 0.72, 0.682, 0.812,
+  0.774, 1.103, 0.771, 0.724, 0.725,
+];
+const LATIN_LOWERCASE = "abcdefghijklmnopqrstuvwxyz";
+const LATIN_LOWERCASE_EM = [
+  0.675, 0.716, 0.593, 0.716, 0.678, 0.435, 0.716, 0.712, 0.343, 0.343,
+  0.665, 0.343, 1.042, 0.712, 0.687, 0.716, 0.716, 0.493, 0.595, 0.478,
+  0.712, 0.652, 0.924, 0.645, 0.652, 0.582,
+];
+const PUNCTUATION_EM: Record<string, number> = {
+  " ": 0.348,
+  "/": 0.365,
+  "+": 0.838,
+  "(": 0.457,
+  ")": 0.457,
+  ".": 0.38,
+  ",": 0.38,
+  ":": 0.4,
+  ";": 0.4,
+  "-": 0.42,
+  "–": 0.7,
+  "—": 1,
+  "'": 0.3,
+  "’": 0.3,
+  '"': 0.5,
+  "“": 0.5,
+  "”": 0.5,
+};
+
+function giftCardGlyphWidthEm(grapheme: string) {
+  const base = grapheme.normalize("NFD").replace(/\p{Mark}/gu, "");
+  if (!base) return 0;
+  const punctuation = PUNCTUATION_EM[base];
+  if (punctuation !== undefined) return punctuation;
+  if (/^\d$/u.test(base)) return 0.696;
+  const uppercaseIndex = LATIN_UPPERCASE.indexOf(base);
+  if (uppercaseIndex >= 0) return LATIN_UPPERCASE_EM[uppercaseIndex];
+  const lowercaseIndex = LATIN_LOWERCASE.indexOf(base);
+  if (lowercaseIndex >= 0) return LATIN_LOWERCASE_EM[lowercaseIndex];
+  if (/\p{Extended_Pictographic}/u.test(grapheme)) return 1.15;
+  return 0.85;
+}
+
+export function estimateGiftCardTextWidth(value: string, fontSize: number) {
+  const graphemes = Array.from(
+    new Intl.Segmenter("es", { granularity: "grapheme" }).segment(value),
+    ({ segment }) => segment,
+  );
+  return (
+    graphemes.reduce(
+      (width, grapheme) => width + giftCardGlyphWidthEm(grapheme),
+      0,
+    ) * fontSize
+  );
+}
+
+function wrapGiftCardTextByWidth(
+  value: string,
+  maxWidth: number,
+  fontSize: number,
+) {
+  const words = value.trim().replace(/\s+/g, " ").split(" ").filter(Boolean);
+  const lines: string[] = [];
+  let current = "";
+
+  for (const originalWord of words) {
+    let word = originalWord;
+    const candidate = current ? `${current} ${word}` : word;
+    if (estimateGiftCardTextWidth(candidate, fontSize) <= maxWidth) {
+      current = candidate;
+      continue;
+    }
+    if (current) {
+      lines.push(current);
+      current = "";
+    }
+    if (estimateGiftCardTextWidth(word, fontSize) <= maxWidth) {
+      current = word;
+      continue;
+    }
+    const graphemes = Array.from(
+      new Intl.Segmenter("es", { granularity: "grapheme" }).segment(word),
+      ({ segment }) => segment,
+    );
+    let fragment = "";
+    for (const grapheme of graphemes) {
+      const next = `${fragment}${grapheme}`;
+      if (fragment && estimateGiftCardTextWidth(next, fontSize) > maxWidth) {
+        lines.push(fragment);
+        fragment = grapheme;
+      } else {
+        fragment = next;
+      }
+    }
+    word = fragment;
+    if (word) current = word;
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
 export function fitGiftCardText(
   value: string,
   options: {
@@ -152,18 +261,32 @@ export function fitGiftCardText(
     maxLines: number;
     baseFontSize: number;
     minFontSize: number;
+    maxWidth?: number;
   },
 ) {
+  const minimum = options.maxWidth
+    ? Math.min(options.minFontSize, 10)
+    : options.minFontSize;
   for (
     let fontSize = options.baseFontSize;
-    fontSize >= options.minFontSize;
+    fontSize >= minimum;
     fontSize -= 2
   ) {
-    const maxCharacters = Math.floor(
-      (options.baseCharacters * options.baseFontSize) / fontSize,
-    );
-    const lines = wrapGiftCardText(value, maxCharacters);
+    const lines = options.maxWidth
+      ? wrapGiftCardTextByWidth(value, options.maxWidth, fontSize)
+      : wrapGiftCardText(
+          value,
+          Math.floor(
+            (options.baseCharacters * options.baseFontSize) / fontSize,
+          ),
+        );
     if (lines.length <= options.maxLines) return { lines, fontSize };
+  }
+  if (options.maxWidth) {
+    return {
+      lines: wrapGiftCardTextByWidth(value, options.maxWidth, minimum),
+      fontSize: minimum,
+    };
   }
   const maxCharacters = Math.ceil(Array.from(value).length / options.maxLines);
   return {
@@ -230,6 +353,7 @@ export function renderGiftCardSvg(
     maxLines: 3,
     baseFontSize: 70,
     minFontSize: 38,
+    maxWidth: TEXT_MAX_WIDTH,
   });
   const expiration = formatGiftCardDate(data.expirationDate);
   const isService = data.type === "SERVICIO";
@@ -239,11 +363,15 @@ export function renderGiftCardSvg(
         maxLines: 3,
         baseFontSize: 63,
         minFontSize: 34,
+        maxWidth: TEXT_MAX_WIDTH,
       })
-    : {
-        lines: [`GIFT CARD POR S/ ${Number(data.amount).toFixed(2)}`],
-        fontSize: 64,
-      };
+    : fitGiftCardText(`GIFT CARD POR S/ ${Number(data.amount).toFixed(2)}`, {
+        baseCharacters: 24,
+        maxLines: 1,
+        baseFontSize: 64,
+        minFontSize: 34,
+        maxWidth: TEXT_MAX_WIDTH,
+      });
   const descriptionLayout =
     isService && serviceDescription
       ? fitGiftCardText(serviceDescription, {
@@ -251,6 +379,7 @@ export function renderGiftCardSvg(
           maxLines: 6,
           baseFontSize: 32,
           minFontSize: 18,
+          maxWidth: TEXT_MAX_WIDTH,
         })
       : { lines: [], fontSize: 32 };
   const dedicationLayout = dedication
@@ -259,6 +388,7 @@ export function renderGiftCardSvg(
         maxLines: 5,
         baseFontSize: 25,
         minFontSize: 16,
+        maxWidth: TEXT_MAX_WIDTH,
       })
     : { lines: [], fontSize: 25 };
 

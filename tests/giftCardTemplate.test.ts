@@ -4,6 +4,7 @@ import { promisify } from "node:util";
 import test from "node:test";
 import { gunzip } from "node:zlib";
 import {
+  estimateGiftCardTextWidth,
   fitGiftCardText,
   normalizeGiftCardPresentationText,
   renderGiftCardSvg,
@@ -238,6 +239,45 @@ test("textos razonablemente largos se ajustan sin elipsis ni invasión de zonas 
   assert.ok(dedication.lines.length <= 4);
   assert.doesNotMatch(beneficiary.lines.join(" "), /…/);
   assert.doesNotMatch(dedication.lines.join(" "), /…/);
+});
+
+test("el fitting por ancho conserva máximos y reduce solo los glifos que no caben", () => {
+  const beneficiary = fitGiftCardText(
+    "MARÍA FERNANDA DE LOS ÁNGELES RODRÍGUEZ PEÑA Y JOSÉ NÚÑEZ SALAZAR",
+    {
+      baseCharacters: 22,
+      maxLines: 3,
+      baseFontSize: 70,
+      minFontSize: 38,
+      maxWidth: 850,
+    },
+  );
+  const service = fitGiftCardText(
+    "EXPERIENCIA RENACER PREMIUM PARA DOS PERSONAS",
+    {
+      baseCharacters: 24,
+      maxLines: 3,
+      baseFontSize: 63,
+      minFontSize: 34,
+      maxWidth: 850,
+    },
+  );
+  const short = fitGiftCardText("GLOW FACIAL", {
+    baseCharacters: 24,
+    maxLines: 3,
+    baseFontSize: 63,
+    minFontSize: 34,
+    maxWidth: 850,
+  });
+
+  assert.equal(beneficiary.fontSize, 54);
+  assert.equal(service.fontSize, 63);
+  assert.equal(short.fontSize, 63);
+  for (const layout of [beneficiary, service, short]) {
+    for (const line of layout.lines) {
+      assert.ok(estimateGiftCardTextWidth(line, layout.fontSize) <= 850);
+    }
+  }
 });
 
 test("la descarga no expone identificadores internos y conserva autenticación", async () => {
