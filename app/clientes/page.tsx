@@ -32,6 +32,11 @@ type ClientesCatalogoPayload = {
   };
   top?: Row[];
   recuperar?: Row[];
+  paginacion?: {
+    offset?: number;
+    limite?: number;
+    total_paginas?: number;
+  };
 };
 
 const CLIENTES_POR_PAGINA = 50;
@@ -321,7 +326,8 @@ function groupServices(rows: Row[]) {
 
 function paginaSegura(value: string | undefined) {
   const pagina = Number.parseInt(String(value ?? "1"), 10);
-  return Number.isSafeInteger(pagina) && pagina > 0 ? pagina : 1;
+  const maxPaginaEntera = Math.floor(2_147_483_647 / CLIENTES_POR_PAGINA);
+  return Number.isSafeInteger(pagina) && pagina > 0 && pagina <= maxPaginaEntera ? pagina : 1;
 }
 
 function hrefPagina(
@@ -400,8 +406,12 @@ export default async function ClientesPage({ searchParams }: { searchParams: Sea
   const historicos = Number(catalogo?.resumen?.historicos ?? 0);
   const clientesTop = (catalogo?.top ?? []) as Row[];
   const clientesRecuperar = (catalogo?.recuperar ?? []) as Row[];
-  const totalPaginas = Math.max(1, Math.ceil(totalClientes / CLIENTES_POR_PAGINA));
-  const paginaMostrada = Math.min(paginaActual, totalPaginas);
+  const offsetResuelto = Number(catalogo?.paginacion?.offset ?? offset);
+  const totalPaginas = Math.max(
+    1,
+    Number(catalogo?.paginacion?.total_paginas ?? Math.ceil(totalClientes / CLIENTES_POR_PAGINA))
+  );
+  const paginaMostrada = Math.floor(offsetResuelto / CLIENTES_POR_PAGINA) + 1;
   const filtrosPagina = { q, estado, actividad, contacto, sede, tipo };
 
   const serviciosTop = serviciosAgrupados.slice(0, 10);
@@ -671,7 +681,7 @@ export default async function ClientesPage({ searchParams }: { searchParams: Sea
             <div>
               <h2>Base de clientes</h2>
               <p>
-                Mostrando {totalClientes === 0 ? 0 : offset + 1}–{Math.min(offset + clientes.length, totalClientes)} de {numberFmt(totalClientes)} clientes.
+                Mostrando {totalClientes === 0 ? 0 : offsetResuelto + 1}–{Math.min(offsetResuelto + clientes.length, totalClientes)} de {numberFmt(totalClientes)} clientes.
               </p>
             </div>
             {totalClientes > CLIENTES_POR_PAGINA && (
