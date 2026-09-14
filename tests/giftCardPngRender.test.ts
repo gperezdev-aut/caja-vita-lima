@@ -132,11 +132,11 @@ test("Resvg pinta cada región de texto dinámico de la Gift Card", async () => 
   const regions = {
     expiracion: [48, 55, 458, 100],
     codigo: [48, 100, 458, 145],
-    beneficiario: [780, 315, 1505, 385],
-    servicio: [780, 530, 1505, 590],
-    descripcion: [780, 590, 1505, 635],
-    dedicatoria: [780, 640, 1505, 685],
-    duracion: [1080, 980, 1510, 1040],
+    beneficiario: [780, 325, 1505, 430],
+    servicio: [780, 575, 1505, 640],
+    descripcion: [780, 640, 1505, 695],
+    dedicatoria: [780, 695, 1505, 755],
+    duracion: [900, 990, 1450, 1060],
   } satisfies Record<string, [number, number, number, number]>;
 
   for (const [label, region] of Object.entries(regions)) {
