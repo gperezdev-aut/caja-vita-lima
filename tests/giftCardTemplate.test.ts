@@ -57,6 +57,10 @@ test("descarga por servicio renderiza fecha, código, beneficiario, duración y 
   assert.match(svg, /aromaterapia/);
   assert.match(svg, /65 MINUTOS/);
   assert.match(svg, /“Disfruta tu día”/);
+  assert.match(svg, /data-section="beneficiary"[^>]*font-size="70"/);
+  assert.match(svg, /data-section="service"[^>]*font-size="63"/);
+  assert.match(svg, /data-section="description"[^>]*font-size="32"/);
+  assert.match(svg, /data-section="duration"[^>]*font-size="42"/);
 });
 
 test("descarga por monto usa el importe, omite duración y omite dedicatoria vacía", () => {
@@ -100,6 +104,20 @@ test("servicio histórico usa included_es solo con coincidencia exacta de sus tr
   );
   assert.equal(
     resolveGiftCardServiceDescription(
+      { ...identity, serviceCode: "SVC_999" },
+      rows,
+    ),
+    GIFT_CARD_DESCRIPTION_FALLBACK,
+  );
+  assert.equal(
+    resolveGiftCardServiceDescription(
+      { ...identity, releaseId: "otro-release" },
+      rows,
+    ),
+    GIFT_CARD_DESCRIPTION_FALLBACK,
+  );
+  assert.equal(
+    resolveGiftCardServiceDescription(
       { ...identity, priceVersion: "otra-version" },
       rows,
     ),
@@ -107,8 +125,22 @@ test("servicio histórico usa included_es solo con coincidencia exacta de sus tr
   );
   assert.equal(
     resolveGiftCardServiceDescription(identity, [
+      { ...rows[0], included_es: null },
+    ]),
+    GIFT_CARD_DESCRIPTION_FALLBACK,
+  );
+  assert.equal(
+    resolveGiftCardServiceDescription(identity, [
       { ...rows[0], included_es: "   " },
     ]),
+    GIFT_CARD_DESCRIPTION_FALLBACK,
+  );
+  assert.equal(
+    resolveGiftCardServiceDescription(identity, [rows[0], { ...rows[0] }]),
+    GIFT_CARD_DESCRIPTION_FALLBACK,
+  );
+  assert.equal(
+    resolveGiftCardServiceDescription(identity, []),
     GIFT_CARD_DESCRIPTION_FALLBACK,
   );
 });
@@ -209,9 +241,10 @@ test("textos razonablemente largos se ajustan sin elipsis ni invasión de zonas 
 });
 
 test("la descarga no expone identificadores internos y conserva autenticación", async () => {
-  const route = await source(
-    "app/api/gift-cards/[giftcard_id]/download/route.ts",
-  );
+  const [route, catalogMigration] = await Promise.all([
+    source("app/api/gift-cards/[giftcard_id]/download/route.ts"),
+    source("sql/026_gift_card_catalog_history_read.sql"),
+  ]);
   const svg = renderGiftCardSvg(
     {
       code: "GC-VITA-ABCDEF12",
@@ -228,11 +261,22 @@ test("la descarga no expone identificadores internos y conserva autenticación",
   assert.match(route, /"Content-Type": "image\/png"/);
   assert.match(route, /filename="gift-card-\$\{code\}\.png"/);
   assert.match(route, /private, no-store/);
-  assert.match(route, /"caja_catalog_services"/);
-  assert.match(route, /service_code=eq\.\$\{serviceCode\}/);
-  assert.match(route, /release_id=eq\.\$\{releaseId\}/);
-  assert.match(route, /price_version=eq\.\$\{priceVersion\}/);
+  assert.match(route, /supabaseRpc<Row\[]>/);
+  assert.match(route, /"caja_gift_card_catalog_history_read_v1"/);
+  assert.match(route, /p_service_code: serviceCode/);
+  assert.match(route, /p_release_id: releaseId/);
+  assert.match(route, /p_price_version: priceVersion/);
   assert.match(route, /resolveGiftCardServiceDescription/);
+  assert.match(catalogMigration, /language sql\s+stable\s+security definer/i);
+  assert.match(catalogMigration, /from public\.caja_catalog_services s/i);
+  assert.match(catalogMigration, /s\.service_code = p_service_code/i);
+  assert.match(catalogMigration, /s\.release_id = p_release_id/i);
+  assert.match(catalogMigration, /s\.price_version = p_price_version/i);
+  assert.match(catalogMigration, /limit 2/i);
+  assert.match(
+    catalogMigration,
+    /grant execute on function public\.caja_gift_card_catalog_history_read_v1\(text, text, text\)\s+to service_role/i,
+  );
   assert.doesNotMatch(
     svg,
     /giftcard_id|request_id|movimiento_id|release_id|price_version|pago_id/,

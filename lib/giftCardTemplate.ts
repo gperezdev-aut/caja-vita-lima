@@ -181,10 +181,19 @@ function textLines(
     fontSize: number;
     weight?: number;
     style?: string;
+    section?: string;
   },
 ) {
-  const { x, y, lineHeight, fontSize, weight = 400, style = "" } = options;
-  return `<text x="${x}" y="${y}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="${fontSize}" font-weight="${weight}" fill="${BROWN}" ${style}>${lines
+  const {
+    x,
+    y,
+    lineHeight,
+    fontSize,
+    weight = 400,
+    style = "",
+    section = "content",
+  } = options;
+  return `<text data-section="${section}" x="${x}" y="${y}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="${fontSize}" font-weight="${weight}" fill="${BROWN}" ${style}>${lines
     .map(
       (line, index) =>
         `<tspan x="${x}" dy="${index === 0 ? 0 : lineHeight}">${escapeGiftCardXml(line)}</tspan>`,
@@ -217,33 +226,33 @@ export function renderGiftCardSvg(
   ).trim();
   const dedication = normalizeGiftCardPresentationText(data.dedication).trim();
   const beneficiaryLayout = fitGiftCardText(beneficiary, {
-    baseCharacters: 23,
+    baseCharacters: 22,
     maxLines: 3,
-    baseFontSize: 64,
-    minFontSize: 36,
+    baseFontSize: 70,
+    minFontSize: 38,
   });
   const expiration = formatGiftCardDate(data.expirationDate);
   const isService = data.type === "SERVICIO";
   const giftLayout = isService
     ? fitGiftCardText(serviceName, {
-        baseCharacters: 25,
+        baseCharacters: 24,
         maxLines: 3,
-        baseFontSize: 58,
-        minFontSize: 32,
+        baseFontSize: 63,
+        minFontSize: 34,
       })
     : {
         lines: [`GIFT CARD POR S/ ${Number(data.amount).toFixed(2)}`],
-        fontSize: 58,
+        fontSize: 64,
       };
   const descriptionLayout =
     isService && serviceDescription
       ? fitGiftCardText(serviceDescription, {
-          baseCharacters: 45,
+          baseCharacters: 43,
           maxLines: 6,
-          baseFontSize: 30,
+          baseFontSize: 32,
           minFontSize: 18,
         })
-      : { lines: [], fontSize: 30 };
+      : { lines: [], fontSize: 32 };
   const dedicationLayout = dedication
     ? fitGiftCardText(`“${dedication}”`, {
         baseCharacters: 52,
@@ -258,7 +267,7 @@ export function renderGiftCardSvg(
   const descriptionLineHeight = Math.round(descriptionLayout.fontSize * 1.24);
   const dedicationLineHeight = Math.round(dedicationLayout.fontSize * 1.24);
   const labelHeight = 25;
-  const labelGap = 18;
+  const labelGap = 20;
   const sections = [
     labelHeight +
       labelGap +
@@ -266,17 +275,20 @@ export function renderGiftCardSvg(
     labelHeight + labelGap + layoutHeight(giftLayout, giftLineHeight),
     ...(descriptionLayout.lines.length
       ? [
-          labelHeight +
+          18 +
+            labelHeight +
             labelGap +
             layoutHeight(descriptionLayout, descriptionLineHeight),
         ]
       : []),
-    ...(isService ? [42] : []),
+    ...(isService ? [46] : []),
     ...(dedicationLayout.lines.length
       ? [layoutHeight(dedicationLayout, dedicationLineHeight)]
       : []),
   ];
-  const availableHeight = 755;
+  const contentTop = isService ? 282 : 350;
+  const contentBottom = 1050;
+  const availableHeight = contentBottom - contentTop;
   const naturalHeight = sections.reduce((sum, height) => sum + height, 0);
   const naturalGap =
     sections.length > 1
@@ -294,17 +306,19 @@ export function renderGiftCardSvg(
   const scale = (value: number) =>
     Math.max(1, Math.round(value * verticalScale));
   const sectionGap = scale(naturalGap);
-  let cursorY = 292;
+  let cursorY = isService
+    ? contentTop
+    : contentTop + Math.max(0, (availableHeight - occupiedHeight) / 2);
 
-  const renderLabel = (label: string) => {
-    const svg = `<text x="1142" y="${cursorY + scale(labelHeight)}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="${scale(25)}" font-weight="500" letter-spacing="4" fill="${BROWN}">${label}</text>`;
+  const renderLabel = (label: string, section: string) => {
+    const svg = `<text data-section="${section}" x="1142" y="${cursorY + scale(labelHeight)}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="${scale(25)}" font-weight="500" letter-spacing="4" fill="${BROWN}">${label}</text>`;
     cursorY += scale(labelHeight + labelGap);
     return svg;
   };
   const renderLayout = (
     layout: GiftCardTextLayout,
     lineHeight: number,
-    options: { weight?: number; style?: string } = {},
+    options: { weight?: number; style?: string; section?: string } = {},
   ) => {
     const fontSize = scale(layout.fontSize);
     const scaledLineHeight = scale(lineHeight);
@@ -323,35 +337,44 @@ export function renderGiftCardSvg(
     return "";
   };
 
-  const beneficiarySvg = `${renderLabel("PARA")}${renderLayout(
+  const beneficiarySvg = `${renderLabel("PARA", "beneficiary-label")}${renderLayout(
     beneficiaryLayout,
     beneficiaryLineHeight,
-    { weight: 600 },
+    { weight: 600, section: "beneficiary" },
   )}`;
   addSectionGap();
-  const giftSvg = `${renderLabel(isService ? "SERVICIO" : "REGALO")}${
+  const giftSvg = `${renderLabel(isService ? "SERVICIO" : "REGALO", "gift-label")}${
     isService && data.serviceEmojiBase64
-      ? `<image href="data:image/png;base64,${data.serviceEmojiBase64}" x="1262" y="${cursorY - scale(labelHeight + labelGap) - scale(2)}" width="${scale(34)}" height="${scale(34)}" preserveAspectRatio="xMidYMid meet"/>`
+      ? `<image data-section="service-emoji" href="data:image/png;base64,${data.serviceEmojiBase64}" x="1262" y="${cursorY - scale(labelHeight + labelGap) - scale(2)}" width="${scale(34)}" height="${scale(34)}" preserveAspectRatio="xMidYMid meet"/>`
       : ""
-  }${renderLayout(giftLayout, giftLineHeight, { weight: 600 })}`;
-  const descriptionSvg = descriptionLayout.lines.length
-    ? `${addSectionGap()}${renderLabel("INCLUYE")}${renderLayout(
-        descriptionLayout,
-        descriptionLineHeight,
-        { weight: 400 },
-      )}`
-    : "";
+  }${renderLayout(giftLayout, giftLineHeight, {
+    weight: 600,
+    section: isService ? "service" : "amount",
+  })}`;
+  let descriptionSvg = "";
+  if (descriptionLayout.lines.length) {
+    addSectionGap();
+    descriptionSvg = `<line data-section="included-divider" x1="925" y1="${cursorY}" x2="1359" y2="${cursorY}" stroke="${BROWN}" stroke-width="1" opacity="0.28"/>`;
+    cursorY += scale(18);
+    descriptionSvg += renderLabel("INCLUYE", "included-label");
+    descriptionSvg += renderLayout(
+      descriptionLayout,
+      descriptionLineHeight,
+      { weight: 400, section: "description" },
+    );
+  }
   const durationSvg = isService
-    ? `${addSectionGap()}<text x="1142" y="${cursorY + scale(36)}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="${scale(38)}" font-weight="600" letter-spacing="1" fill="${BROWN}">${escapeGiftCardXml(Number(data.durationMinutes ?? 0))} MINUTOS</text>`
+    ? `${addSectionGap()}<text data-section="duration" x="1142" y="${cursorY + scale(40)}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="${scale(42)}" font-weight="700" letter-spacing="1" fill="${BROWN}">${escapeGiftCardXml(Number(data.durationMinutes ?? 0))} MINUTOS</text>`
     : "";
-  if (isService) cursorY += scale(42);
+  if (isService) cursorY += scale(46);
   const dedicationSvg = dedicationLayout.lines.length
     ? `${addSectionGap()}${renderLayout(
         dedicationLayout,
         dedicationLineHeight,
-        { style: 'font-style="italic"' },
+        { style: 'font-style="italic"', section: "dedication" },
       )}`
     : "";
+  const contentEnd = Math.round(cursorY);
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}" role="img" aria-labelledby="gift-card-title gift-card-description">
@@ -360,12 +383,14 @@ export function renderGiftCardSvg(
   <rect width="${WIDTH}" height="${HEIGHT}" fill="#fffdf9"/>
   <image href="data:image/png;base64,${templateBase64}" x="0" y="0" width="${WIDTH}" height="${HEIGHT}" preserveAspectRatio="xMidYMid meet"/>
   <rect x="48" y="45" width="410" height="112" rx="4" fill="#ffffff"/>
-  <text x="245" y="91" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="29" fill="${BROWN}">EXPIRA: ${escapeGiftCardXml(expiration)}</text>
-  <text x="245" y="132" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="27" fill="${BROWN}">CÓDIGO: ${escapeGiftCardXml(data.code)}</text>
-  ${beneficiarySvg}
-  ${giftSvg}
-  ${descriptionSvg}
-  ${durationSvg}
-  ${dedicationSvg}
+  <text data-section="expiration" x="245" y="91" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="29" fill="${BROWN}">EXPIRA: ${escapeGiftCardXml(expiration)}</text>
+  <text data-section="code" x="245" y="132" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="27" fill="${BROWN}">CÓDIGO: ${escapeGiftCardXml(data.code)}</text>
+  <g data-layout-top="${Math.round(contentTop)}" data-layout-bottom="${contentEnd}">
+    ${beneficiarySvg}
+    ${giftSvg}
+    ${descriptionSvg}
+    ${durationSvg}
+    ${dedicationSvg}
+  </g>
 </svg>`;
 }

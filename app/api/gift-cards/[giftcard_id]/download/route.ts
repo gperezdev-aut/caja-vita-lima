@@ -13,14 +13,15 @@ import {
   splitGiftCardServiceName,
 } from "@/lib/giftCardTemplate";
 import { renderGiftCardPng } from "@/lib/giftCardPng";
-import { supabaseSelectWhere } from "@/lib/supabaseServer";
+import { supabaseRpc, supabaseSelectWhere } from "@/lib/supabaseServer";
 
 type Row = Record<string, unknown>;
 const unzip = promisify(gunzip);
 
 function catalogIdentifier(value: unknown) {
-  const identifier = String(value ?? "").trim();
-  return /^[A-Za-z0-9._-]{1,100}$/.test(identifier) ? identifier : "";
+  return typeof value === "string" && /^[A-Za-z0-9._-]{1,100}$/.test(value)
+    ? value
+    : "";
 }
 
 export async function GET(
@@ -42,15 +43,19 @@ export async function GET(
   const priceVersion = catalogIdentifier(card.catalog_price_version);
   let serviceDescription = GIFT_CARD_DESCRIPTION_FALLBACK;
   if (card.tipo === "SERVICIO" && serviceCode && releaseId && priceVersion) {
-    const descriptionResult = await supabaseSelectWhere<Row>(
-      "caja_catalog_services",
-      `select=service_code,release_id,price_version,included_es&service_code=eq.${serviceCode}&release_id=eq.${releaseId}&price_version=eq.${priceVersion}&limit=2`,
+    const descriptionResult = await supabaseRpc<Row[]>(
+      "caja_gift_card_catalog_history_read_v1",
+      {
+        p_service_code: serviceCode,
+        p_release_id: releaseId,
+        p_price_version: priceVersion,
+      },
     );
     serviceDescription = descriptionResult.error
       ? GIFT_CARD_DESCRIPTION_FALLBACK
       : resolveGiftCardServiceDescription(
           { serviceCode, releaseId, priceVersion },
-          descriptionResult.data,
+          descriptionResult.data ?? [],
         );
   }
   const compressedTemplate = await readFile(

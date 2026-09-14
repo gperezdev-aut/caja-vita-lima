@@ -92,6 +92,40 @@ function changedPixels(
   return changed;
 }
 
+function changedPixelsOutside(
+  rendered: DecodedPng,
+  control: DecodedPng,
+  allowed: [number, number, number, number],
+) {
+  const [left, top, right, bottom] = allowed;
+  let changed = 0;
+  for (let y = 0; y < rendered.height; y += 1) {
+    for (let x = 0; x < rendered.width; x += 1) {
+      if (x >= left && x < right && y >= top && y < bottom) continue;
+      const offset = (y * rendered.width + x) * 4;
+      if (
+        rendered.pixels[offset] !== control.pixels[offset] ||
+        rendered.pixels[offset + 1] !== control.pixels[offset + 1] ||
+        rendered.pixels[offset + 2] !== control.pixels[offset + 2] ||
+        rendered.pixels[offset + 3] !== control.pixels[offset + 3]
+      )
+        changed += 1;
+    }
+  }
+  return changed;
+}
+
+function withoutSection(svg: string, section: string) {
+  const escaped = section.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return svg.replace(
+    new RegExp(
+      `<(?:text|line|image)\\b(?=[^>]*data-section="${escaped}")[\\s\\S]*?(?:<\\/text>|\\/>)`,
+      "g",
+    ),
+    "",
+  );
+}
+
 test("Resvg sin fuentes omite silenciosamente los elementos text", () => {
   const base =
     '<svg xmlns="http://www.w3.org/2000/svg" width="240" height="80"><rect width="240" height="80" fill="white"/>';
@@ -129,26 +163,28 @@ test("Resvg pinta cada región de texto dinámico de la Gift Card", async () => 
     },
     gunzipSync(compressed).toString("base64"),
   );
-  const controlSvg = svg.replace(/<text\b[\s\S]*?<\/text>/g, "");
   const rendered = decodeRgbaPng(renderGiftCardPng(svg));
-  const control = decodeRgbaPng(renderGiftCardPng(controlSvg));
 
   assert.equal(rendered.width, 1645);
   assert.equal(rendered.height, 1379);
   const regions = {
-    expiracion: [48, 55, 458, 100],
-    codigo: [48, 100, 458, 145],
-    beneficiario: [740, 285, 1545, 420],
-    servicio: [740, 430, 1545, 610],
-    descripcion: [740, 610, 1545, 770],
-    duracion: [740, 770, 1545, 900],
-    dedicatoria: [740, 880, 1545, 1035],
+    expiration: [48, 55, 458, 100],
+    code: [48, 100, 458, 145],
+    beneficiary: [700, 260, 1585, 1070],
+    service: [700, 260, 1585, 1070],
+    "included-label": [700, 260, 1585, 1070],
+    description: [700, 260, 1585, 1070],
+    duration: [700, 260, 1585, 1070],
+    dedication: [700, 260, 1585, 1070],
   } satisfies Record<string, [number, number, number, number]>;
 
-  for (const [label, region] of Object.entries(regions)) {
+  for (const [section, region] of Object.entries(regions)) {
+    const control = decodeRgbaPng(
+      renderGiftCardPng(withoutSection(svg, section)),
+    );
     assert.ok(
       changedPixels(rendered, control, region) > 20,
-      `Resvg no pintó texto visible en la región: ${label}`,
+      `Resvg no pintó texto visible en la región: ${section}`,
     );
   }
 });
@@ -221,6 +257,11 @@ test("Resvg renderiza sin desbordar los casos de composición obligatorios", asy
   for (const scenario of cases) {
     const svg = renderGiftCardSvg(scenario.data, template);
     const png = decodeRgbaPng(renderGiftCardPng(svg));
+    const controlSvg = svg.replace(
+      /<g data-layout-top="[^"]+" data-layout-bottom="[^"]+">[\s\S]*?<\/g>/,
+      "",
+    );
+    const control = decodeRgbaPng(renderGiftCardPng(controlSvg));
     assert.equal(png.width, 1645, scenario.label);
     assert.equal(png.height, 1379, scenario.label);
     assert.doesNotMatch(svg, /…/, scenario.label);
@@ -228,6 +269,13 @@ test("Resvg renderiza sin desbordar los casos de composición obligatorios", asy
       svg,
       /y="1[1-9]\d\d"[^>]*>.*(?:PARA|SERVICIO|REGALO|INCLUYE|MINUTOS)/,
       scenario.label,
+    );
+    const bottom = Number(svg.match(/data-layout-bottom="([\d.]+)"/)?.[1]);
+    assert.ok(bottom <= 1050, `${scenario.label}: contenido termina en ${bottom}`);
+    assert.equal(
+      changedPixelsOutside(png, control, [700, 260, 1585, 1070]),
+      0,
+      `${scenario.label}: hay píxeles dinámicos fuera de la región segura`,
     );
   }
 });
