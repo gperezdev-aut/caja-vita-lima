@@ -19,8 +19,9 @@ const migrations = names.map((name, index) =>
   resolve(root, `sql/${String(index + 1).padStart(3, "0")}_${name}.sql`),
 );
 const fixture = resolve(root, "sql/tests/catalog_snapshot_active_fixture.sql");
+const ledgerViewFix = resolve(root, "sql/027_ledger_full_join_nullsafe.sql");
 const contract = resolve(root, "sql/tests/022_reserva_a_atencion_rollback.sql");
-const files = [...migrations, fixture, contract];
+const files = [...migrations, fixture, ledgerViewFix, contract];
 const rolesSql = "do $$ begin if not exists (select 1 from pg_roles where rolname='anon') then create role anon nologin; end if; if not exists (select 1 from pg_roles where rolname='authenticated') then create role authenticated nologin; end if; if not exists (select 1 from pg_roles where rolname='service_role') then create role service_role nologin; end if; end $$;";
 
 function fail(message) { throw new Error(message); }
