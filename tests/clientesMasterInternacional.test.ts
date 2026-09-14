@@ -45,8 +45,28 @@ test("Clientes pagina desde el maestro sin depender de un límite de mil filas",
   assert.match(migration, /create or replace function public\.caja_clientes_crm_catalogo_paginado_v1/);
   assert.match(migration, /from public\.clientes c[\s\S]*left join public\.vista_clientes_crm_catalogo v on v\.cliente_id = c\.cliente_id/);
   assert.match(migration, /least\(greatest\(coalesce\(p_limit, 50\), 1\), 100\)/);
-  assert.match(migration, /limit p\.limite offset p\.desplazamiento/);
+  assert.match(migration, /limit p\.limite offset p\.desplazamiento_resuelto/);
   assert.doesNotMatch(migration, /limit=1000/);
+});
+
+test("una página solicitada fuera de rango se resuelve a la última página válida", async () => {
+  const [page, migration] = await Promise.all([
+    readFile(new URL("../app/clientes/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../sql/026_clientes_master_internacional.sql", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(migration, /paginacion as \([\s\S]*when r\.total_clientes = 0 then 0[\s\S]*least\([\s\S]*p\.desplazamiento,[\s\S]*\(\(r\.total_clientes - 1\) \/ p\.limite\) \* p\.limite/);
+  assert.match(migration, /'offset', desplazamiento_resuelto/);
+  assert.match(migration, /limit p\.limite offset p\.desplazamiento_resuelto/);
+  assert.match(page, /const offsetResuelto = Number\(catalogo\?\.paginacion\?\.offset \?\? offset\)/);
+  assert.match(page, /const paginaMostrada = Math\.floor\(offsetResuelto \/ CLIENTES_POR_PAGINA\) \+ 1/);
+});
+
+test("la búsqueda por servicio incluye ultimo_servicio del maestro sin CRM", async () => {
+  const migration = await readFile(new URL("../sql/026_clientes_master_internacional.sql", import.meta.url), "utf8");
+  assert.match(migration, /fila->>'servicio_mas_comprado' ilike/);
+  assert.match(migration, /fila->>'servicio_mas_comprado_catalogo_nombre' ilike/);
+  assert.match(migration, /fila->>'ultimo_servicio' ilike/);
 });
 
 test("la consulta paginada conserva métricas y rankings de todo el filtro", async () => {
