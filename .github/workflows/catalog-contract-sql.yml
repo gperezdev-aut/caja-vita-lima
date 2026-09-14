@@ -1,4 +1,4 @@
-name: Validate catalog snapshot PostgreSQL
+name: Validate SQL contracts PostgreSQL
 
 on:
   pull_request:
@@ -11,8 +11,6 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    env:
-      DATABASE_URL: postgresql://caja_ci:caja_ci_only_password@localhost:5432/caja_contract_test
     services:
       postgres:
         image: postgres:16-alpine
@@ -42,6 +40,27 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Validate 018, 019 and the rollback harness
-        shell: pwsh
-        run: npm run test:sql
+      - name: Create isolated contract databases
+        env:
+          DATABASE_URL: postgresql://caja_ci:caja_ci_only_password@localhost:5432/caja_contract_test
+        run: |
+          psql "$DATABASE_URL" --set ON_ERROR_STOP=1 <<'SQL'
+          CREATE DATABASE caja_catalog_contract;
+          CREATE DATABASE caja_ledger_contract;
+          CREATE DATABASE caja_reserva_contract;
+          SQL
+
+      - name: Validate catalog snapshot contract
+        env:
+          DATABASE_URL: postgresql://caja_ci:caja_ci_only_password@localhost:5432/caja_catalog_contract
+        run: node tests/run-catalog-snapshot-postgres-validation.mjs
+
+      - name: Validate payment ledger contract
+        env:
+          DATABASE_URL: postgresql://caja_ci:caja_ci_only_password@localhost:5432/caja_ledger_contract
+        run: node tests/run-pagos-ledger-postgres-validation.mjs
+
+      - name: Validate reservation-to-attention contract
+        env:
+          DATABASE_URL: postgresql://caja_ci:caja_ci_only_password@localhost:5432/caja_reserva_contract
+        run: node tests/run-reserva-atencion-postgres-validation.mjs
