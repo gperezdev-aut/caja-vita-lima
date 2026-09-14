@@ -4,7 +4,6 @@ import { promisify } from "node:util";
 import { gunzip } from "node:zlib";
 import { NextResponse } from "next/server";
 import { requireModuleAccess } from "@/lib/auth";
-import { readCanonicalCatalog } from "@/lib/catalogoCanonicoServer";
 import {
   renderGiftCardSvg,
   splitGiftCardServiceName,
@@ -18,6 +17,22 @@ const unzip = promisify(gunzip);
 function catalogIdentifier(value: unknown) {
   const identifier = String(value ?? "").trim();
   return /^[A-Za-z0-9._-]{1,100}$/.test(identifier) ? identifier : "";
+}
+
+async function readExactServiceDescription(card: Row) {
+  if (card.tipo !== "SERVICIO") return "";
+
+  const serviceCode = catalogIdentifier(card.service_code);
+  const releaseId = catalogIdentifier(card.catalog_release_id);
+  const priceVersion = catalogIdentifier(card.catalog_price_version);
+  if (!serviceCode || !releaseId || !priceVersion) return "";
+
+  const result = await supabaseSelectWhere<Row>(
+    "caja_catalog_services",
+    `select=included_es&service_code=eq.${encodeURIComponent(serviceCode)}&release_id=eq.${encodeURIComponent(releaseId)}&price_version=eq.${encodeURIComponent(priceVersion)}&limit=1`,
+  );
+  if (result.error) return "";
+  return String(result.data[0]?.included_es ?? "").trim();
 }
 
 export async function GET(
@@ -34,24 +49,8 @@ export async function GET(
   );
   const card = result.data[0];
   if (!card) return new NextResponse("No encontrada", { status: 404 });
-  const serviceCode = catalogIdentifier(card.service_code);
-  const releaseId = catalogIdentifier(card.catalog_release_id);
-  const priceVersion = catalogIdentifier(card.catalog_price_version);
-  let serviceDescription = "";
-  if (card.tipo === "SERVICIO" && serviceCode && releaseId && priceVersion) {
-    try {
-      const catalog = await readCanonicalCatalog();
-      const versionedService = catalog.services?.find(
-        (service) =>
-          service.service_code === serviceCode &&
-          service.release_id === releaseId &&
-          service.price_version === priceVersion,
-      );
-      serviceDescription = versionedService?.included_es ?? "";
-    } catch {
-      serviceDescription = "";
-    }
-  }
+
+  const serviceDescription = await readExactServiceDescription(card);
   const compressedTemplate = await readFile(
     join(
       process.cwd(),
