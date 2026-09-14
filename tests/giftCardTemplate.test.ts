@@ -9,6 +9,10 @@ import {
   renderGiftCardSvg,
   splitGiftCardServiceName,
 } from "../lib/giftCardTemplate.ts";
+import {
+  GIFT_CARD_DESCRIPTION_FALLBACK,
+  resolveGiftCardServiceDescription,
+} from "../lib/giftCardCatalog.ts";
 import { renderGiftCardPng } from "../lib/giftCardPng.ts";
 import { whatsappGiftCardUrl } from "../lib/giftCards.ts";
 
@@ -49,7 +53,8 @@ test("descarga por servicio renderiza fecha, código, beneficiario, duración y 
   assert.match(svg, /CÓDIGO: GC-VITA-A1B2C3D4/);
   assert.match(svg, /MARÍA PEÑA/);
   assert.match(svg, /✨ MASAJE RELAJANTE/);
-  assert.match(svg, /Masaje relajante \+ reflexología y aromaterapia/);
+  assert.match(svg, /Masaje relajante \+ reflexología y/);
+  assert.match(svg, /aromaterapia/);
   assert.match(svg, /65 MINUTOS/);
   assert.match(svg, /“Disfruta tu día”/);
 });
@@ -71,6 +76,79 @@ test("descarga por monto usa el importe, omite duración y omite dedicatoria vac
   assert.match(svg, /JOSÉ NÚÑEZ/);
   assert.doesNotMatch(svg, /MINUTOS/);
   assert.doesNotMatch(svg, /font-style="italic"/);
+  assert.doesNotMatch(svg, /INCLUYE/);
+});
+
+test("servicio histórico usa included_es solo con coincidencia exacta de sus tres identificadores", () => {
+  const identity = {
+    serviceCode: "SVC_047",
+    releaseId: "catalog-v1-web-4104385",
+    priceVersion: "catalog-v1-web-4104385",
+  };
+  const rows = [
+    {
+      service_code: "SVC_047",
+      release_id: "catalog-v1-web-4104385",
+      price_version: "catalog-v1-web-4104385",
+      included_es: "Limpieza + exfoliación + mascarilla de colágeno + luz LED",
+    },
+  ];
+
+  assert.equal(
+    resolveGiftCardServiceDescription(identity, rows),
+    rows[0].included_es,
+  );
+  assert.equal(
+    resolveGiftCardServiceDescription(
+      { ...identity, priceVersion: "otra-version" },
+      rows,
+    ),
+    GIFT_CARD_DESCRIPTION_FALLBACK,
+  );
+  assert.equal(
+    resolveGiftCardServiceDescription(identity, [
+      { ...rows[0], included_es: "   " },
+    ]),
+    GIFT_CARD_DESCRIPTION_FALLBACK,
+  );
+});
+
+test("composición amplia conserva textos largos completos, tildes, ñ y emoji", () => {
+  const beneficiary =
+    "María Fernanda de los Ángeles Rodríguez Peña y José Núñez";
+  const serviceName = "✨ Experiencia Renacer Premium para dos personas";
+  const serviceDescription =
+    "Masaje relajante y descontracturante + piedras calientes + exfoliación de espalda + mascarilla de ácido hialurónico + reflexología podal + hidratación corporal + aromaterapia con vela de soja artesanal + copa de vino o infusión";
+  const dedication =
+    "Con muchísimo cariño para que disfrutes esta pausa, renueves tu energía y recuerdes lo especial que eres para nosotros.";
+  const svg = renderGiftCardSvg(
+    {
+      code: "GC-VITA-LARGO001",
+      beneficiary,
+      type: "SERVICIO",
+      serviceName,
+      serviceDescription,
+      durationMinutes: 120,
+      amount: 280,
+      dedication,
+      expirationDate: "2027-09-13",
+    },
+    "VEVNUExBVEU=",
+  );
+
+  for (const word of [
+    "MARÍA",
+    "NÚÑEZ",
+    "EXPERIENCIA",
+    "ácido",
+    "aromaterapia",
+    "muchísimo",
+    "120 MINUTOS",
+  ]) {
+    assert.match(svg, new RegExp(word));
+  }
+  assert.match(svg, /INCLUYE/);
+  assert.doesNotMatch(svg, /…/);
 });
 
 test("normalización visual repara mojibake y preserva UTF-8 válido", () => {
@@ -150,14 +228,29 @@ test("la descarga no expone identificadores internos y conserva autenticación",
   assert.match(route, /"Content-Type": "image\/png"/);
   assert.match(route, /filename="gift-card-\$\{code\}\.png"/);
   assert.match(route, /private, no-store/);
-  assert.match(route, /await readCanonicalCatalog\(\)/);
-  assert.match(route, /service\.service_code === serviceCode/);
-  assert.match(route, /service\.release_id === releaseId/);
-  assert.match(route, /service\.price_version === priceVersion/);
+  assert.match(route, /"caja_catalog_services"/);
+  assert.match(route, /service_code=eq\.\$\{serviceCode\}/);
+  assert.match(route, /release_id=eq\.\$\{releaseId\}/);
+  assert.match(route, /price_version=eq\.\$\{priceVersion\}/);
+  assert.match(route, /resolveGiftCardServiceDescription/);
   assert.doesNotMatch(
     svg,
     /giftcard_id|request_id|movimiento_id|release_id|price_version|pago_id/,
   );
+});
+
+test("Ver y Descargar Gift Card consumen el mismo endpoint PNG", async () => {
+  const detail = await source("app/gift-cards/[giftcard_id]/page.tsx");
+  assert.match(
+    detail,
+    /src={`\/api\/gift-cards\/\$\{encodeURIComponent\(giftcardId\)\}\/download\?preview=1`}/,
+  );
+  assert.match(
+    detail,
+    /href={`\/api\/gift-cards\/\$\{encodeURIComponent\(giftcardId\)\}\/download`}/,
+  );
+  assert.match(detail, /<Image/);
+  assert.doesNotMatch(detail, /renderGiftCardSvg|renderGiftCardPng/);
 });
 
 test("PNG final es válido, conserva 1645 × 1379 y usa el mismo SVG del preview", async () => {

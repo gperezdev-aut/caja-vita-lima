@@ -4,7 +4,10 @@ import { promisify } from "node:util";
 import { gunzip } from "node:zlib";
 import { NextResponse } from "next/server";
 import { requireModuleAccess } from "@/lib/auth";
-import { readCanonicalCatalog } from "@/lib/catalogoCanonicoServer";
+import {
+  GIFT_CARD_DESCRIPTION_FALLBACK,
+  resolveGiftCardServiceDescription,
+} from "@/lib/giftCardCatalog";
 import {
   renderGiftCardSvg,
   splitGiftCardServiceName,
@@ -37,20 +40,18 @@ export async function GET(
   const serviceCode = catalogIdentifier(card.service_code);
   const releaseId = catalogIdentifier(card.catalog_release_id);
   const priceVersion = catalogIdentifier(card.catalog_price_version);
-  let serviceDescription = "";
+  let serviceDescription = GIFT_CARD_DESCRIPTION_FALLBACK;
   if (card.tipo === "SERVICIO" && serviceCode && releaseId && priceVersion) {
-    try {
-      const catalog = await readCanonicalCatalog();
-      const versionedService = catalog.services?.find(
-        (service) =>
-          service.service_code === serviceCode &&
-          service.release_id === releaseId &&
-          service.price_version === priceVersion,
-      );
-      serviceDescription = versionedService?.included_es ?? "";
-    } catch {
-      serviceDescription = "";
-    }
+    const descriptionResult = await supabaseSelectWhere<Row>(
+      "caja_catalog_services",
+      `select=service_code,release_id,price_version,included_es&service_code=eq.${serviceCode}&release_id=eq.${releaseId}&price_version=eq.${priceVersion}&limit=2`,
+    );
+    serviceDescription = descriptionResult.error
+      ? GIFT_CARD_DESCRIPTION_FALLBACK
+      : resolveGiftCardServiceDescription(
+          { serviceCode, releaseId, priceVersion },
+          descriptionResult.data,
+        );
   }
   const compressedTemplate = await readFile(
     join(

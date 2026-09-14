@@ -10,16 +10,19 @@ const compressed = await readFile(
   "public/gift-cards/gift-card-template-vita-lima.png.gz",
 );
 const template = await unzip(compressed);
+const serviceEmoji = await readFile("public/gift-cards/emoji/2728.png");
 const svg = renderGiftCardSvg(
   {
     code: "GC-VITA-TEST1234",
     beneficiary: "SANDRA MEJIA",
     type: "SERVICIO",
-    serviceName: "RELAX",
-    serviceDescription: "texto de prueba",
-    durationMinutes: 60,
-    amount: 120,
-    dedication: "Para mi reina",
+    serviceName: "✨ EXPERIENCIA RENACER PREMIUM",
+    serviceEmojiBase64: serviceEmoji.toString("base64"),
+    serviceDescription:
+      "Masaje relajante + piedras calientes + exfoliación de espalda + mascarilla de ácido hialurónico + reflexología podal + aromaterapia",
+    durationMinutes: 120,
+    amount: 280,
+    dedication: "Para que disfrutes una pausa muy especial",
     expirationDate: "2027-09-13",
   },
   template.toString("base64"),
