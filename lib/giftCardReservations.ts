@@ -11,3 +11,13 @@ export function calcularEfectivoMinimoAdicional(adelantoEstandar: number, cobert
 export function calcularSaldoRealPendiente(totalCita: number, pagosReales: number, coberturaGiftCard: number) {
   return redondearDinero(Math.max(totalCita - pagosReales - coberturaGiftCard, 0));
 }
+
+export function tieneIdentidadHistoricaGiftCard(
+  serviceCode: unknown,
+  releaseId: unknown,
+  priceVersion: unknown,
+) {
+  return [serviceCode, releaseId, priceVersion].every(
+    (value) => String(value ?? "").trim().length > 0,
+  );
+}
