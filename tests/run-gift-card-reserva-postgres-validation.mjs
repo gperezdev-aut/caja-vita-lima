@@ -10,7 +10,7 @@ const migrations=names.map((name,index)=>resolve(root,`sql/${String(index+1).pad
 const fixture=resolve(root,"sql/tests/catalog_snapshot_active_fixture.sql");
 const contract=resolve(root,"sql/tests/028_gift_card_reserva_ficha_rollback.sql");
 const files=[...migrations.slice(0,20),fixture,...migrations.slice(20),contract];
-const roles="do $$ begin if not exists(select 1 from pg_roles where rolname='anon') then create role anon nologin; end if; if not exists(select 1 from pg_roles where rolname='authenticated') then create role authenticated nologin; end if; if not exists(select 1 from pg_roles where rolname='service_role') then create role service_role nologin; end if; end $$;";
+const roles="create schema if not exists extensions; create extension if not exists pgcrypto with schema extensions; do $$ begin if not exists(select 1 from pg_roles where rolname='anon') then create role anon nologin; end if; if not exists(select 1 from pg_roles where rolname='authenticated') then create role authenticated nologin; end if; if not exists(select 1 from pg_roles where rolname='service_role') then create role service_role nologin; end if; end $$;";
 function fail(message){throw new Error(message)}
 function run(command,args,capture=false){const result=spawnSync(command,args,{cwd:root,encoding:capture?"utf8":undefined,stdio:capture?["ignore","pipe","inherit"]:"inherit"});if(result.error||result.status!==0)fail(`${command} failed validating migration 028`);return result.stdout?.trim()}
 for(const file of files)if(!existsSync(file))fail(`Required SQL file not found: ${file}`);
