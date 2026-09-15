@@ -61,7 +61,7 @@ begin
       'component_eligible', case when n in (8, 9) then false else true end,
       'component_eligibility_status', 'PENDING_REVIEW',
       'active', true,
-      'price_pen', case when n = 1 then 120 when n between 26 and 39 then 200 else 100 end,
+      'price_pen', case when n = 1 then 120 when n = 16 then 70 when n between 26 and 39 then 200 else 100 end,
       'previous_price_pen', null,
       'price_version', v_release_id,
       'valid_from', '2026-09-01T00:00:00+00:00',
