@@ -5,7 +5,7 @@ import { FormField } from "@/components/FormField";
 import { Input } from "@/components/Input";
 import { Select } from "@/components/Select";
 import { createSalidaAction } from "./actions";
-import { RegistrarSalidaWizard } from "./RegistrarSalidaWizard";
+import { RegistrarSalidaWizard } from "./RegistrarSalidaWizard.tsx";
 
 type Row = Record<string, any>;
 

@@ -13,7 +13,7 @@ import { Input } from "@/components/Input";
 import { Select } from "@/components/Select";
 import { Badge } from "@/components/Badge";
 import { createCierreCajaAction } from "./actions";
-import { CierreCajaWizard } from "./CierreCajaWizard";
+import { CierreCajaWizard } from "./CierreCajaWizard.tsx";
 
 type Row = Record<string, any>;
 

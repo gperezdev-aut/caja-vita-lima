@@ -5,6 +5,7 @@ type Props = {
   personas: number;
   onSelect: (value: AppointmentType) => void;
   onPersonas: (value: number) => void;
+  allowed?: AppointmentType[];
 };
 
 const choices: Array<{ value: AppointmentType; title: string; detail: string }> = [
@@ -14,14 +15,14 @@ const choices: Array<{ value: AppointmentType; title: string; detail: string }> 
   { value: "custom", title: "Atención personalizada", detail: "Combina componentes y precio acordado" },
 ];
 
-export function AppointmentTypeStep({ value, personas, onSelect, onPersonas }: Props) {
+export function AppointmentTypeStep({ value, personas, onSelect, onPersonas, allowed }: Props) {
   return (
     <section className="wizardPanel visible prepararStepPanel" aria-labelledby="type-step-title">
       <p className="stepKicker">Paso 2 de 6</p>
       <h2 id="type-step-title">¿Qué tipo de cita es?</h2>
       <p className="wizardIntro">Elige una opción para mostrar solo los servicios compatibles.</p>
       <div className="appointmentTypeGrid" role="radiogroup" aria-label="Tipo de cita">
-        {choices.map((choice) => (
+        {choices.filter((choice) => !allowed || allowed.includes(choice.value)).map((choice) => (
           <button
             key={choice.value}
             type="button"

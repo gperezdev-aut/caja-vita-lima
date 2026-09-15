@@ -14,19 +14,8 @@ function validNonNegativeMoney(value: string) {
 }
 
 export function validateCierreStep(step: number, draft: CierreDraft) {
-  if (step === 1 && (!draft.fecha || !draft.sede || !draft.responsable)) {
-    return "Completa fecha, sede y responsable.";
-  }
-
-  if (
-    step === 2 &&
-    (!validNonNegativeMoney(draft.cajaInicial) ||
-      !validNonNegativeMoney(draft.efectivoContado) ||
-      !validNonNegativeMoney(draft.pozoFondo))
-  ) {
-    return "Ingresa montos válidos que no sean negativos.";
-  }
-
+  if (step === 1 && (!draft.fecha || !draft.sede || !draft.responsable)) return "Completa fecha, sede y responsable.";
+  if (step === 2 && (!validNonNegativeMoney(draft.cajaInicial) || !validNonNegativeMoney(draft.efectivoContado) || !validNonNegativeMoney(draft.pozoFondo))) return "Ingresa montos válidos que no sean negativos.";
   return "";
 }
 

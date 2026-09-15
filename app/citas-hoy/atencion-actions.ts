@@ -88,12 +88,13 @@ export async function guardarAtencionReservadaAction(
     return { ok: false, error: "Asigna una terapista a cada persona." };
   }
 
+  // El wrapper delega el flujo normal a iniciar_o_cerrar_atencion_reservada_v1.
   const rpc = await supabaseRpc<{
     ok: boolean;
     completada: boolean;
     pendiente: number;
     reutilizado: boolean;
-  }>("iniciar_o_cerrar_atencion_reservada_v1", {
+  }>("iniciar_o_cerrar_atencion_reservada_gift_card_v1", {
     p_payload: {
       request_id: requestId,
       movimiento_id: movimientoId,

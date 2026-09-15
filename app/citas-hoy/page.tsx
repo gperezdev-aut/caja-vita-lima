@@ -119,10 +119,11 @@ type CitaPresentation = {
   comprobante: string;
   alerta: string;
   puedeAtender: boolean;
+  coberturaGiftCard: number;
 };
 
 function CitaMobileCard({ cita }: { cita: CitaPresentation }) {
-  const { row, movimientoId, terapistas, pendiente, comprobante, alerta, puedeAtender } = cita;
+  const { row, movimientoId, terapistas, pendiente, comprobante, alerta, puedeAtender, coberturaGiftCard } = cita;
   const comprobanteOk = comprobante.toUpperCase().includes("OK");
 
   return (
@@ -156,6 +157,7 @@ function CitaMobileCard({ cita }: { cita: CitaPresentation }) {
           <span>Pagado</span>
           <strong>{money(row.total_pagado)}</strong>
         </div>
+        {coberturaGiftCard > 0 && <div><span>Gift Card</span><strong>{money(coberturaGiftCard)}</strong></div>}
         <div className={pendiente > 0 ? "citasHoyMoneyPending" : ""}>
           <span>Pendiente</span>
           <strong>{money(row.pendiente)}</strong>
@@ -258,6 +260,7 @@ export default async function CitasHoyPage({
     "citas_reservadas",
     reservasQuery.join("&")
   );
+  const holds = await supabaseSelectWhere<Row>("gift_card_reservas", "select=movimiento_id,monto_reservado,estado&estado=in.(ACTIVA,CANJEADA)");
 
   const whatsappList = Array.from(
     new Set(
@@ -287,7 +290,7 @@ export default async function CitasHoyPage({
     }
   }
 
-  const errors = [config.error, movimientos.error, detalles.error, reservas.error, alertasResult.error].filter(
+  const errors = [config.error, movimientos.error, detalles.error, reservas.error, holds.error, alertasResult.error].filter(
     Boolean
   );
 
@@ -295,6 +298,7 @@ export default async function CitasHoyPage({
   const reservaPorId = new Map(
     reservas.data.map((row) => [String(row.reserva_id ?? ""), row])
   );
+  const holdPorMovimiento = new Map(holds.data.map((row) => [String(row.movimiento_id ?? ""), row]));
 
   for (const detalle of detalles.data) {
     const movimientoId = String(detalle.movimiento_id ?? "");
@@ -345,6 +349,7 @@ export default async function CitasHoyPage({
       (row.tipo_movimiento === "RESERVA_APP" && row.estado === "Reservado" && reserva?.estado === "PENDIENTE") ||
       (row.tipo_movimiento === "ATENCION_APP" && row.estado === "En atención" && reserva?.estado === "EN_ATENCION")
     );
+    const coberturaGiftCard = Number(holdPorMovimiento.get(movimientoId)?.monto_reservado ?? 0);
 
     return {
       row,
@@ -354,6 +359,7 @@ export default async function CitasHoyPage({
       comprobante,
       alerta,
       puedeAtender,
+      coberturaGiftCard,
     };
   });
 
@@ -545,6 +551,7 @@ export default async function CitasHoyPage({
                       <th>Terapista</th>
                       <th>Total</th>
                       <th>Pagado</th>
+                      <th>Gift Card</th>
                       <th>Pendiente</th>
                       <th>Estado</th>
                       <th>Comprobante</th>
@@ -563,6 +570,7 @@ export default async function CitasHoyPage({
                         comprobante,
                         alerta,
                         puedeAtender,
+                        coberturaGiftCard,
                       }) => (
                         <tr key={movimientoId}>
                           <td>{hourLabel(row.hora)}</td>
@@ -588,6 +596,7 @@ export default async function CitasHoyPage({
                           <td>{terapistas}</td>
                           <td>{money(row.total_cobrar)}</td>
                           <td>{money(row.total_pagado)}</td>
+                          <td>{coberturaGiftCard > 0 ? money(coberturaGiftCard) : "-"}</td>
                           <td>
                             <Badge tone={pendiente > 0 ? "warn" : "good"}>
                               {money(row.pendiente)}

@@ -7,7 +7,7 @@ import { requireModuleAccess } from "@/lib/auth";
 import { formatGiftCardDate } from "@/lib/giftCards";
 import { normalizeGiftCardPresentationText } from "@/lib/giftCardTemplate";
 import { supabaseSelectWhere } from "@/lib/supabaseServer";
-import { anularGiftCardAction, canjearGiftCardAction } from "../actions";
+import { anularGiftCardAction, canjearGiftCardAction, liberarReservaGiftCardAction } from "../actions";
 import { GiftCardShareButton } from "../GiftCardShareButton";
 
 type Row = Record<string, unknown>;
@@ -29,7 +29,7 @@ export default async function GiftCardDetailPage({
   );
   const card = cards.data[0];
   if (!card) notFound();
-  const [uses, payments, movements] = await Promise.all([
+  const [uses, payments, movements, holds] = await Promise.all([
     supabaseSelectWhere<Row>(
       "gift_card_usos",
       `select=*&giftcard_id=eq.${encodeURIComponent(giftcardId)}&order=created_at.desc`,
@@ -42,11 +42,18 @@ export default async function GiftCardDetailPage({
       "caja_movimientos",
       `select=movimiento_id,tipo_movimiento,fecha,hora,sede,total_pagado,source_type,source_id&movimiento_id=eq.${encodeURIComponent(String(card.movimiento_id ?? ""))}&limit=1`,
     ),
+    supabaseSelectWhere<Row>(
+      "gift_card_reservas",
+      `select=id,reserva_id,movimiento_id,monto_reservado,estado,responsable,created_at,released_at,redeemed_at&giftcard_id=eq.${encodeURIComponent(giftcardId)}&order=created_at.desc`,
+    ),
   ]);
   const status = String(card.estado_efectivo ?? card.estado ?? "EMITIDA");
   const code = String(card.codigo ?? "");
-  const canRedeem = ["EMITIDA", "PARCIALMENTE_USADA"].includes(status);
   const isAmount = card.tipo === "MONTO";
+  const activeHold = holds.data.find((hold) => hold.estado === "ACTIVA");
+  const activeReservation = activeHold ? (await supabaseSelectWhere<Row>("citas_reservadas", `select=fecha_cita,hora_cita,sede&reserva_id=eq.${encodeURIComponent(String(activeHold.reserva_id))}&limit=1`)).data[0] : null;
+  const canRedeem = ["EMITIDA", "PARCIALMENTE_USADA"].includes(status) && !activeHold;
+  const canPrepare = ["EMITIDA", "PARCIALMENTE_USADA"].includes(status) && Number(card.saldo_disponible ?? card.saldo_restante ?? 0) > 0 && (!activeHold || isAmount);
   const phone = String(
     card.whatsapp_beneficiario ?? card.whatsapp_comprador ?? "",
   );
@@ -86,6 +93,11 @@ export default async function GiftCardDetailPage({
               code={code}
               phone={phone}
             />
+          )}
+          {canPrepare && (
+            <Link className="primaryButton" href={`/preparar-cita?giftcard_id=${encodeURIComponent(giftcardId)}`}>
+              Preparar cita con esta Gift Card
+            </Link>
           )}
         </div>
         <section className="giftCardDetailGrid">
@@ -132,6 +144,9 @@ export default async function GiftCardDetailPage({
                       : "Uso completo disponible"}
                 </dd>
               </div>
+              <div><dt>Saldo financiero</dt><dd>{money(card.saldo_restante)}</dd></div>
+              <div><dt>Saldo comprometido</dt><dd>{money(card.saldo_comprometido)}</dd></div>
+              <div><dt>Saldo disponible</dt><dd>{money(card.saldo_disponible ?? card.saldo_restante)}</dd></div>
             </dl>
             <details className="technicalDetails">
               <summary>Movimiento y pago asociados</summary>
@@ -149,6 +164,7 @@ export default async function GiftCardDetailPage({
           </div>
           <div className="panel">
             <h2>Canje</h2>
+            {activeHold && <div className="alert">El canje manual está bloqueado porque existe una reserva activa.</div>}
             {canRedeem ? (
               <form
                 action={canjearGiftCardAction}
@@ -221,6 +237,24 @@ export default async function GiftCardDetailPage({
               )}
           </div>
         </section>
+        {activeHold && (
+          <section className="panel">
+            <h2>Reserva activa</h2>
+            <dl className="giftCardData">
+              <div><dt>Reserva</dt><dd>{String(activeHold.reserva_id)}</dd></div>
+              <div><dt>Cobertura reservada</dt><dd>{money(activeHold.monto_reservado)}</dd></div>
+              <div><dt>Estado del hold</dt><dd>{String(activeHold.estado)}</dd></div>
+              <div><dt>Fecha y hora</dt><dd>{String(activeReservation?.fecha_cita ?? "—")} · {String(activeReservation?.hora_cita ?? "").slice(0,5)}</dd></div>
+              <div><dt>Sede</dt><dd>{String(activeReservation?.sede ?? "—")}</dd></div>
+            </dl>
+            <form action={liberarReservaGiftCardAction} className="giftCardActionForm">
+              <input type="hidden" name="request_id" value={randomUUID()} />
+              <input type="hidden" name="giftcard_id" value={giftcardId} />
+              <input type="hidden" name="reserva_id" value={String(activeHold.reserva_id)} />
+              <button className="dangerButton" type="submit">Liberar reserva de Gift Card</button>
+            </form>
+          </section>
+        )}
         <section className="panel">
           <h2>Historial de usos</h2>
           {uses.data.length ? (

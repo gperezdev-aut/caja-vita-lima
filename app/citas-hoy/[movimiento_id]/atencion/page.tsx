@@ -35,7 +35,7 @@ export default async function AtencionReservadaPage({
   if (!movimiento) notFound();
 
   const reservaId = String(movimiento.source_id ?? "");
-  const [reservaResult, detallesResult, configResult] = await Promise.all([
+  const [reservaResult, detallesResult, configResult, holdResult] = await Promise.all([
     supabaseSelectWhere<Row>(
       "citas_reservadas",
       `select=reserva_id,source_id,cliente_id,estado,estado_ficha,requiere_confirmacion,confirmado_en,atencion_personalizada,tipo_atencion&reserva_id=eq.${encodeURIComponent(reservaId)}&limit=1`
@@ -45,6 +45,7 @@ export default async function AtencionReservadaPage({
       `select=persona_n,terapista,terapista_otro&movimiento_id=eq.${encodeURIComponent(movimientoId)}&order=persona_n.asc`
     ),
     supabaseSelect<Row>("config_listas"),
+    supabaseSelectWhere<Row>("gift_card_reservas", `select=monto_reservado,estado,giftcard_id&reserva_id=eq.${encodeURIComponent(reservaId)}&estado=in.(ACTIVA,CANJEADA)&limit=1`),
   ]);
   const reserva = reservaResult.data[0];
   const relacionValida = Boolean(
@@ -64,7 +65,8 @@ export default async function AtencionReservadaPage({
     const terapeuta = String(detalle.terapista ?? "");
     if (Number.isInteger(persona) && terapeuta && terapeuta !== "Por asignar") terapeutasActuales[persona] = terapeuta;
   }
-  const errors = [movimientoResult.error, reservaResult.error, detallesResult.error, configResult.error].filter(Boolean);
+  const hold = holdResult.data[0];
+  const errors = [movimientoResult.error, reservaResult.error, detallesResult.error, configResult.error, holdResult.error].filter(Boolean);
   const comprobante = String(
     movimiento.estado_comprobante_manual || movimiento.estado_boleta || movimiento.tipo_comprobante || "No definido"
   );
@@ -89,6 +91,7 @@ export default async function AtencionReservadaPage({
           <div><span>Movimiento</span><strong>{movimientoId}</strong></div>
           <div><span>Ficha</span><strong>{String(reserva?.estado_ficha ?? "-")}</strong></div>
           <div><span>Adelanto/pagado</span><strong>{money(movimiento.total_pagado)}</strong></div>
+          {hold && <div><span>Cobertura Gift Card</span><strong>{money(hold.monto_reservado)} · {String(hold.estado)}</strong></div>}
         </section>
 
         {errors.length > 0 && <div className="alert">No se pudo cargar toda la información: {errors.join(" · ")}</div>}
@@ -113,6 +116,7 @@ export default async function AtencionReservadaPage({
             terapistasActuales={terapeutasActuales}
             comprobante={comprobante}
             estadoActual={movimiento.estado === "En atención" ? "En atención" : "Reservado"}
+            coberturaGiftCard={Number(hold?.monto_reservado ?? 0)}
           />
         )}
       </section>

@@ -7,7 +7,7 @@ import { OperationalWizardStepper } from "@/components/OperationalWizardStepper"
 import { Select } from "@/components/Select";
 import { SubmitButton } from "@/components/SubmitButton";
 import { Textarea } from "@/components/Textarea";
-import { physicalValue, validateCierreStep, type CierreDraft } from "./cierreCajaWizard";
+import { physicalValue, validateCierreStep, type CierreDraft } from "./cierreCajaDomain";
 
 type Props = {
   action: (formData: FormData) => void | Promise<void>;
