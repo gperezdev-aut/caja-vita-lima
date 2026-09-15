@@ -257,8 +257,11 @@ test("normaliza Perú, EE. UU., Canadá, España y Japón y rechaza inconsistenc
   assert.deepEqual(normalizarTelefonoE164("4155552671", "US"), { ok: true, e164: "+14155552671", pais: "US" });
   assert.deepEqual(normalizarTelefonoE164("4165550123", "CA"), { ok: true, e164: "+14165550123", pais: "CA" });
   assert.deepEqual(normalizarTelefonoE164("612345678", "ES"), { ok: true, e164: "+34612345678", pais: "ES" });
+  assert.deepEqual(normalizarTelefonoE164("961234567", "CL"), { ok: true, e164: "+56961234567", pais: "CL" });
   assert.deepEqual(normalizarTelefonoE164("09012345678", "JP"), { ok: true, e164: "+819012345678", pais: "JP" });
   assert.deepEqual(normalizarTelefonoE164("+34612345678", "PE"), { ok: false });
+  assert.deepEqual(normalizarTelefonoE164("987654321", ""), { ok: false });
+  assert.deepEqual(normalizarTelefonoE164("987654321", "ZZ"), { ok: false });
   assert.deepEqual(normalizarTelefonoE164("123", "PE"), { ok: false });
 });
 

@@ -11,6 +11,7 @@ import { Input } from "@/components/Input";
 import { Select } from "@/components/Select";
 import { Textarea } from "@/components/Textarea";
 import { updateClienteCrmAction } from "./actions";
+import { clienteMaestroSinActividad } from "@/lib/clientesCrmCompat";
 
 type Row = Record<string, any>;
 
@@ -69,14 +70,15 @@ function dateInput(value: any) {
   return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : "";
 }
 
-function waHref(value: any) {
-  let digits = String(value ?? "").replace(/\D/g, "");
-  if (!digits) return "";
-  if (digits.length > 9 && digits.startsWith("51")) {
-    digits = digits.slice(2);
-  }
-  digits = digits.slice(-9);
-  return `https://wa.me/51${digits}`;
+function waHref(value: any, e164?: any) {
+  const canonical = String(e164 ?? "").replace(/\D/g, "");
+  if (/^[1-9]\d{7,14}$/.test(canonical)) return `https://wa.me/${canonical}`;
+
+  const raw = String(value ?? "").trim();
+  const digits = raw.replace(/\D/g, "");
+  return raw.startsWith("+") && /^[1-9]\d{7,14}$/.test(digits)
+    ? `https://wa.me/${digits}`
+    : "";
 }
 
 function timeShort(value: any) {
@@ -101,7 +103,7 @@ function getActividad(row: Row) {
   if (explicit) return explicit;
 
   const dias = Number(row.dias_sin_visita ?? 0);
-  if (!row.ultima_visita && !row.ultima_reserva) return "Sin fecha";
+  if (!row.ultima_visita_crm && !row.ultima_visita && !row.ultima_reserva_crm && !row.ultima_reserva) return "Sin actividad";
   if (dias > 60) return "Inactivo";
   return "Activo";
 }
@@ -245,14 +247,20 @@ export default async function ClienteDetallePage({
   const uiParams = await searchParams;
   const clienteId = decodeURIComponent(cliente_id);
 
-  const clienteResult = await supabaseSelectWhere<Row>(
+  const [clienteCrmResult, maestroResult] = await Promise.all([
+    supabaseSelectWhere<Row>(
     "vista_clientes_crm_catalogo",
     [
       "select=*",
       `cliente_id=eq.${encodeURIComponent(clienteId)}`,
       "limit=1",
     ].join("&")
-  );
+    ),
+    supabaseSelectWhere<Row>(
+      "clientes",
+      ["select=*", `cliente_id=eq.${encodeURIComponent(clienteId)}`, "limit=1"].join("&")
+    ),
+  ]);
 
   const historialResult = await supabaseSelectWhere<Row>(
     "vista_cliente_historial_crm",
@@ -264,14 +272,14 @@ export default async function ClienteDetallePage({
     ].join("&")
   );
 
-  const cliente = clienteResult.data?.[0];
+  const cliente = clienteCrmResult.data?.[0] ?? (maestroResult.data?.[0] ? clienteMaestroSinActividad(maestroResult.data[0]) : undefined);
 
-  if (!cliente && !clienteResult.error) {
+  if (!cliente && !clienteCrmResult.error && !maestroResult.error) {
     notFound();
   }
 
   const historial = historialResult.data ?? [];
-  const errors = [clienteResult.error, historialResult.error].filter(Boolean);
+  const errors = [clienteCrmResult.error, maestroResult.error, historialResult.error].filter(Boolean);
 
   const totalCobrarHistorial = historial.reduce(
     (sum, row) => sum + Number(row.total_cobrar ?? 0),
@@ -426,19 +434,17 @@ export default async function ClienteDetallePage({
             <InfoItem
               label="WhatsApp"
               value={
-                whatsapp === "-" ? (
-                  whatsapp
-                ) : (
-                  <a href={waHref(whatsapp)} target="_blank" rel="noopener noreferrer" style={{ color: "var(--green)" }}>
+                waHref(whatsapp, cliente?.whatsapp_e164) ? (
+                  <a href={waHref(whatsapp, cliente?.whatsapp_e164)} target="_blank" rel="noopener noreferrer" style={{ color: "var(--green)" }}>
                     {whatsapp}
                   </a>
-                )
+                ) : whatsapp
               }
             />
             <InfoItem label="DNI" value={dni} />
             <InfoItem label="Email" value={email} />
             <InfoItem label="Primera visita" value={dateShort(cliente?.primera_visita)} />
-            <InfoItem label="Última visita" value={dateShort(cliente?.ultima_visita)} />
+            <InfoItem label="Última visita" value={dateShort(cliente?.ultima_visita_crm ?? cliente?.ultima_visita ?? cliente?.ultima_reserva_crm ?? cliente?.ultima_reserva)} />
             <InfoItem label="Sede frecuente" value={safe(cliente?.sede_frecuente ?? cliente?.ultima_sede)} />
             <InfoItem label="Contacto CRM" value={getContacto(cliente ?? {})} />
             <InfoItem

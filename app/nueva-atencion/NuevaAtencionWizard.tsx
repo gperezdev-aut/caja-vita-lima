@@ -33,6 +33,7 @@ type Props = {
   terapistas: string[];
   estadosBoleta: string[];
   responsables: string[];
+  countries: { code: string; name: string; callingCode: string }[];
   defaultDate: string;
   defaultTime: string;
   canSaveCatalog: boolean;
@@ -54,6 +55,7 @@ export function NuevaAtencionWizard({
   terapistas,
   estadosBoleta,
   responsables,
+  countries,
   defaultDate,
   defaultTime,
   canSaveCatalog,
@@ -67,6 +69,7 @@ export function NuevaAtencionWizard({
 
   const [cliente, setCliente] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
+  const [paisTelefono, setPaisTelefono] = useState("");
   const [dni, setDni] = useState("");
   const [pax, setPax] = useState(1);
 
@@ -80,7 +83,7 @@ export function NuevaAtencionWizard({
   const [terapista1, setTerapista1] = useState("");
   const [terapista2, setTerapista2] = useState("");
 
-  const [clienteAlerta, setClienteAlerta] = useState<{ cliente: string; alerta: string } | null>(null);
+  const [clienteAlerta, setClienteAlerta] = useState<{ cliente: string; alerta: string; error?: string } | null>(null);
 
   const [paid, setPaid] = useState(0);
   const [metodo, setMetodo] = useState("");
@@ -126,8 +129,8 @@ export function NuevaAtencionWizard({
           ? "Pago parcial"
           : "Pagado completo";
 
-  async function checkClienteAlerta(nextWhatsapp: string, nextDni: string) {
-    const validWhatsapp = /^\d{9}$/.test(nextWhatsapp) ? nextWhatsapp : "";
+  async function checkClienteAlerta(nextWhatsapp: string, nextPais: string, nextDni: string) {
+    const validWhatsapp = nextWhatsapp.trim();
     const validDni = /^\d{8}$/.test(nextDni) ? nextDni : "";
 
     if (!validWhatsapp && !validDni) {
@@ -136,8 +139,8 @@ export function NuevaAtencionWizard({
     }
 
     try {
-      const result = await lookupClienteAlertaAction(validWhatsapp, validDni);
-      setClienteAlerta(result.alerta ? result : null);
+      const result = await lookupClienteAlertaAction(validWhatsapp, nextPais, validDni);
+      setClienteAlerta(result.alerta || result.error ? result : null);
     } catch {
       setClienteAlerta(null);
     }
@@ -203,8 +206,8 @@ export function NuevaAtencionWizard({
 
     if (step === 2) {
       if (!cliente.trim()) return "Ingresa el nombre del cliente.";
-      if (whatsapp && !/^\d{9}$/.test(whatsapp)) {
-        return "El WhatsApp debe tener 9 dígitos.";
+      if (whatsapp && !paisTelefono) {
+        return "Selecciona el país del WhatsApp. No se asumirá Perú automáticamente.";
       }
       if (dni && !/^\d{8}$/.test(dni)) {
         return "El DNI debe tener 8 dígitos.";
@@ -316,15 +319,24 @@ export function NuevaAtencionWizard({
           </label>
 
           <label className="atencionField">
+            País del WhatsApp
+            <select name="pais_telefono" value={paisTelefono} onChange={(e) => { setPaisTelefono(e.target.value); setClienteAlerta(null); }}>
+              <option value="">Selecciona país</option>
+              {countries.map((country) => <option key={country.code} value={country.code}>{country.name} (+{country.callingCode})</option>)}
+            </select>
+          </label>
+
+          <label className="atencionField">
             WhatsApp
             <input
               name="whatsapp"
               value={whatsapp}
-              onChange={(e) => setWhatsapp(e.target.value.replace(/\D/g, "").slice(0, 9))}
-              onBlur={() => checkClienteAlerta(whatsapp, dni)}
-              inputMode="numeric"
-              placeholder="Ej. 987654321"
+              onChange={(e) => setWhatsapp(e.target.value.replace(/[^\d+()\-\s]/g, ""))}
+              onBlur={() => checkClienteAlerta(whatsapp, paisTelefono, dni)}
+              inputMode="tel"
+              placeholder="Ej. 987654321 o +34 612 345 678"
             />
+            <small>El país es obligatorio si ingresas un número local.</small>
           </label>
 
           <label className="atencionField">
@@ -333,7 +345,7 @@ export function NuevaAtencionWizard({
               name="dni"
               value={dni}
               onChange={(e) => setDni(e.target.value.replace(/\D/g, "").slice(0, 8))}
-              onBlur={() => checkClienteAlerta(whatsapp, dni)}
+              onBlur={() => checkClienteAlerta(whatsapp, paisTelefono, dni)}
               inputMode="numeric"
               placeholder="Opcional"
             />
