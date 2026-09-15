@@ -45,7 +45,8 @@ test("Clientes pagina desde el maestro sin depender de un límite de mil filas",
   assert.match(migration, /create or replace function public\.caja_clientes_crm_catalogo_paginado_v1/);
   assert.match(migration, /from public\.clientes c[\s\S]*left join public\.vista_clientes_crm_catalogo v on v\.cliente_id = c\.cliente_id/);
   assert.match(migration, /least\(greatest\(coalesce\(p_limit, 50\), 1\), 100\)/);
-  assert.match(migration, /limit p\.limite offset p\.desplazamiento_resuelto/);
+  assert.match(migration, /limit \(select limite from paginacion\)[\s\S]*offset \(select desplazamiento_resuelto from paginacion\)/);
+  assert.doesNotMatch(migration, /limit p\.limite offset p\.desplazamiento_resuelto/);
   assert.doesNotMatch(migration, /limit=1000/);
 });
 
@@ -57,7 +58,7 @@ test("una página solicitada fuera de rango se resuelve a la última página vá
 
   assert.match(migration, /paginacion as \([\s\S]*when r\.total_clientes = 0 then 0[\s\S]*least\([\s\S]*p\.desplazamiento,[\s\S]*\(\(r\.total_clientes - 1\) \/ p\.limite\) \* p\.limite/);
   assert.match(migration, /'offset', desplazamiento_resuelto/);
-  assert.match(migration, /limit p\.limite offset p\.desplazamiento_resuelto/);
+  assert.match(migration, /limit \(select limite from paginacion\)[\s\S]*offset \(select desplazamiento_resuelto from paginacion\)/);
   assert.match(page, /const offsetResuelto = Number\(catalogo\?\.paginacion\?\.offset \?\? offset\)/);
   assert.match(page, /const paginaMostrada = Math\.floor\(offsetResuelto \/ CLIENTES_POR_PAGINA\) \+ 1/);
 });
