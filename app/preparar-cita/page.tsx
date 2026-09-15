@@ -3,7 +3,7 @@ import { getCountries, getCountryCallingCode } from "libphonenumber-js/max";
 import { CajaSidebar } from "@/components/CajaSidebar";
 import { requireModuleAccess } from "@/lib/auth";
 import { leerCatalogoPrepararCita } from "@/lib/catalogoPrepararCita";
-import { supabaseSelect, supabaseSelectWhere } from "@/lib/supabaseServer";
+import { supabaseRpc, supabaseSelect, supabaseSelectWhere } from "@/lib/supabaseServer";
 import { PrepararCitaForm, type GiftCardAppointmentContext } from "./PrepararCitaForm";
 import { serviceDisplayName } from "./prepararCitaWizard";
 
@@ -71,9 +71,10 @@ export default async function PrepararCitaPage({ searchParams }: { searchParams:
     else {
       let lockedService: GiftCardAppointmentContext["lockedService"] = null;
       if (card.tipo === "SERVICIO") {
-        const historical = await supabaseSelectWhere<Row>("caja_catalog_services", `select=service_code,name_es,duration_min,price_pen,category,modality,people_min,people_max,selection_rule,reservation_behavior&release_id=eq.${encodeURIComponent(String(card.catalog_release_id ?? ""))}&service_code=eq.${encodeURIComponent(String(card.service_code ?? ""))}&price_version=eq.${encodeURIComponent(String(card.catalog_price_version ?? ""))}&limit=2`);
-        const service = historical.data[0];
-        if (historical.error || historical.data.length !== 1 || !service) giftCardError = "No se pudo resolver exactamente el servicio histórico de la Gift Card.";
+        const historical = await supabaseRpc<Row[]>("caja_gift_card_catalog_appointment_history_v1", { p_service_code: String(card.service_code ?? ""), p_release_id: String(card.catalog_release_id ?? ""), p_price_version: String(card.catalog_price_version ?? "") });
+        const rows = historical.data ?? [];
+        const service = rows[0];
+        if (historical.error || rows.length !== 1 || !service) giftCardError = "No se pudo resolver exactamente el servicio histórico de la Gift Card.";
         else lockedService = { code: String(service.service_code), name: serviceDisplayName(String(card.service_name_snapshot ?? service.name_es)), duration: Number(card.service_duration_min ?? service.duration_min), price: Number(card.service_price_pen ?? service.price_pen), category: String(service.category), modality: String(service.modality), peopleMin: Number(service.people_min), peopleMax: Number(service.people_max), selectionRule: String(service.selection_rule), reservationBehavior: String(service.reservation_behavior) };
       }
       if (!giftCardError) giftCard = { id: giftcardId, code: String(card.codigo), type: String(card.tipo) as "SERVICIO" | "MONTO", beneficiary: String(card.destinatario ?? ""), phone: String(card.whatsapp_beneficiario ?? ""), available: Number(card.saldo_disponible ?? 0), lockedService };

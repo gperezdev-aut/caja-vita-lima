@@ -64,7 +64,14 @@ begin
 end $$;
 
 do $$ begin
-  if has_table_privilege('anon','public.gift_card_reservas','SELECT') or has_table_privilege('authenticated','public.gift_card_reservas','SELECT') or not has_function_privilege('service_role','public.preparar_ficha_cita_gift_card_v1(jsonb)','EXECUTE') then raise exception 'SEGURIDAD_028_INVALIDA'; end if;
+  if (select count(*) from public.caja_gift_card_catalog_appointment_history_v1('SVC_016','catalog-v1-web-4104385','catalog-v1-web-4104385'))<>1
+    or (select count(*) from public.caja_gift_card_catalog_appointment_history_v1('SVC_016','catalog-v1-web-4104385','otra-version'))<>0 then raise exception 'HISTORICO_028_NO_EXACTO'; end if;
+  if has_table_privilege('anon','public.gift_card_reservas','SELECT')
+    or has_table_privilege('authenticated','public.gift_card_reservas','SELECT')
+    or has_function_privilege('anon','public.caja_gift_card_catalog_appointment_history_v1(text,text,text)','EXECUTE')
+    or has_function_privilege('authenticated','public.caja_gift_card_catalog_appointment_history_v1(text,text,text)','EXECUTE')
+    or not has_function_privilege('service_role','public.caja_gift_card_catalog_appointment_history_v1(text,text,text)','EXECUTE')
+    or not has_function_privilege('service_role','public.preparar_ficha_cita_gift_card_v1(jsonb)','EXECUTE') then raise exception 'SEGURIDAD_028_INVALIDA'; end if;
 end $$;
 
 rollback;

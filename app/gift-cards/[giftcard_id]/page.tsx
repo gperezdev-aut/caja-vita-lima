@@ -50,10 +50,14 @@ export default async function GiftCardDetailPage({
   const status = String(card.estado_efectivo ?? card.estado ?? "EMITIDA");
   const code = String(card.codigo ?? "");
   const isAmount = card.tipo === "MONTO";
-  const activeHold = holds.data.find((hold) => hold.estado === "ACTIVA");
-  const activeReservation = activeHold ? (await supabaseSelectWhere<Row>("citas_reservadas", `select=fecha_cita,hora_cita,sede&reserva_id=eq.${encodeURIComponent(String(activeHold.reserva_id))}&limit=1`)).data[0] : null;
-  const canRedeem = ["EMITIDA", "PARCIALMENTE_USADA"].includes(status) && !activeHold;
-  const canPrepare = ["EMITIDA", "PARCIALMENTE_USADA"].includes(status) && Number(card.saldo_disponible ?? card.saldo_restante ?? 0) > 0 && (!activeHold || isAmount);
+  const activeHolds = holds.data.filter((hold) => hold.estado === "ACTIVA");
+  const activeHoldReservations = await Promise.all(activeHolds.map(async (hold) => ({
+    hold,
+    reservation: (await supabaseSelectWhere<Row>("citas_reservadas", `select=fecha_cita,hora_cita,sede&reserva_id=eq.${encodeURIComponent(String(hold.reserva_id))}&limit=1`)).data[0] ?? null,
+  })));
+  const hasActiveHolds = activeHolds.length > 0;
+  const canRedeem = ["EMITIDA", "PARCIALMENTE_USADA"].includes(status) && !hasActiveHolds && !holds.error;
+  const canPrepare = ["EMITIDA", "PARCIALMENTE_USADA"].includes(status) && Number(card.saldo_disponible ?? card.saldo_restante ?? 0) > 0 && (isAmount || !hasActiveHolds);
   const phone = String(
     card.whatsapp_beneficiario ?? card.whatsapp_comprador ?? "",
   );
@@ -164,7 +168,7 @@ export default async function GiftCardDetailPage({
           </div>
           <div className="panel">
             <h2>Canje</h2>
-            {activeHold && <div className="alert">El canje manual está bloqueado porque existe una reserva activa.</div>}
+            {hasActiveHolds && <div className="alert">El canje manual está bloqueado porque existe al menos una reserva activa.</div>}
             {canRedeem ? (
               <form
                 action={canjearGiftCardAction}
@@ -237,22 +241,26 @@ export default async function GiftCardDetailPage({
               )}
           </div>
         </section>
-        {activeHold && (
+        {activeHoldReservations.length > 0 && (
           <section className="panel">
-            <h2>Reserva activa</h2>
-            <dl className="giftCardData">
-              <div><dt>Reserva</dt><dd>{String(activeHold.reserva_id)}</dd></div>
-              <div><dt>Cobertura reservada</dt><dd>{money(activeHold.monto_reservado)}</dd></div>
-              <div><dt>Estado del hold</dt><dd>{String(activeHold.estado)}</dd></div>
-              <div><dt>Fecha y hora</dt><dd>{String(activeReservation?.fecha_cita ?? "—")} · {String(activeReservation?.hora_cita ?? "").slice(0,5)}</dd></div>
-              <div><dt>Sede</dt><dd>{String(activeReservation?.sede ?? "—")}</dd></div>
-            </dl>
-            <form action={liberarReservaGiftCardAction} className="giftCardActionForm">
-              <input type="hidden" name="request_id" value={randomUUID()} />
-              <input type="hidden" name="giftcard_id" value={giftcardId} />
-              <input type="hidden" name="reserva_id" value={String(activeHold.reserva_id)} />
-              <button className="dangerButton" type="submit">Liberar reserva de Gift Card</button>
-            </form>
+            <h2>Reservas activas</h2>
+            {activeHoldReservations.map(({ hold, reservation }) => (
+              <article key={String(hold.id)} className="giftCardActionForm">
+                <dl className="giftCardData">
+                  <div><dt>Reserva</dt><dd>{String(hold.reserva_id)}</dd></div>
+                  <div><dt>Cobertura reservada</dt><dd>{money(hold.monto_reservado)}</dd></div>
+                  <div><dt>Estado del hold</dt><dd>{String(hold.estado)}</dd></div>
+                  <div><dt>Fecha y hora</dt><dd>{String(reservation?.fecha_cita ?? "—")} · {String(reservation?.hora_cita ?? "").slice(0,5)}</dd></div>
+                  <div><dt>Sede</dt><dd>{String(reservation?.sede ?? "—")}</dd></div>
+                </dl>
+                <form action={liberarReservaGiftCardAction}>
+                  <input type="hidden" name="request_id" value={randomUUID()} />
+                  <input type="hidden" name="giftcard_id" value={giftcardId} />
+                  <input type="hidden" name="reserva_id" value={String(hold.reserva_id)} />
+                  <button className="dangerButton" type="submit">Liberar esta reserva de Gift Card</button>
+                </form>
+              </article>
+            ))}
           </section>
         )}
         <section className="panel">

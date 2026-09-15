@@ -143,9 +143,10 @@ export async function prepararCitaAction(
     giftCard = giftResult.data[0] ?? null;
     if (giftResult.error || !giftCard || !["EMITIDA", "PARCIALMENTE_USADA"].includes(String(giftCard.estado_efectivo)) || Number(giftCard.saldo_disponible ?? 0) <= 0) return { ok: false, error: "La Gift Card ya no está disponible para reservar." };
     if (giftCard.tipo === "SERVICIO") {
-      const history = await supabaseSelectWhere<Row>("caja_catalog_services", `select=service_code,name_es,duration_min,price_pen,category,commercial_group,modality,people_min,people_max,selection_rule,reservation_behavior,release_id,price_version,valid_from,valid_to&release_id=eq.${encodeURIComponent(String(giftCard.catalog_release_id ?? ""))}&service_code=eq.${encodeURIComponent(String(giftCard.service_code ?? ""))}&price_version=eq.${encodeURIComponent(String(giftCard.catalog_price_version ?? ""))}&limit=2`);
-      if (history.error || history.data.length !== 1) return { ok: false, error: "No se pudo validar el servicio histórico exacto de la Gift Card." };
-      historicalService = history.data[0];
+      const history = await supabaseRpc<Row[]>("caja_gift_card_catalog_appointment_history_v1", { p_service_code: String(giftCard.service_code ?? ""), p_release_id: String(giftCard.catalog_release_id ?? ""), p_price_version: String(giftCard.catalog_price_version ?? "") });
+      const rows = history.data ?? [];
+      if (history.error || rows.length !== 1) return { ok: false, error: "No se pudo validar el servicio histórico exacto de la Gift Card." };
+      historicalService = rows[0];
     }
   }
 

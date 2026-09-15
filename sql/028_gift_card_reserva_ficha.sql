@@ -46,6 +46,39 @@ from public.gift_cards g
 left join lateral (select sum(monto_usado) total_usado,count(*) cantidad_usos from public.gift_card_usos where giftcard_id=g.giftcard_id) u on true
 left join lateral (select sum(monto_reservado) total_reservado from public.gift_card_reservas where giftcard_id=g.giftcard_id and estado='ACTIVA') h on true;
 
+create or replace function public.caja_gift_card_catalog_appointment_history_v1(
+  p_service_code text,
+  p_release_id text,
+  p_price_version text
+)
+returns table (
+  service_code text,
+  name_es text,
+  duration_min integer,
+  price_pen numeric,
+  category text,
+  commercial_group text,
+  modality text,
+  people_min integer,
+  people_max integer,
+  selection_rule text,
+  reservation_behavior text,
+  release_id text,
+  price_version text
+)
+language sql stable security definer set search_path=public,pg_temp as $$
+  select s.service_code,s.name_es,s.duration_min,s.price_pen,s.category,s.commercial_group,
+    s.modality,s.people_min,s.people_max,s.selection_rule,s.reservation_behavior,s.release_id,s.price_version
+  from public.caja_catalog_services s
+  where s.service_code=p_service_code
+    and s.release_id=p_release_id
+    and s.price_version=p_price_version
+  limit 2
+$$;
+
+revoke all on function public.caja_gift_card_catalog_appointment_history_v1(text,text,text) from public,anon,authenticated;
+grant execute on function public.caja_gift_card_catalog_appointment_history_v1(text,text,text) to service_role;
+
 create or replace function public.preparar_ficha_cita_gift_card_v1(p_payload jsonb)
 returns jsonb language plpgsql security definer set search_path=public,pg_temp as $$
 declare
@@ -206,5 +239,6 @@ end $$;
 revoke all on function public.preparar_ficha_cita_gift_card_v1(jsonb),public.liberar_reserva_gift_card_v1(jsonb),public.canjear_gift_card_v1(jsonb),public.iniciar_o_cerrar_atencion_reservada_gift_card_v1(jsonb) from public,anon,authenticated;
 grant execute on function public.preparar_ficha_cita_gift_card_v1(jsonb),public.liberar_reserva_gift_card_v1(jsonb),public.canjear_gift_card_v1(jsonb),public.iniciar_o_cerrar_atencion_reservada_gift_card_v1(jsonb) to service_role;
 comment on table public.gift_card_reservas is 'Hold financiero-operativo; no es ingreso ni cambia el estado principal de la Gift Card.';
+comment on function public.caja_gift_card_catalog_appointment_history_v1(text,text,text) is 'Lectura mínima y exacta del snapshot histórico requerido para preparar una cita con Gift Card.';
 comment on function public.iniciar_o_cerrar_atencion_reservada_gift_card_v1(jsonb) is 'Concilia pagos reales de caja_pagos más cobertura canjeada, sin duplicar ingresos.';
 commit;
