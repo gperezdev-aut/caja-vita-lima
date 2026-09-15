@@ -5,6 +5,7 @@ import { randomUUID } from "crypto";
 import { CajaSidebar } from "@/components/CajaSidebar";
 import { requireModuleAccess } from "@/lib/auth";
 import { formatGiftCardDate } from "@/lib/giftCards";
+import { tieneIdentidadHistoricaGiftCard } from "@/lib/giftCardReservations";
 import { normalizeGiftCardPresentationText } from "@/lib/giftCardTemplate";
 import { supabaseSelectWhere } from "@/lib/supabaseServer";
 import { anularGiftCardAction, canjearGiftCardAction, liberarReservaGiftCardAction } from "../actions";
@@ -50,6 +51,13 @@ export default async function GiftCardDetailPage({
   const status = String(card.estado_efectivo ?? card.estado ?? "EMITIDA");
   const code = String(card.codigo ?? "");
   const isAmount = card.tipo === "MONTO";
+  const hasHistoricalServiceIdentity =
+    isAmount ||
+    tieneIdentidadHistoricaGiftCard(
+      card.service_code,
+      card.catalog_release_id,
+      card.catalog_price_version,
+    );
   const activeHolds = holds.data.filter((hold) => hold.estado === "ACTIVA");
   const activeHoldReservations = await Promise.all(activeHolds.map(async (hold) => ({
     hold,
@@ -57,7 +65,10 @@ export default async function GiftCardDetailPage({
   })));
   const hasActiveHolds = activeHolds.length > 0;
   const canRedeem = ["EMITIDA", "PARCIALMENTE_USADA"].includes(status) && !hasActiveHolds && !holds.error;
-  const canPrepare = ["EMITIDA", "PARCIALMENTE_USADA"].includes(status) && Number(card.saldo_disponible ?? card.saldo_restante ?? 0) > 0 && (isAmount || !hasActiveHolds);
+  const canPrepare = ["EMITIDA", "PARCIALMENTE_USADA"].includes(status)
+    && Number(card.saldo_disponible ?? card.saldo_restante ?? 0) > 0
+    && hasHistoricalServiceIdentity
+    && (isAmount || !hasActiveHolds);
   const phone = String(
     card.whatsapp_beneficiario ?? card.whatsapp_comprador ?? "",
   );
@@ -104,6 +115,11 @@ export default async function GiftCardDetailPage({
             </Link>
           )}
         </div>
+        {!isAmount && !hasHistoricalServiceIdentity && (
+          <div className="alert">
+            Esta Gift Card histórica no tiene identificadores de catálogo suficientes para preparar una cita automáticamente. Mantén su atención por el flujo manual vigente.
+          </div>
+        )}
         <section className="giftCardDetailGrid">
           <div className="panel">
             <h2>Datos y saldo</h2>
