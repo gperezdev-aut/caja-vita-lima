@@ -333,8 +333,8 @@ ordenados as (
 pagina as (
   select o.*
   from ordenados o
-  cross join paginacion p
-  limit p.limite offset p.desplazamiento_resuelto
+  limit (select limite from paginacion)
+  offset (select desplazamiento_resuelto from paginacion)
 ),
 top_clientes as (
   select * from ordenados limit 8
