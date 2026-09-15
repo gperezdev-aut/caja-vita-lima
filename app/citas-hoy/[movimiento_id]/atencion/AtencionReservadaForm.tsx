@@ -3,7 +3,7 @@
 import { useActionState, useMemo, useState } from "react";
 import {
   guardarAtencionReservadaAction,
-  INITIAL_ATENCION_RESERVADA_STATE,
+  type AtencionReservadaState,
 } from "@/app/citas-hoy/atencion-actions";
 import {
   calcularSaldoPosterior,
@@ -26,6 +26,10 @@ type Props = {
   comprobante: string;
   estadoActual: EstadoActualAtencion;
   coberturaGiftCard: number;
+};
+
+const INITIAL_ATENCION_RESERVADA_STATE: AtencionReservadaState = {
+  ok: false,
 };
 
 function money(value: number) {
