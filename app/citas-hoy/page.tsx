@@ -1,6 +1,7 @@
 import { requireModuleAccess } from "@/lib/auth";
 import { CajaSidebar } from "@/components/CajaSidebar";
 import { supabaseSelect, supabaseSelectWhere } from "@/lib/supabaseServer";
+import { displayText } from "@/lib/displayText";
 import { Badge } from "@/components/Badge";
 import { FormField } from "@/components/FormField";
 import { Input } from "@/components/Input";
@@ -135,7 +136,7 @@ function CitaMobileCard({ cita }: { cita: CitaPresentation }) {
 
       <div className="citasHoyCardIdentity">
         <h3>{row.cliente}</h3>
-        <p>{row.servicio}</p>
+        <p>{displayText(row.servicio)}</p>
         {alerta && (
           <div style={{ marginTop: "8px" }}>
             <AlertaBadge alerta={alerta} />
@@ -592,7 +593,7 @@ export default async function CitasHoyPage({
                             )}
                           </td>
                           <td>{row.sede}</td>
-                          <td>{row.servicio}</td>
+                          <td>{displayText(row.servicio)}</td>
                           <td>{terapistas}</td>
                           <td>{money(row.total_cobrar)}</td>
                           <td>{money(row.total_pagado)}</td>
