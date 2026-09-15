@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { calcularCoberturaGiftCard, calcularEfectivoMinimoAdicional, calcularSaldoRealPendiente } from "../lib/giftCardReservations.ts";
+import {
+  calcularCoberturaGiftCard,
+  calcularEfectivoMinimoAdicional,
+  calcularSaldoRealPendiente,
+  tieneIdentidadHistoricaGiftCard,
+} from "../lib/giftCardReservations.ts";
 
 test("la cobertura y el adelanto adicional no se convierten en un pago falso", () => {
   assert.equal(calcularCoberturaGiftCard(100, 70), 70);
@@ -9,6 +14,12 @@ test("la cobertura y el adelanto adicional no se convierten en un pago falso", (
   assert.equal(calcularEfectivoMinimoAdicional(10, 30), 0);
   assert.equal(calcularEfectivoMinimoAdicional(50, 30), 20);
   assert.equal(calcularSaldoRealPendiente(100, 20, 30), 50);
+});
+
+test("una Gift Card de servicio legacy no se considera apta para reserva automática", () => {
+  assert.equal(tieneIdentidadHistoricaGiftCard("SVC_016", "catalog-v1", "catalog-v1"), true);
+  assert.equal(tieneIdentidadHistoricaGiftCard(null, null, null), false);
+  assert.equal(tieneIdentidadHistoricaGiftCard("SVC_016", "", "catalog-v1"), false);
 });
 
 test("la migración 028 separa hold, uso y dinero real y expone el histórico por RPC privada", async () => {
@@ -29,6 +40,8 @@ test("Caja integra CTA, prefill, servicio bloqueado, WhatsApp, liberación y ate
   ]);
   assert.match(detail, /Preparar cita con esta Gift Card/);
   assert.match(detail, /liberarReservaGiftCardAction/);
+  assert.match(detail, /tieneIdentidadHistoricaGiftCard/);
+  assert.match(detail, /Gift Card histórica no tiene identificadores de catálogo suficientes/);
   assert.match(page, /whatsapp_beneficiario/);
   assert.match(page, /service_name_snapshot/);
   assert.match(page, /caja_gift_card_catalog_appointment_history_v1/);
