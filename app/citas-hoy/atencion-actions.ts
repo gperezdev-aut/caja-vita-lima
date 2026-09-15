@@ -13,10 +13,6 @@ export type AtencionReservadaState = {
   pendiente?: number;
 };
 
-export const INITIAL_ATENCION_RESERVADA_STATE: AtencionReservadaState = {
-  ok: false,
-};
-
 function text(formData: FormData, name: string) {
   return String(formData.get(name) ?? "").trim();
 }
