@@ -1,0 +1,39 @@
+.giftCardAppointmentSummary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  align-items: stretch;
+}
+
+.giftCardAppointmentSummary .eyebrow {
+  grid-column: 1 / -1;
+  margin-bottom: 0;
+}
+
+.giftCardAppointmentSummary > strong,
+.giftCardAppointmentSummary > span {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
+  overflow-wrap: anywhere;
+}
+
+.giftCardAppointmentSummary > strong {
+  font-weight: 900;
+}
+
+@media (max-width: 760px) {
+  .giftCardAppointmentSummary {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 520px) {
+  .giftCardAppointmentSummary {
+    grid-template-columns: 1fr;
+  }
+}
