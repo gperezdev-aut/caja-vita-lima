@@ -139,6 +139,8 @@ begin
   if v_hold.estado<>'ACTIVA' then raise exception using errcode='22023',message='HOLD_NO_ACTIVO'; end if;
   if v_responsable='' then raise exception using errcode='22023',message='RESPONSABLE_REQUERIDO'; end if;
   update public.gift_card_reservas set estado='LIBERADA',released_at=clock_timestamp(),released_by=v_responsable,release_request_id=v_request,release_request_fingerprint=v_fp where id=v_hold.id;
+  update public.caja_movimientos set pendiente=greatest(total_cobrar-total_pagado,0),updated_at=now() where movimiento_id=v_hold.movimiento_id;
+  update public.citas_reservadas c set saldo_pendiente=m.pendiente,updated_at=now() from public.caja_movimientos m where c.reserva_id=v_hold.reserva_id and m.movimiento_id=v_hold.movimiento_id;
   return jsonb_build_object('ok',true,'reutilizado',false,'reserva_id',v_hold.reserva_id,'monto_liberado',v_hold.monto_reservado);
 end $$;
 

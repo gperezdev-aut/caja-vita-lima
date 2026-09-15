@@ -26,7 +26,7 @@ begin
 
   -- CASE_03 liberar permite reservar otra vez / CASE_13 no crea uso.
   perform public.liberar_reserva_gift_card_v1(jsonb_build_object('request_id','28000000-0000-4000-8000-000000000004','giftcard_id',v_gc_service,'reserva_id','RES-QA-028-S1','responsable','QA'));
-  if exists(select 1 from public.gift_card_usos where giftcard_id=v_gc_service) or not exists(select 1 from public.gift_card_reservas where reserva_id='RES-QA-028-S1' and estado='LIBERADA') then raise exception 'CASE_03_CASE_13'; end if;
+  if exists(select 1 from public.gift_card_usos where giftcard_id=v_gc_service) or not exists(select 1 from public.gift_card_reservas where reserva_id='RES-QA-028-S1' and estado='LIBERADA') or (select pendiente from public.caja_movimientos where movimiento_id='MOV-QA-028-S1')<>70 then raise exception 'CASE_03_CASE_13'; end if;
   v_hold:=public.preparar_ficha_cita_gift_card_v1(v_base||jsonb_build_object('request_id','28000000-0000-4000-8000-000000000005','giftcard_id',v_gc_service,'movimiento_id','MOV-QA-028-S3','reserva_id','RES-QA-028-S3','pago_id','PAY-QA-028-S3','token',repeat('U',43),'servicios',jsonb_build_array(jsonb_build_object('codigo','SVC_016'))));
 
   -- CASE_16 canje manual no invade holds.
