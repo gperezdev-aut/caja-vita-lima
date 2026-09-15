@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { CajaSidebar } from "@/components/CajaSidebar";
 import { Badge } from "@/components/Badge";
 import { requireModuleAccess } from "@/lib/auth";
+import { displayText } from "@/lib/displayText";
 import { supabaseSelect, supabaseSelectWhere } from "@/lib/supabaseServer";
 import { AtencionReservadaForm } from "./AtencionReservadaForm";
 
@@ -66,6 +67,12 @@ export default async function AtencionReservadaPage({
     if (Number.isInteger(persona) && terapeuta && terapeuta !== "Por asignar") terapeutasActuales[persona] = terapeuta;
   }
   const hold = holdResult.data[0];
+  const atencionCompletada = Boolean(
+    relacionValida &&
+    movimiento.estado === "Atendido" &&
+    reserva?.estado === "ATENDIDA_APP" &&
+    hold?.estado === "CANJEADA"
+  );
   const errors = [movimientoResult.error, reservaResult.error, detallesResult.error, configResult.error, holdResult.error].filter(Boolean);
   const comprobante = String(
     movimiento.estado_comprobante_manual || movimiento.estado_boleta || movimiento.tipo_comprobante || "No definido"
@@ -78,8 +85,8 @@ export default async function AtencionReservadaPage({
         <section className="hero atencionReservadaHero">
           <div>
             <p className="eyebrow">Reserva existente</p>
-            <h1>Iniciar atención</h1>
-            <p className="subtitle">{String(movimiento.cliente ?? "-")} · {String(movimiento.servicio ?? "-")}</p>
+            <h1>{atencionCompletada ? "Atención completada" : "Iniciar atención"}</h1>
+            <p className="subtitle">{String(movimiento.cliente ?? "-")} · {displayText(movimiento.servicio ?? "-")}</p>
           </div>
           <Badge>{String(movimiento.estado ?? "-")}</Badge>
         </section>
@@ -95,7 +102,19 @@ export default async function AtencionReservadaPage({
         </section>
 
         {errors.length > 0 && <div className="alert">No se pudo cargar toda la información: {errors.join(" · ")}</div>}
-        {!relacionValida || !transicionable || !confirmacionValida ? (
+        {atencionCompletada ? (
+          <section className="panel">
+            <div className="formMessage ok" style={{ marginBottom: "16px" }}>
+              Atención completada. La Gift Card se canjeó correctamente y no generó un pago adicional.
+            </div>
+            <div className="reviewGrid" style={{ marginBottom: "18px" }}>
+              <div><span>Cobertura Gift Card</span><strong>{money(hold?.monto_reservado)}</strong></div>
+              <div><span>Estado Gift Card</span><strong>Canjeada</strong></div>
+              <div className="reviewImportant"><span>Saldo pendiente</span><strong>{money(movimiento.pendiente)}</strong></div>
+            </div>
+            <a className="ghostButton" href="/citas-hoy">Volver a Citas de hoy</a>
+          </section>
+        ) : !relacionValida || !transicionable || !confirmacionValida ? (
           <section className="panel">
             <div className="alert">
               Esta reserva no es válida para la transición segura. Verifica relación, confirmación y estado antes de continuar.
@@ -107,7 +126,7 @@ export default async function AtencionReservadaPage({
             requestId={randomUUID()}
             movimientoId={movimientoId}
             reservaId={reservaId}
-            personas={Number(movimiento.n_pax ?? 1)}
+            personas={Number(movimiento.n_pax ?? 0) || 1}
             total={Number(movimiento.total_cobrar ?? 0)}
             pagado={Number(movimiento.total_pagado ?? 0)}
             pendiente={Number(movimiento.pendiente ?? 0)}
