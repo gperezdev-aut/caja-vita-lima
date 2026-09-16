@@ -20,8 +20,6 @@ export function CajaSidebar({ session }: { session: CajaSession }) {
     ...(horariosItem ? [horariosItem] : []),
   ];
   const moduleItems = navItems.filter((item) => item.key !== "dashboard" && item.key !== "alertas");
-  const mobilePrimaryItems = navItems.filter((item) => item.key !== "horarios" && item.key !== "cierre-caja");
-  const mobileFinalItems = navItems.filter((item) => item.key === "cierre-caja" || item.key === "horarios");
 
   return (
     <>
@@ -110,22 +108,12 @@ export function CajaSidebar({ session }: { session: CajaSession }) {
 
           <div className="mobileMenuContent">
             <nav className="mobileMenuNav" aria-label="Navegación principal">
-              {mobilePrimaryItems.map((item) => (
+              {navItems.map((item) => (
                 <Link key={item.key} href={item.href}>
                   {item.label}
                 </Link>
               ))}
             </nav>
-
-            {mobileFinalItems.length > 0 && (
-              <nav className="mobileMenuNav mobileMenuFinalRow" aria-label="Navegación de cierre y horarios">
-                {mobileFinalItems.map((item) => (
-                  <Link key={item.key} href={item.href}>
-                    {item.label}
-                  </Link>
-                ))}
-              </nav>
-            )}
 
             <form action={logoutAction}>
               <button
