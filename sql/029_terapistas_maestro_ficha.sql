@@ -20,7 +20,7 @@ create index if not exists idx_terapistas_sede on public.terapistas(sede_habitua
 
 create table if not exists public.terapista_aliases (
   alias text primary key,
-  terapista_id uuid not null references public.terapistas(terapista_id) on delete cascade,
+  terapista_id uuid not null references public.terapistas(terapista_id) on delete restrict,
   nota text,
   created_at timestamptz not null default now()
 );
@@ -50,14 +50,34 @@ set activo = false,
     updated_at = now()
 where lista = 'TERAPISTAS';
 
+-- Compatibilidad con el nombre histórico ya existente.
 update public.config_listas
 set valor = 'Allison',
     activo = true,
+    orden = 1,
     alias_de = 'Alison',
     nota = 'Terapista activa; Alison se conserva como alias histórico.',
     updated_at = now()
 where lista = 'TERAPISTAS'
   and valor = 'Alison';
+
+-- Idempotencia: si la migración ya se ejecutó antes, Allison ya existe con su nombre canónico.
+update public.config_listas
+set activo = true,
+    orden = 1,
+    alias_de = coalesce(alias_de, 'Alison'),
+    nota = 'Terapista activa; Alison se conserva como alias histórico.',
+    updated_at = now()
+where lista = 'TERAPISTAS'
+  and valor = 'Allison';
+
+insert into public.config_listas (lista, valor, orden, activo, alias_de, nota)
+select 'TERAPISTAS', 'Allison', 1, true, 'Alison', 'Terapista activa; Alison se conserva como alias histórico.'
+where not exists (
+  select 1
+  from public.config_listas
+  where lista = 'TERAPISTAS' and valor = 'Allison'
+);
 
 insert into public.config_listas (lista, valor, orden, activo, alias_de, nota)
 select 'TERAPISTAS', 'Marivel', 2, true, null, 'Terapista activa vigente.'
