@@ -1,11 +1,17 @@
 /* QA móvil de Horarios — ajustes aislados sobre la UI existente */
 .mobileMenuFinalRow {
-  margin-top: 10px;
+  margin-top: 6px;
 }
 
 @media (max-width: 700px) {
+  .mobileMenuNav a[href="/gift-cards"] {
+    grid-column: 1 / -1;
+    text-align: center;
+  }
+
   .mobileMenuFinalRow {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-top: 4px;
   }
 
   .mobileMenuFinalRow a {
