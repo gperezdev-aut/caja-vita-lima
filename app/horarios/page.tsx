@@ -31,6 +31,12 @@ type ExcepcionRow = {
   observacion: string | null;
 };
 
+type CalendarDay = {
+  iso: string;
+  day: number;
+  weekDay: number;
+};
+
 const DIAS = [
   [1, "Lun"],
   [2, "Mar"],
@@ -51,23 +57,76 @@ const TIPO_LABEL: Record<string, string> = {
   APOYO: "Apoyo",
 };
 
+const TYPE_STYLE: Record<string, { background: string; color: string; borderColor: string }> = {
+  DESCANSO: { background: "#eee9e1", color: "#4f5960", borderColor: "#d7d0c5" },
+  CAMBIO_HORARIO: { background: "#fff1c9", color: "#795500", borderColor: "#ecd28b" },
+  FALTA: { background: "#fde4df", color: "#9b3126", borderColor: "#edb9b0" },
+  RECUPERACION: { background: "#ffe6cf", color: "#8a4708", borderColor: "#f0bf91" },
+  VACACIONES: { background: "#dff3f5", color: "#17616a", borderColor: "#acd9de" },
+  REUNION: { background: "#ece4f8", color: "#5d3c85", borderColor: "#cfbce7" },
+  APOYO: { background: "#e1edf9", color: "#295e8a", borderColor: "#b5d0e8" },
+};
+
 function hhmm(value: string | null) {
   return value ? value.slice(0, 5) : "";
 }
 
-function limaYearMonth() {
+function limaTodayIso() {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Lima",
     year: "numeric",
     month: "2-digit",
+    day: "2-digit",
   }).formatToParts(new Date());
   const year = parts.find((part) => part.type === "year")?.value ?? "2026";
   const month = parts.find((part) => part.type === "month")?.value ?? "01";
-  return `${year}-${month}`;
+  const day = parts.find((part) => part.type === "day")?.value ?? "01";
+  return `${year}-${month}-${day}`;
+}
+
+function limaYearMonth() {
+  return limaTodayIso().slice(0, 7);
 }
 
 function normalizeMonth(value: string | undefined) {
   return /^\d{4}-\d{2}$/.test(value ?? "") ? value! : limaYearMonth();
+}
+
+function normalizeDate(value: string | undefined) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value ?? "") ? value! : limaTodayIso();
+}
+
+function utcDate(iso: string) {
+  const [year, month, day] = iso.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+function isoFromDate(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function addDays(iso: string, delta: number) {
+  const date = utcDate(iso);
+  date.setUTCDate(date.getUTCDate() + delta);
+  return isoFromDate(date);
+}
+
+function weekBounds(anchorIso: string) {
+  const anchor = utcDate(anchorIso);
+  const jsDay = anchor.getUTCDay();
+  const mondayDelta = jsDay === 0 ? -6 : 1 - jsDay;
+  const monday = new Date(anchor);
+  monday.setUTCDate(anchor.getUTCDate() + mondayDelta);
+  const days: CalendarDay[] = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(monday);
+    date.setUTCDate(monday.getUTCDate() + index);
+    return {
+      iso: isoFromDate(date),
+      day: date.getUTCDate(),
+      weekDay: index + 1,
+    };
+  });
+  return { first: days[0].iso, last: days[6].iso, days };
 }
 
 function monthBounds(month: string) {
@@ -84,7 +143,7 @@ function monthBounds(month: string) {
         iso: date.toISOString().slice(0, 10),
         day: index + 1,
         weekDay: jsDay === 0 ? 7 : jsDay,
-      };
+      } satisfies CalendarDay;
     }),
   };
 }
@@ -104,6 +163,18 @@ function monthLabel(month: string) {
   }).format(new Date(Date.UTC(year, monthNumber - 1, 1)));
 }
 
+function compactDateLabel(iso: string) {
+  return new Intl.DateTimeFormat("es-PE", {
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  }).format(utcDate(iso));
+}
+
+function weekLabel(first: string, last: string) {
+  return `${compactDateLabel(first)} → ${compactDateLabel(last)}`;
+}
+
 function scheduleLabel(row: HorarioRow | ExcepcionRow | undefined) {
   if (!row || !row.trabaja) return "Descanso";
   const range = `${hhmm(row.hora_inicio)}–${hhmm(row.hora_fin)}`;
@@ -121,12 +192,22 @@ function errorMessage(code: string | undefined) {
 export default async function HorariosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ mes?: string; updated?: string; deleted?: string; error?: string }>;
+  searchParams: Promise<{
+    vista?: string;
+    fecha?: string;
+    mes?: string;
+    updated?: string;
+    deleted?: string;
+    error?: string;
+  }>;
 }) {
   const session = await requireModuleAccess("horarios");
   const query = await searchParams;
-  const month = normalizeMonth(query.mes);
-  const bounds = monthBounds(month);
+  const view = query.vista === "mes" ? "mes" : "semana";
+  const anchorDate = normalizeDate(query.fecha);
+  const month = normalizeMonth(query.mes ?? anchorDate.slice(0, 7));
+  const bounds = view === "semana" ? weekBounds(anchorDate) : monthBounds(month);
+  const today = limaTodayIso();
   const canEdit = session.rol === "ADMIN_GERALD" || session.rol === "SOCIO";
 
   const [terapistasResult, horariosResult, excepcionesResult] = await Promise.all([
@@ -163,6 +244,10 @@ export default async function HorariosPage({
   const therapistName = new Map(terapistasResult.data.map((row) => [row.terapista_id, row.nombre]));
   const errors = [terapistasResult.error, horariosResult.error, excepcionesResult.error].filter(Boolean);
 
+  const weekPrev = addDays(bounds.first, -7);
+  const weekNext = addDays(bounds.first, 7);
+  const calendarTitle = view === "semana" ? `Semana ${weekLabel(bounds.first, bounds.last)}` : monthLabel(month);
+
   return (
     <main className="appShell">
       <CajaSidebar session={session} />
@@ -172,7 +257,7 @@ export default async function HorariosPage({
             <p className="eyebrow">Personal</p>
             <h1>Horarios</h1>
             <p className="subtitle">
-              Cuadro global de entrada, salida y descansos. El horario habitual viene de cada ficha y los cambios puntuales se aplican por fecha.
+              Vista rápida de entradas, salidas y descansos. Semana para operación diaria; mes para planificación.
             </p>
           </div>
           <div className="badge"><span>Activas</span><strong>{terapistasResult.data.length}</strong></div>
@@ -186,27 +271,64 @@ export default async function HorariosPage({
         <section className="panel">
           <div className="panelTitle" style={{ alignItems: "center", flexWrap: "wrap" }}>
             <div>
-              <h2 style={{ textTransform: "capitalize" }}>{monthLabel(month)}</h2>
-              <p>Desliza horizontalmente en celular para recorrer el mes.</p>
+              <h2 style={{ textTransform: "capitalize" }}>{calendarTitle}</h2>
+              <p>{view === "semana" ? "La semana actual se muestra por defecto." : "Desliza horizontalmente para recorrer el mes."}</p>
             </div>
-            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-              <Link className="ghostButton" href={`/horarios?mes=${moveMonth(month, -1)}`}>← Mes anterior</Link>
-              <Link className="ghostButton" href={`/horarios?mes=${limaYearMonth()}`}>Hoy</Link>
-              <Link className="ghostButton" href={`/horarios?mes=${moveMonth(month, 1)}`}>Mes siguiente →</Link>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "flex-end" }}>
+              <Link className={view === "semana" ? "primaryButton" : "ghostButton"} href={`/horarios?vista=semana&fecha=${anchorDate}`}>Semana</Link>
+              <Link className={view === "mes" ? "primaryButton" : "ghostButton"} href={`/horarios?vista=mes&mes=${month}`}>Mes</Link>
+              {view === "semana" ? (
+                <>
+                  <Link className="ghostButton" href={`/horarios?vista=semana&fecha=${weekPrev}`}>← Semana anterior</Link>
+                  <Link className="ghostButton" href={`/horarios?vista=semana&fecha=${today}`}>Esta semana</Link>
+                  <Link className="ghostButton" href={`/horarios?vista=semana&fecha=${weekNext}`}>Semana siguiente →</Link>
+                </>
+              ) : (
+                <>
+                  <Link className="ghostButton" href={`/horarios?vista=mes&mes=${moveMonth(month, -1)}`}>← Mes anterior</Link>
+                  <Link className="ghostButton" href={`/horarios?vista=mes&mes=${limaYearMonth()}`}>Hoy</Link>
+                  <Link className="ghostButton" href={`/horarios?vista=mes&mes=${moveMonth(month, 1)}`}>Mes siguiente →</Link>
+                </>
+              )}
             </div>
           </div>
 
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "14px" }}>
+            {Object.entries(TIPO_LABEL).map(([tipo, label]) => (
+              <span
+                key={tipo}
+                style={{
+                  ...TYPE_STYLE[tipo],
+                  border: `1px solid ${TYPE_STYLE[tipo].borderColor}`,
+                  borderRadius: "999px",
+                  padding: "6px 10px",
+                  fontSize: "12px",
+                  fontWeight: 800,
+                }}
+              >
+                {label}
+              </span>
+            ))}
+          </div>
+
           <div className="tableWrap">
-            <table className="horarioMensualTable" style={{ minWidth: `${Math.max(980, 170 + bounds.days.length * 132)}px` }}>
+            <table style={{ minWidth: view === "semana" ? "920px" : `${Math.max(980, 170 + bounds.days.length * 132)}px` }}>
               <thead>
                 <tr>
-                  <th className="horarioStickyCol">Terapista</th>
-                  {bounds.days.map((day) => (
-                    <th key={day.iso}>
-                      <span>{DIAS.find(([value]) => value === day.weekDay)?.[1]}</span>
-                      <strong style={{ display: "block", marginTop: "3px" }}>{day.day}</strong>
-                    </th>
-                  ))}
+                  <th style={{ position: "sticky", left: 0, zIndex: 4, background: "#fbf4e7", minWidth: "150px" }}>Terapista</th>
+                  {bounds.days.map((day) => {
+                    const isToday = day.iso === today;
+                    return (
+                      <th
+                        key={day.iso}
+                        style={isToday ? { background: "#e5f1eb", color: "#1f6b4f" } : undefined}
+                      >
+                        <span>{DIAS.find(([value]) => value === day.weekDay)?.[1]}</span>
+                        <strong style={{ display: "block", marginTop: "3px" }}>{day.day}</strong>
+                        {isToday && <small style={{ display: "block", marginTop: "3px", fontWeight: 900 }}>HOY</small>}
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody>
@@ -215,7 +337,7 @@ export default async function HorariosPage({
                   const excepciones = excepcionByTherapist.get(terapista.terapista_id);
                   return (
                     <tr key={terapista.terapista_id}>
-                      <td className="horarioStickyCol">
+                      <td style={{ position: "sticky", left: 0, zIndex: 3, background: "white", minWidth: "150px" }}>
                         <Link className="strong" href={`/terapistas/${terapista.terapista_id}/horario`}>
                           {terapista.nombre}
                         </Link>
@@ -224,13 +346,30 @@ export default async function HorariosPage({
                         const exception = excepciones?.get(day.iso);
                         const base = habitual?.get(day.weekDay);
                         const resolved = exception ?? base;
+                        const isToday = day.iso === today;
+                        const style = exception ? TYPE_STYLE[exception.tipo] : undefined;
                         return (
-                          <td key={day.iso} className={exception ? "horarioExceptionCell" : undefined}>
-                            <strong style={{ display: "block", fontSize: "12px" }}>{scheduleLabel(resolved)}</strong>
-                            {exception && (
-                              <small style={{ display: "block", marginTop: "5px", fontWeight: 800 }}>
-                                {TIPO_LABEL[exception.tipo] ?? exception.tipo}
-                              </small>
+                          <td
+                            key={day.iso}
+                            style={{
+                              ...(style ?? {}),
+                              ...(isToday ? { boxShadow: "inset 0 0 0 2px rgba(31,107,79,.32)" } : {}),
+                              minWidth: view === "semana" ? "108px" : "124px",
+                            }}
+                          >
+                            {exception ? (
+                              <>
+                                <strong style={{ display: "block", fontSize: "12px" }}>
+                                  {exception.tipo === "DESCANSO" ? "DESCANSO" : TIPO_LABEL[exception.tipo] ?? exception.tipo}
+                                </strong>
+                                {exception.trabaja && (
+                                  <small style={{ display: "block", marginTop: "5px", fontWeight: 800 }}>
+                                    {scheduleLabel(exception)}
+                                  </small>
+                                )}
+                              </>
+                            ) : (
+                              <strong style={{ display: "block", fontSize: "12px" }}>{scheduleLabel(resolved)}</strong>
                             )}
                           </td>
                         );
@@ -265,7 +404,7 @@ export default async function HorariosPage({
                 </label>
                 <label className="atencionField">
                   Fecha
-                  <input name="fecha" type="date" min={bounds.first} max={bounds.last} required />
+                  <input name="fecha" type="date" required />
                 </label>
                 <label className="atencionField">
                   Tipo
@@ -310,15 +449,18 @@ export default async function HorariosPage({
         )}
 
         <section className="panel">
-          <div className="panelTitle"><div><h2>Excepciones del mes</h2><p>Los cambios aquí reemplazan el horario habitual solo en esa fecha.</p></div></div>
+          <div className="panelTitle"><div><h2>Excepciones visibles</h2><p>Cambios puntuales dentro del período mostrado.</p></div></div>
           <div className="miniList">
             {excepcionesResult.data.length === 0 ? (
-              <div className="miniItem"><span>Sin excepciones registradas este mes</span></div>
+              <div className="miniItem"><span>Sin excepciones registradas en este período</span></div>
             ) : excepcionesResult.data.map((row) => (
               <div className="miniItem" key={row.excepcion_id} style={{ alignItems: "center", flexWrap: "wrap" }}>
                 <span>
                   <strong style={{ display: "block", color: "var(--text)" }}>{therapistName.get(row.terapista_id) ?? "Terapista"} · {row.fecha}</strong>
-                  {TIPO_LABEL[row.tipo] ?? row.tipo} · {scheduleLabel(row)}{row.observacion ? ` · ${row.observacion}` : ""}
+                  {row.tipo === "DESCANSO"
+                    ? "Descanso"
+                    : `${TIPO_LABEL[row.tipo] ?? row.tipo} · ${scheduleLabel(row)}`}
+                  {row.observacion ? ` · ${row.observacion}` : ""}
                 </span>
                 {canEdit && (
                   <form action={deleteHorarioExcepcionAction}>
@@ -335,10 +477,10 @@ export default async function HorariosPage({
         <section className="panel">
           <div className="panelTitle"><div><h2>Horario habitual</h2><p>Referencia base semanal de cada terapista.</p></div></div>
           <div className="tableWrap">
-            <table style={{ minWidth: "1080px" }}>
+            <table style={{ minWidth: "920px" }}>
               <thead>
                 <tr>
-                  <th>Terapista</th>
+                  <th style={{ position: "sticky", left: 0, zIndex: 4, background: "#fbf4e7" }}>Terapista</th>
                   {DIAS.map(([, nombre]) => <th key={nombre}>{nombre}</th>)}
                 </tr>
               </thead>
@@ -347,7 +489,7 @@ export default async function HorariosPage({
                   const schedule = habitualByTherapist.get(terapista.terapista_id);
                   return (
                     <tr key={terapista.terapista_id}>
-                      <td><Link className="strong" href={`/terapistas/${terapista.terapista_id}/horario`}>{terapista.nombre}</Link></td>
+                      <td style={{ position: "sticky", left: 0, zIndex: 3, background: "white" }}><Link className="strong" href={`/terapistas/${terapista.terapista_id}/horario`}>{terapista.nombre}</Link></td>
                       {DIAS.map(([dia, nombre]) => <td key={nombre}>{scheduleLabel(schedule?.get(dia))}</td>)}
                     </tr>
                   );
