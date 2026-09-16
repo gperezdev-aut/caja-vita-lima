@@ -69,7 +69,9 @@ export async function updateTerapistaFichaAction(formData: FormData) {
   const terapistaId = String(formData.get("terapista_id") ?? "").trim();
 
   if (!terapistaId) redirect("/terapistas?error=terapista_id");
-  if (session.rol !== "ADMIN_GERALD") redirect(errorPath(terapistaId, "sin_permisos"));
+  if (session.rol !== "ADMIN_GERALD" && session.rol !== "SOCIO") {
+    redirect(errorPath(terapistaId, "sin_permisos"));
+  }
 
   const dni = text(formData.get("dni"));
   const ruc = text(formData.get("ruc"));
