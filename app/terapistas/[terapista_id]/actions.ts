@@ -31,6 +31,37 @@ function errorPath(terapistaId: string, code: string) {
   return `/terapistas/${encodeURIComponent(terapistaId)}?error=${encodeURIComponent(code)}`;
 }
 
+async function updateTerapistaMaster(terapistaId: string, payload: Record<string, unknown>) {
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    return { error: "config" };
+  }
+
+  try {
+    const response = await fetch(
+      `${supabaseUrl.replace(/\/$/, "")}/rest/v1/terapistas?terapista_id=eq.${encodeURIComponent(terapistaId)}`,
+      {
+        method: "PATCH",
+        headers: {
+          apikey: serviceRoleKey,
+          Authorization: `Bearer ${serviceRoleKey}`,
+          "Content-Type": "application/json",
+          Prefer: "return=minimal",
+        },
+        body: JSON.stringify(payload),
+        cache: "no-store",
+      }
+    );
+
+    if (!response.ok) return { error: "save" };
+    return { error: null };
+  } catch {
+    return { error: "save" };
+  }
+}
+
 export async function updateTerapistaFichaAction(formData: FormData) {
   const session = await requireModuleAccess("terapistas");
   const terapistaId = String(formData.get("terapista_id") ?? "").trim();
@@ -52,19 +83,17 @@ export async function updateTerapistaFichaAction(formData: FormData) {
   const llavesRaw = String(formData.get("llaves") ?? "").trim();
   const llaves = llavesRaw === "SI" ? true : llavesRaw === "NO" ? false : null;
 
+  const masterResult = await updateTerapistaMaster(terapistaId, {
+    telefono: text(formData.get("telefono")),
+    sede_habitual: text(formData.get("sede_habitual")),
+    fecha_ingreso: date(formData.get("fecha_ingreso")),
+    observacion: text(formData.get("observacion")),
+    updated_at: now,
+  });
+
+  if (masterResult.error) redirect(errorPath(terapistaId, masterResult.error));
+
   const operaciones = await Promise.all([
-    supabaseUpsert(
-      "terapistas",
-      {
-        terapista_id: terapistaId,
-        telefono: text(formData.get("telefono")),
-        sede_habitual: text(formData.get("sede_habitual")),
-        fecha_ingreso: date(formData.get("fecha_ingreso")),
-        observacion: text(formData.get("observacion")),
-        updated_at: now,
-      },
-      "terapista_id"
-    ),
     supabaseUpsert(
       "terapista_datos_personales",
       {
