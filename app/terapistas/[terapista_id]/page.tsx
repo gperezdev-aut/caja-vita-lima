@@ -91,7 +91,7 @@ export default async function TerapistaFichaPage({
   const session = await requireModuleAccess("terapistas");
   const terapistaId = (await params).terapista_id;
   const query = await searchParams;
-  const isAdmin = session.rol === "ADMIN_GERALD";
+  const canManage = session.rol === "ADMIN_GERALD" || session.rol === "SOCIO";
 
   const [terapistaResult, aliasResult, laboralResult, uniformeResult] = await Promise.all([
     supabaseSelectWhere<TerapistaRow>(
@@ -119,7 +119,7 @@ export default async function TerapistaFichaPage({
   let pago: PagoRow | null = null;
   let privateErrors: string[] = [];
 
-  if (isAdmin) {
+  if (canManage) {
     const [personalResult, pagoResult] = await Promise.all([
       supabaseSelectWhere<PersonalRow>(
         "terapista_datos_personales",
@@ -178,7 +178,7 @@ export default async function TerapistaFichaPage({
           <div className="alert">No se pudo cargar toda la ficha: {errors.join(" · ")}</div>
         )}
 
-        {isAdmin && (
+        {canManage && (
           <form action={updateTerapistaFichaAction} className="atencionForm" style={{ marginBottom: "24px" }}>
             <input type="hidden" name="terapista_id" value={terapistaId} />
 
@@ -366,7 +366,7 @@ export default async function TerapistaFichaPage({
           />
         </section>
 
-        {isAdmin ? (
+        {canManage ? (
           <>
             <section className="panel">
               <div className="panelTitle"><div><h2>Datos personales</h2><p>Información privada de la ficha de personal.</p></div></div>
@@ -392,7 +392,7 @@ export default async function TerapistaFichaPage({
                 ]} />
               </div>
               <div className="panel">
-                <div className="panelTitle"><div><h2>Pago y AFP</h2><p>Visible únicamente para administración.</p></div></div>
+                <div className="panelTitle"><div><h2>Pago y AFP</h2><p>Visible para administración.</p></div></div>
                 <DataGrid items={[
                   { label: "Banco", value: pago?.banco },
                   { label: "Cuenta en soles", value: pago?.cuenta_soles },
