@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { CajaSidebar } from "@/components/CajaSidebar";
 import { requireModuleAccess } from "@/lib/auth";
 import { supabaseSelectWhere } from "@/lib/supabaseServer";
+import { updateTerapistaFichaAction } from "./actions";
 
 type TerapistaRow = {
   terapista_id: string;
@@ -49,9 +50,9 @@ type UniformeRow = {
   cantidad: number | null;
 };
 
-function value(value: unknown) {
-  if (value === null || value === undefined || value === "") return "Pendiente";
-  return String(value);
+function value(input: unknown) {
+  if (input === null || input === undefined || input === "") return "Pendiente";
+  return String(input);
 }
 
 function DataGrid({ items }: { items: { label: string; value: unknown }[] }) {
@@ -67,13 +68,29 @@ function DataGrid({ items }: { items: { label: string; value: unknown }[] }) {
   );
 }
 
+function uniformValue(rows: UniformeRow[], prenda: string) {
+  return rows.find((row) => row.prenda === prenda) ?? null;
+}
+
+function errorMessage(code: string | undefined) {
+  if (!code) return "";
+  if (code === "dni") return "El DNI debe tener exactamente 8 dígitos.";
+  if (code === "ruc") return "El RUC debe tener exactamente 11 dígitos.";
+  if (code === "codigo_marcacion") return "El código de marcación debe tener 4 dígitos.";
+  if (code === "sin_permisos") return "Solo administración puede editar esta ficha.";
+  return "No se pudo guardar la ficha. Revisa los datos e inténtalo nuevamente.";
+}
+
 export default async function TerapistaFichaPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ terapista_id: string }>;
+  searchParams: Promise<{ updated?: string; error?: string }>;
 }) {
   const session = await requireModuleAccess("terapistas");
   const terapistaId = (await params).terapista_id;
+  const query = await searchParams;
   const isAdmin = session.rol === "ADMIN_GERALD";
 
   const [terapistaResult, aliasResult, laboralResult, uniformeResult] = await Promise.all([
@@ -119,6 +136,11 @@ export default async function TerapistaFichaPage({
   }
 
   const laboral = laboralResult.data[0] ?? null;
+  const pantalon = uniformValue(uniformeResult.data, "Pantalón");
+  const chaqueta = uniformValue(uniformeResult.data, "Chaqueta");
+  const casaca = uniformValue(uniformeResult.data, "Casaca");
+  const visibleUniformes = uniformeResult.data.filter((row) => row.talla || row.cantidad);
+
   const errors = [
     terapistaResult.error,
     aliasResult.error,
@@ -146,8 +168,183 @@ export default async function TerapistaFichaPage({
           </div>
         </section>
 
+        {query.updated === "1" && (
+          <div className="formMessage ok">Ficha actualizada correctamente.</div>
+        )}
+        {query.error && (
+          <div className="formMessage error">{errorMessage(query.error)}</div>
+        )}
         {errors.length > 0 && (
           <div className="alert">No se pudo cargar toda la ficha: {errors.join(" · ")}</div>
+        )}
+
+        {isAdmin && (
+          <form action={updateTerapistaFichaAction} className="atencionForm" style={{ marginBottom: "24px" }}>
+            <input type="hidden" name="terapista_id" value={terapistaId} />
+
+            <div className="panelTitle">
+              <div>
+                <h2>Editar ficha</h2>
+                <p>Actualiza aquí la información que antes vivía en el Excel de personal.</p>
+              </div>
+            </div>
+
+            <fieldset className="formSection">
+              <legend className="formSectionTitle">Datos laborales</legend>
+              <div className="atencionGrid">
+                <label className="atencionField">
+                  Nombre operativo
+                  <input value={terapista.nombre} readOnly />
+                  <small>El nombre operativo se mantiene estable para proteger el histórico.</small>
+                </label>
+                <label className="atencionField">
+                  Teléfono
+                  <input name="telefono" defaultValue={terapista.telefono ?? ""} inputMode="tel" />
+                </label>
+                <label className="atencionField">
+                  Sede habitual
+                  <select name="sede_habitual" defaultValue={terapista.sede_habitual ?? ""}>
+                    <option value="">Sin definir</option>
+                    <option value="Miraflores">Miraflores</option>
+                    <option value="San Borja">San Borja</option>
+                    <option value="Ambas">Ambas</option>
+                  </select>
+                </label>
+                <label className="atencionField">
+                  Fecha de ingreso
+                  <input name="fecha_ingreso" type="date" defaultValue={terapista.fecha_ingreso ?? ""} />
+                </label>
+                <label className="atencionField">
+                  Código de marcación
+                  <input name="codigo_marcacion" defaultValue={laboral?.codigo_marcacion ?? ""} inputMode="numeric" maxLength={4} />
+                </label>
+                <label className="atencionField">
+                  Llaves
+                  <select name="llaves" defaultValue={laboral?.llaves === true ? "SI" : laboral?.llaves === false ? "NO" : ""}>
+                    <option value="">Sin definir</option>
+                    <option value="SI">Sí</option>
+                    <option value="NO">No</option>
+                  </select>
+                </label>
+                <label className="atencionField atencionFieldWide">
+                  Observación laboral
+                  <textarea name="observacion_laboral" defaultValue={laboral?.observacion_laboral ?? ""} />
+                </label>
+                <label className="atencionField atencionFieldWide">
+                  Observación general
+                  <textarea name="observacion" defaultValue={terapista.observacion ?? ""} />
+                </label>
+              </div>
+            </fieldset>
+
+            <fieldset className="formSection">
+              <legend className="formSectionTitle">Datos personales</legend>
+              <div className="atencionGrid">
+                <label className="atencionField atencionFieldWide">
+                  Nombre y apellidos
+                  <input name="nombre_completo" defaultValue={personal?.nombre_completo ?? ""} />
+                </label>
+                <label className="atencionField atencionFieldWide">
+                  Dirección
+                  <input name="direccion" defaultValue={personal?.direccion ?? ""} />
+                </label>
+                <label className="atencionField">
+                  Fecha de nacimiento
+                  <input name="fecha_nacimiento" type="date" defaultValue={personal?.fecha_nacimiento ?? ""} />
+                </label>
+                <label className="atencionField">
+                  DNI
+                  <input name="dni" defaultValue={personal?.dni ?? ""} inputMode="numeric" maxLength={8} />
+                </label>
+                <label className="atencionField">
+                  RUC
+                  <input name="ruc" defaultValue={personal?.ruc ?? ""} inputMode="numeric" maxLength={11} />
+                </label>
+                <label className="atencionField">
+                  Estado civil
+                  <input name="estado_civil" defaultValue={personal?.estado_civil ?? ""} />
+                </label>
+                <label className="atencionField">
+                  Hijos
+                  <input name="hijos" type="number" min={0} defaultValue={personal?.hijos ?? ""} />
+                </label>
+                <label className="atencionField atencionFieldWide">
+                  Correo
+                  <input name="correo" type="email" defaultValue={personal?.correo ?? ""} />
+                </label>
+              </div>
+            </fieldset>
+
+            <fieldset className="formSection">
+              <legend className="formSectionTitle">Contacto de emergencia</legend>
+              <div className="atencionGrid">
+                <label className="atencionField atencionFieldWide">
+                  Nombre del contacto
+                  <input name="contacto_emergencia" defaultValue={personal?.contacto_emergencia ?? ""} />
+                </label>
+                <label className="atencionField">
+                  Teléfono
+                  <input name="telefono_emergencia" defaultValue={personal?.telefono_emergencia ?? ""} inputMode="tel" />
+                </label>
+                <label className="atencionField">
+                  Relación
+                  <input name="relacion_contacto" defaultValue={personal?.relacion_contacto ?? ""} placeholder="Ej. madre, pareja, hermana" />
+                </label>
+              </div>
+            </fieldset>
+
+            <fieldset className="formSection">
+              <legend className="formSectionTitle">Pago y AFP</legend>
+              <div className="atencionGrid">
+                <label className="atencionField">
+                  Banco
+                  <input name="banco" defaultValue={pago?.banco ?? ""} />
+                </label>
+                <label className="atencionField atencionFieldWide">
+                  Cuenta en soles
+                  <input name="cuenta_soles" defaultValue={pago?.cuenta_soles ?? ""} inputMode="numeric" />
+                </label>
+                <label className="atencionField">
+                  AFP
+                  <input name="afp" defaultValue={pago?.afp ?? ""} />
+                </label>
+              </div>
+            </fieldset>
+
+            <fieldset className="formSection">
+              <legend className="formSectionTitle">Uniforme</legend>
+              <div className="atencionGrid">
+                <label className="atencionField">
+                  Pantalón · talla
+                  <input name="uniforme_pantalon_talla" defaultValue={pantalon?.talla ?? ""} />
+                </label>
+                <label className="atencionField">
+                  Pantalón · cantidad
+                  <input name="uniforme_pantalon_cantidad" type="number" min={1} defaultValue={pantalon?.cantidad ?? ""} />
+                </label>
+                <label className="atencionField">
+                  Chaqueta · talla
+                  <input name="uniforme_chaqueta_talla" defaultValue={chaqueta?.talla ?? ""} />
+                </label>
+                <label className="atencionField">
+                  Chaqueta · cantidad
+                  <input name="uniforme_chaqueta_cantidad" type="number" min={1} defaultValue={chaqueta?.cantidad ?? ""} />
+                </label>
+                <label className="atencionField">
+                  Casaca · talla
+                  <input name="uniforme_casaca_talla" defaultValue={casaca?.talla ?? ""} />
+                </label>
+                <label className="atencionField">
+                  Casaca · cantidad
+                  <input name="uniforme_casaca_cantidad" type="number" min={1} defaultValue={casaca?.cantidad ?? ""} />
+                </label>
+              </div>
+            </fieldset>
+
+            <button className="primaryButton" type="submit" style={{ width: "100%", marginTop: "16px", minHeight: "50px" }}>
+              Guardar ficha
+            </button>
+          </form>
         )}
 
         <section className="panel">
@@ -172,57 +369,35 @@ export default async function TerapistaFichaPage({
         {isAdmin ? (
           <>
             <section className="panel">
-              <div className="panelTitle">
-                <div>
-                  <h2>Datos personales</h2>
-                  <p>Información privada de la ficha de personal.</p>
-                </div>
-              </div>
-              <DataGrid
-                items={[
-                  { label: "Nombre y apellidos", value: personal?.nombre_completo },
-                  { label: "Dirección", value: personal?.direccion },
-                  { label: "Fecha de nacimiento", value: personal?.fecha_nacimiento },
-                  { label: "DNI", value: personal?.dni },
-                  { label: "RUC", value: personal?.ruc },
-                  { label: "Estado civil", value: personal?.estado_civil },
-                  { label: "Hijos", value: personal?.hijos },
-                  { label: "Correo", value: personal?.correo },
-                ]}
-              />
+              <div className="panelTitle"><div><h2>Datos personales</h2><p>Información privada de la ficha de personal.</p></div></div>
+              <DataGrid items={[
+                { label: "Nombre y apellidos", value: personal?.nombre_completo },
+                { label: "Dirección", value: personal?.direccion },
+                { label: "Fecha de nacimiento", value: personal?.fecha_nacimiento },
+                { label: "DNI", value: personal?.dni },
+                { label: "RUC", value: personal?.ruc },
+                { label: "Estado civil", value: personal?.estado_civil },
+                { label: "Hijos", value: personal?.hijos },
+                { label: "Correo", value: personal?.correo },
+              ]} />
             </section>
 
             <section className="twoCols">
               <div className="panel">
-                <div className="panelTitle">
-                  <div>
-                    <h2>Contacto de emergencia</h2>
-                    <p>Datos para una eventual emergencia.</p>
-                  </div>
-                </div>
-                <DataGrid
-                  items={[
-                    { label: "Contacto", value: personal?.contacto_emergencia },
-                    { label: "Teléfono", value: personal?.telefono_emergencia },
-                    { label: "Relación", value: personal?.relacion_contacto },
-                  ]}
-                />
+                <div className="panelTitle"><div><h2>Contacto de emergencia</h2><p>Datos para una eventual emergencia.</p></div></div>
+                <DataGrid items={[
+                  { label: "Contacto", value: personal?.contacto_emergencia },
+                  { label: "Teléfono", value: personal?.telefono_emergencia },
+                  { label: "Relación", value: personal?.relacion_contacto },
+                ]} />
               </div>
-
               <div className="panel">
-                <div className="panelTitle">
-                  <div>
-                    <h2>Pago y AFP</h2>
-                    <p>Visible únicamente para administración.</p>
-                  </div>
-                </div>
-                <DataGrid
-                  items={[
-                    { label: "Banco", value: pago?.banco },
-                    { label: "Cuenta en soles", value: pago?.cuenta_soles },
-                    { label: "AFP", value: pago?.afp },
-                  ]}
-                />
+                <div className="panelTitle"><div><h2>Pago y AFP</h2><p>Visible únicamente para administración.</p></div></div>
+                <DataGrid items={[
+                  { label: "Banco", value: pago?.banco },
+                  { label: "Cuenta en soles", value: pago?.cuenta_soles },
+                  { label: "AFP", value: pago?.afp },
+                ]} />
               </div>
             </section>
           </>
@@ -232,61 +407,37 @@ export default async function TerapistaFichaPage({
 
         <section className="twoCols">
           <div className="panel">
-            <div className="panelTitle">
-              <div>
-                <h2>Uniforme</h2>
-                <p>Tallas y cantidades entregadas o requeridas.</p>
-              </div>
-            </div>
+            <div className="panelTitle"><div><h2>Uniforme</h2><p>Tallas y cantidades registradas.</p></div></div>
             <div className="miniList">
-              {uniformeResult.data.length === 0 ? (
+              {visibleUniformes.length === 0 ? (
                 <div className="miniItem"><span>Sin prendas registradas</span></div>
-              ) : (
-                uniformeResult.data.map((row) => (
-                  <div className="miniItem" key={row.uniforme_id}>
-                    <span>{row.prenda}</span>
-                    <strong>{row.talla || "Sin talla"}{row.cantidad ? ` · ${row.cantidad}` : ""}</strong>
-                  </div>
-                ))
-              )}
+              ) : visibleUniformes.map((row) => (
+                <div className="miniItem" key={row.uniforme_id}>
+                  <span>{row.prenda}</span>
+                  <strong>{row.talla || "Sin talla"}{row.cantidad ? ` · ${row.cantidad}` : ""}</strong>
+                </div>
+              ))}
             </div>
           </div>
 
           <div className="panel">
-            <div className="panelTitle">
-              <div>
-                <h2>Alias históricos</h2>
-                <p>Reconocen nombres antiguos sin tocar atenciones pasadas.</p>
-              </div>
-            </div>
+            <div className="panelTitle"><div><h2>Alias históricos</h2><p>Reconocen nombres antiguos sin tocar atenciones pasadas.</p></div></div>
             <div className="miniList">
               {aliasResult.data.length === 0 ? (
                 <div className="miniItem"><span>Sin alias registrados</span></div>
-              ) : (
-                aliasResult.data.map((row) => (
-                  <div className="miniItem" key={row.alias}>
-                    <span>{row.alias}</span>
-                    <strong>{row.nota || "Alias histórico"}</strong>
-                  </div>
-                ))
-              )}
+              ) : aliasResult.data.map((row) => (
+                <div className="miniItem" key={row.alias}>
+                  <span>{row.alias}</span>
+                  <strong>{row.nota || "Alias histórico"}</strong>
+                </div>
+              ))}
             </div>
           </div>
         </section>
 
         <section className="panel">
-          <div className="panelTitle">
-            <div>
-              <h2>Horario habitual</h2>
-              <p>Se implementará en la siguiente fase sobre esta misma ficha.</p>
-            </div>
-          </div>
-          <div className="miniList">
-            <div className="miniItem">
-              <span>Estado</span>
-              <strong>Pendiente de configurar</strong>
-            </div>
-          </div>
+          <div className="panelTitle"><div><h2>Horario habitual</h2><p>Se implementará en la siguiente fase sobre esta misma ficha.</p></div></div>
+          <div className="miniList"><div className="miniItem"><span>Estado</span><strong>Pendiente de configurar</strong></div></div>
         </section>
 
         {(laboral?.observacion_laboral || terapista.observacion) && (
