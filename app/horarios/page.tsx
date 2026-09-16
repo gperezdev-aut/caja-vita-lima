@@ -68,7 +68,9 @@ export default async function HorariosPage() {
           <div>
             <p className="eyebrow">Personal</p>
             <h1>Horarios</h1>
-            <p className="subtitle">Vista semanal general para saber a qué hora entra cada terapista. Se alimenta automáticamente desde la ficha de cada una.</p>
+            <p className="subtitle">
+              Vista semanal general para saber a qué hora entra cada terapista. Se alimenta automáticamente desde el horario habitual de cada ficha.
+            </p>
           </div>
           <div className="badge"><span>Activas</span><strong>{terapistasResult.data.length}</strong></div>
         </section>
@@ -76,9 +78,14 @@ export default async function HorariosPage() {
         {errors.length > 0 && <div className="alert">No se pudo cargar toda la información de horarios.</div>}
 
         <section className="panel">
-          <div className="panelTitle"><div><h2>Semana habitual</h2><p>La vista de excepciones por fecha se agregará en la siguiente fase.</p></div></div>
+          <div className="panelTitle">
+            <div>
+              <h2>Semana habitual</h2>
+              <p>En celular puedes deslizar la tabla horizontalmente. Los cambios por fecha se agregarán como excepciones en la siguiente fase.</p>
+            </div>
+          </div>
 
-          <div className="tableWrap horariosDesktop">
+          <div className="tableWrap">
             <table style={{ minWidth: "1080px" }}>
               <thead>
                 <tr>
@@ -91,32 +98,19 @@ export default async function HorariosPage() {
                   const schedule = byTherapist.get(terapista.terapista_id);
                   return (
                     <tr key={terapista.terapista_id}>
-                      <td><Link className="strong" href={`/terapistas/${terapista.terapista_id}/horario`}>{terapista.nombre}</Link></td>
-                      {DIAS.map(([dia, nombre]) => <td key={nombre}>{scheduleLabel(schedule?.get(dia))}</td>)}
+                      <td>
+                        <Link className="strong" href={`/terapistas/${terapista.terapista_id}/horario`}>
+                          {terapista.nombre}
+                        </Link>
+                      </td>
+                      {DIAS.map(([dia, nombre]) => (
+                        <td key={nombre}>{scheduleLabel(schedule?.get(dia))}</td>
+                      ))}
                     </tr>
                   );
                 })}
               </tbody>
             </table>
-          </div>
-
-          <div className="horariosMobile miniList">
-            {DIAS.map(([dia, nombre]) => (
-              <section className="formSection" key={dia}>
-                <h3 style={{ margin: "0 0 12px" }}>{nombre}</h3>
-                <div className="miniList">
-                  {terapistasResult.data.map((terapista) => {
-                    const row = byTherapist.get(terapista.terapista_id)?.get(dia);
-                    return (
-                      <div className="miniItem" key={terapista.terapista_id}>
-                        <span>{terapista.nombre}</span>
-                        <strong>{scheduleLabel(row)}</strong>
-                      </div>
-                    );
-                  })}
-                </div>
-              </section>
-            ))}
           </div>
         </section>
       </section>
