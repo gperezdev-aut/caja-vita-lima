@@ -58,7 +58,7 @@ const TIPO_LABEL: Record<string, string> = {
 };
 
 const TYPE_STYLE: Record<string, { background: string; color: string; borderColor: string }> = {
-  DESCANSO: { background: "#eee9e1", color: "#4f5960", borderColor: "#d7d0c5" },
+  DESCANSO: { background: "#e8e1d6", color: "#374047", borderColor: "#cfc5b7" },
   CAMBIO_HORARIO: { background: "#fff1c9", color: "#795500", borderColor: "#ecd28b" },
   FALTA: { background: "#fde4df", color: "#9b3126", borderColor: "#edb9b0" },
   RECUPERACION: { background: "#ffe6cf", color: "#8a4708", borderColor: "#f0bf91" },
@@ -120,21 +120,16 @@ function weekBounds(anchorIso: string) {
   const days: CalendarDay[] = Array.from({ length: 7 }, (_, index) => {
     const date = new Date(monday);
     date.setUTCDate(monday.getUTCDate() + index);
-    return {
-      iso: isoFromDate(date),
-      day: date.getUTCDate(),
-      weekDay: index + 1,
-    };
+    return { iso: isoFromDate(date), day: date.getUTCDate(), weekDay: index + 1 };
   });
   return { first: days[0].iso, last: days[6].iso, days };
 }
 
 function monthBounds(month: string) {
   const [year, monthNumber] = month.split("-").map(Number);
-  const first = new Date(Date.UTC(year, monthNumber - 1, 1));
   const last = new Date(Date.UTC(year, monthNumber, 0));
   return {
-    first: first.toISOString().slice(0, 10),
+    first: `${month}-01`,
     last: last.toISOString().slice(0, 10),
     days: Array.from({ length: last.getUTCDate() }, (_, index) => {
       const date = new Date(Date.UTC(year, monthNumber - 1, index + 1));
@@ -163,16 +158,18 @@ function monthLabel(month: string) {
   }).format(new Date(Date.UTC(year, monthNumber - 1, 1)));
 }
 
-function compactDateLabel(iso: string) {
-  return new Intl.DateTimeFormat("es-PE", {
-    day: "numeric",
-    month: "short",
-    timeZone: "UTC",
-  }).format(utcDate(iso));
-}
-
 function weekLabel(first: string, last: string) {
-  return `${compactDateLabel(first)} → ${compactDateLabel(last)}`;
+  const start = utcDate(first);
+  const end = utcDate(last);
+  const sameMonth = start.getUTCMonth() === end.getUTCMonth();
+  const sameYear = start.getUTCFullYear() === end.getUTCFullYear();
+  const startDay = start.getUTCDate();
+  const endDay = end.getUTCDate();
+  const startMonth = new Intl.DateTimeFormat("es-PE", { month: "long", timeZone: "UTC" }).format(start);
+  const endMonth = new Intl.DateTimeFormat("es-PE", { month: "long", timeZone: "UTC" }).format(end);
+  if (sameMonth && sameYear) return `${startDay}–${endDay} de ${endMonth}`;
+  if (sameYear) return `${startDay} de ${startMonth} – ${endDay} de ${endMonth}`;
+  return `${startDay} de ${startMonth} de ${start.getUTCFullYear()} – ${endDay} de ${endMonth} de ${end.getUTCFullYear()}`;
 }
 
 function scheduleLabel(row: HorarioRow | ExcepcionRow | undefined) {
@@ -189,18 +186,7 @@ function errorMessage(code: string | undefined) {
   return "No se pudo guardar el cambio de horario.";
 }
 
-export default async function HorariosPage({
-  searchParams,
-}: {
-  searchParams: Promise<{
-    vista?: string;
-    fecha?: string;
-    mes?: string;
-    updated?: string;
-    deleted?: string;
-    error?: string;
-  }>;
-}) {
+export default async function HorariosPage({ searchParams }: { searchParams: Promise<{ vista?: string; fecha?: string; mes?: string; updated?: string; deleted?: string; error?: string }> }) {
   const session = await requireModuleAccess("horarios");
   const query = await searchParams;
   const view = query.vista === "mes" ? "mes" : "semana";
@@ -211,42 +197,28 @@ export default async function HorariosPage({
   const canEdit = session.rol === "ADMIN_GERALD" || session.rol === "SOCIO";
 
   const [terapistasResult, horariosResult, excepcionesResult] = await Promise.all([
-    supabaseSelectWhere<TerapistaRow>(
-      "terapistas",
-      "select=terapista_id,nombre,estado&estado=eq.ACTIVA&order=nombre.asc"
-    ),
-    supabaseSelectWhere<HorarioRow>(
-      "terapista_horario_habitual",
-      "select=terapista_id,dia_semana,trabaja,hora_inicio,hora_fin,sede&order=terapista_id.asc,dia_semana.asc"
-    ),
-    supabaseSelectWhere<ExcepcionRow>(
-      "terapista_horario_excepciones",
-      `select=excepcion_id,terapista_id,fecha,tipo,trabaja,hora_inicio,hora_fin,sede,observacion&fecha=gte.${bounds.first}&fecha=lte.${bounds.last}&order=fecha.asc,terapista_id.asc`
-    ),
+    supabaseSelectWhere<TerapistaRow>("terapistas", "select=terapista_id,nombre,estado&estado=eq.ACTIVA&order=nombre.asc"),
+    supabaseSelectWhere<HorarioRow>("terapista_horario_habitual", "select=terapista_id,dia_semana,trabaja,hora_inicio,hora_fin,sede&order=terapista_id.asc,dia_semana.asc"),
+    supabaseSelectWhere<ExcepcionRow>("terapista_horario_excepciones", `select=excepcion_id,terapista_id,fecha,tipo,trabaja,hora_inicio,hora_fin,sede,observacion&fecha=gte.${bounds.first}&fecha=lte.${bounds.last}&order=fecha.asc,terapista_id.asc`),
   ]);
 
   const habitualByTherapist = new Map<string, Map<number, HorarioRow>>();
   for (const row of horariosResult.data) {
-    if (!habitualByTherapist.has(row.terapista_id)) {
-      habitualByTherapist.set(row.terapista_id, new Map());
-    }
+    if (!habitualByTherapist.has(row.terapista_id)) habitualByTherapist.set(row.terapista_id, new Map());
     habitualByTherapist.get(row.terapista_id)!.set(row.dia_semana, row);
   }
 
   const excepcionByTherapist = new Map<string, Map<string, ExcepcionRow>>();
   for (const row of excepcionesResult.data) {
-    if (!excepcionByTherapist.has(row.terapista_id)) {
-      excepcionByTherapist.set(row.terapista_id, new Map());
-    }
+    if (!excepcionByTherapist.has(row.terapista_id)) excepcionByTherapist.set(row.terapista_id, new Map());
     excepcionByTherapist.get(row.terapista_id)!.set(row.fecha, row);
   }
 
   const therapistName = new Map(terapistasResult.data.map((row) => [row.terapista_id, row.nombre]));
   const errors = [terapistasResult.error, horariosResult.error, excepcionesResult.error].filter(Boolean);
-
   const weekPrev = addDays(bounds.first, -7);
   const weekNext = addDays(bounds.first, 7);
-  const calendarTitle = view === "semana" ? `Semana ${weekLabel(bounds.first, bounds.last)}` : monthLabel(month);
+  const calendarTitle = view === "semana" ? weekLabel(bounds.first, bounds.last) : monthLabel(month);
 
   return (
     <main className="appShell">
@@ -256,9 +228,7 @@ export default async function HorariosPage({
           <div>
             <p className="eyebrow">Personal</p>
             <h1>Horarios</h1>
-            <p className="subtitle">
-              Vista rápida de entradas, salidas y descansos. Semana para operación diaria; mes para planificación.
-            </p>
+            <p className="subtitle">Vista rápida de entradas, salidas y descansos. Semana para operación diaria; mes para planificación.</p>
           </div>
           <div className="badge"><span>Activas</span><strong>{terapistasResult.data.length}</strong></div>
         </section>
@@ -277,57 +247,34 @@ export default async function HorariosPage({
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "flex-end" }}>
               <Link className={view === "semana" ? "primaryButton" : "ghostButton"} href={`/horarios?vista=semana&fecha=${anchorDate}`}>Semana</Link>
               <Link className={view === "mes" ? "primaryButton" : "ghostButton"} href={`/horarios?vista=mes&mes=${month}`}>Mes</Link>
-              {view === "semana" ? (
-                <>
-                  <Link className="ghostButton" href={`/horarios?vista=semana&fecha=${weekPrev}`}>← Semana anterior</Link>
-                  <Link className="ghostButton" href={`/horarios?vista=semana&fecha=${today}`}>Esta semana</Link>
-                  <Link className="ghostButton" href={`/horarios?vista=semana&fecha=${weekNext}`}>Semana siguiente →</Link>
-                </>
-              ) : (
-                <>
-                  <Link className="ghostButton" href={`/horarios?vista=mes&mes=${moveMonth(month, -1)}`}>← Mes anterior</Link>
-                  <Link className="ghostButton" href={`/horarios?vista=mes&mes=${limaYearMonth()}`}>Hoy</Link>
-                  <Link className="ghostButton" href={`/horarios?vista=mes&mes=${moveMonth(month, 1)}`}>Mes siguiente →</Link>
-                </>
-              )}
+              {view === "semana" ? <>
+                <Link className="ghostButton" href={`/horarios?vista=semana&fecha=${weekPrev}`}>← Semana anterior</Link>
+                <Link className="ghostButton" href={`/horarios?vista=semana&fecha=${today}`}>Esta semana</Link>
+                <Link className="ghostButton" href={`/horarios?vista=semana&fecha=${weekNext}`}>Semana siguiente →</Link>
+              </> : <>
+                <Link className="ghostButton" href={`/horarios?vista=mes&mes=${moveMonth(month, -1)}`}>← Mes anterior</Link>
+                <Link className="ghostButton" href={`/horarios?vista=mes&mes=${limaYearMonth()}`}>Hoy</Link>
+                <Link className="ghostButton" href={`/horarios?vista=mes&mes=${moveMonth(month, 1)}`}>Mes siguiente →</Link>
+              </>}
             </div>
           </div>
 
           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "14px" }}>
-            {Object.entries(TIPO_LABEL).map(([tipo, label]) => (
-              <span
-                key={tipo}
-                style={{
-                  ...TYPE_STYLE[tipo],
-                  border: `1px solid ${TYPE_STYLE[tipo].borderColor}`,
-                  borderRadius: "999px",
-                  padding: "6px 10px",
-                  fontSize: "12px",
-                  fontWeight: 800,
-                }}
-              >
-                {label}
-              </span>
-            ))}
+            {Object.entries(TIPO_LABEL).map(([tipo, label]) => <span key={tipo} style={{ ...TYPE_STYLE[tipo], border: `1px solid ${TYPE_STYLE[tipo].borderColor}`, borderRadius: "999px", padding: "6px 10px", fontSize: "12px", fontWeight: 800 }}>{label}</span>)}
           </div>
 
           <div className="tableWrap">
             <table style={{ minWidth: view === "semana" ? "920px" : `${Math.max(980, 170 + bounds.days.length * 132)}px` }}>
               <thead>
                 <tr>
-                  <th style={{ position: "sticky", left: 0, zIndex: 4, background: "#fbf4e7", minWidth: "150px" }}>Terapista</th>
+                  <th style={{ position: "sticky", left: 0, top: 0, zIndex: 6, background: "#fbf4e7", minWidth: "150px" }}>Terapista</th>
                   {bounds.days.map((day) => {
                     const isToday = day.iso === today;
-                    return (
-                      <th
-                        key={day.iso}
-                        style={isToday ? { background: "#e5f1eb", color: "#1f6b4f" } : undefined}
-                      >
-                        <span>{DIAS.find(([value]) => value === day.weekDay)?.[1]}</span>
-                        <strong style={{ display: "block", marginTop: "3px" }}>{day.day}</strong>
-                        {isToday && <small style={{ display: "block", marginTop: "3px", fontWeight: 900 }}>HOY</small>}
-                      </th>
-                    );
+                    return <th key={day.iso} style={{ position: "sticky", top: 0, zIndex: 5, background: isToday ? "#dceee4" : "#fbf4e7", color: isToday ? "#1f6b4f" : undefined }}>
+                      <span>{DIAS.find(([value]) => value === day.weekDay)?.[1]}</span>
+                      <strong style={{ display: "block", marginTop: "3px" }}>{day.day}</strong>
+                      {isToday && <small style={{ display: "block", marginTop: "3px", fontWeight: 900 }}>HOY</small>}
+                    </th>;
                   })}
                 </tr>
               </thead>
@@ -335,168 +282,61 @@ export default async function HorariosPage({
                 {terapistasResult.data.map((terapista) => {
                   const habitual = habitualByTherapist.get(terapista.terapista_id);
                   const excepciones = excepcionByTherapist.get(terapista.terapista_id);
-                  return (
-                    <tr key={terapista.terapista_id}>
-                      <td style={{ position: "sticky", left: 0, zIndex: 3, background: "white", minWidth: "150px" }}>
-                        <Link className="strong" href={`/terapistas/${terapista.terapista_id}/horario`}>
-                          {terapista.nombre}
-                        </Link>
-                      </td>
-                      {bounds.days.map((day) => {
-                        const exception = excepciones?.get(day.iso);
-                        const base = habitual?.get(day.weekDay);
-                        const resolved = exception ?? base;
-                        const isToday = day.iso === today;
-                        const style = exception ? TYPE_STYLE[exception.tipo] : undefined;
-                        return (
-                          <td
-                            key={day.iso}
-                            style={{
-                              ...(style ?? {}),
-                              ...(isToday ? { boxShadow: "inset 0 0 0 2px rgba(31,107,79,.32)" } : {}),
-                              minWidth: view === "semana" ? "108px" : "124px",
-                            }}
-                          >
-                            {exception ? (
-                              <>
-                                <strong style={{ display: "block", fontSize: "12px" }}>
-                                  {exception.tipo === "DESCANSO" ? "DESCANSO" : TIPO_LABEL[exception.tipo] ?? exception.tipo}
-                                </strong>
-                                {exception.trabaja && (
-                                  <small style={{ display: "block", marginTop: "5px", fontWeight: 800 }}>
-                                    {scheduleLabel(exception)}
-                                  </small>
-                                )}
-                              </>
-                            ) : (
-                              <strong style={{ display: "block", fontSize: "12px" }}>{scheduleLabel(resolved)}</strong>
-                            )}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  );
+                  return <tr key={terapista.terapista_id}>
+                    <td style={{ position: "sticky", left: 0, zIndex: 4, background: "white", minWidth: "150px", boxShadow: "4px 0 8px rgba(32,45,58,.06)" }}>
+                      <Link className="strong" href={`/terapistas/${terapista.terapista_id}/horario`}>{terapista.nombre}</Link>
+                    </td>
+                    {bounds.days.map((day) => {
+                      const exception = excepciones?.get(day.iso);
+                      const base = habitual?.get(day.weekDay);
+                      const resolved = exception ?? base;
+                      const isToday = day.iso === today;
+                      const style = exception ? TYPE_STYLE[exception.tipo] : undefined;
+                      return <td key={day.iso} style={{ ...(style ?? {}), ...(isToday ? { boxShadow: "inset 0 0 0 2px rgba(31,107,79,.32)" } : {}), minWidth: view === "semana" ? "108px" : "124px" }}>
+                        {exception ? <>
+                          <strong style={{ display: "block", fontSize: exception.tipo === "DESCANSO" ? "12px" : "12px", fontWeight: exception.tipo === "DESCANSO" ? 900 : 800, letterSpacing: exception.tipo === "DESCANSO" ? ".02em" : undefined }}>
+                            {exception.tipo === "DESCANSO" ? "DESCANSO" : TIPO_LABEL[exception.tipo] ?? exception.tipo}
+                          </strong>
+                          {exception.trabaja && <small style={{ display: "block", marginTop: "5px", fontWeight: 800 }}>{scheduleLabel(exception)}</small>}
+                        </> : <strong style={{ display: "block", fontSize: "12px" }}>{scheduleLabel(resolved)}</strong>}
+                      </td>;
+                    })}
+                  </tr>;
                 })}
               </tbody>
             </table>
           </div>
         </section>
 
-        {canEdit && (
-          <section className="panel">
-            <div className="panelTitle">
-              <div>
-                <h2>Cambio puntual por fecha</h2>
-                <p>Úsalo para descanso, falta, recuperación, vacaciones, reunión, apoyo o cambio de horario. No modifica el patrón habitual.</p>
-              </div>
+        {canEdit && <section className="panel">
+          <div className="panelTitle"><div><h2>Cambio puntual por fecha</h2><p>Úsalo para descanso, falta, recuperación, vacaciones, reunión, apoyo o cambio de horario. No modifica el patrón habitual.</p></div></div>
+          <form action={saveHorarioExcepcionAction} className="atencionForm" style={{ boxShadow: "none" }} autoComplete="off">
+            <div className="atencionGrid">
+              <label className="atencionField">Terapista<select name="terapista_id" required defaultValue="" autoComplete="off"><option value="" disabled>Seleccionar terapista</option>{terapistasResult.data.map((terapista) => <option key={terapista.terapista_id} value={terapista.terapista_id}>{terapista.nombre}</option>)}</select></label>
+              <label className="atencionField">Fecha<input name="fecha" type="date" required defaultValue={today} /></label>
+              <label className="atencionField">Tipo<select name="tipo" required defaultValue="DESCANSO"><option value="DESCANSO">Descanso</option><option value="CAMBIO_HORARIO">Cambio de horario</option><option value="FALTA">Falta</option><option value="RECUPERACION">Recuperación</option><option value="VACACIONES">Vacaciones</option><option value="REUNION">Reunión</option><option value="APOYO">Apoyo</option></select></label>
+              <label className="atencionField">Entrada<input name="hora_inicio" type="time" /><small>Solo se usa en cambio de horario, recuperación o apoyo.</small></label>
+              <label className="atencionField">Salida<input name="hora_fin" type="time" /></label>
+              <label className="atencionField">Sede<select name="sede" defaultValue=""><option value="">Sin definir</option><option value="Miraflores">Miraflores</option><option value="San Borja">San Borja</option><option value="Ambas">Ambas</option></select></label>
+              <label className="atencionField atencionFieldWide">Observación<input name="observacion" placeholder="Ej. cambio solicitado por coordinación" /></label>
             </div>
-
-            <form action={saveHorarioExcepcionAction} className="atencionForm" style={{ boxShadow: "none" }}>
-              <div className="atencionGrid">
-                <label className="atencionField">
-                  Terapista
-                  <select name="terapista_id" required defaultValue="">
-                    <option value="" disabled>Seleccionar</option>
-                    {terapistasResult.data.map((terapista) => (
-                      <option key={terapista.terapista_id} value={terapista.terapista_id}>{terapista.nombre}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className="atencionField">
-                  Fecha
-                  <input name="fecha" type="date" required />
-                </label>
-                <label className="atencionField">
-                  Tipo
-                  <select name="tipo" required defaultValue="DESCANSO">
-                    <option value="DESCANSO">Descanso</option>
-                    <option value="CAMBIO_HORARIO">Cambio de horario</option>
-                    <option value="FALTA">Falta</option>
-                    <option value="RECUPERACION">Recuperación</option>
-                    <option value="VACACIONES">Vacaciones</option>
-                    <option value="REUNION">Reunión</option>
-                    <option value="APOYO">Apoyo</option>
-                  </select>
-                </label>
-                <label className="atencionField">
-                  Entrada
-                  <input name="hora_inicio" type="time" />
-                  <small>Solo se usa en cambio de horario, recuperación o apoyo.</small>
-                </label>
-                <label className="atencionField">
-                  Salida
-                  <input name="hora_fin" type="time" />
-                </label>
-                <label className="atencionField">
-                  Sede
-                  <select name="sede" defaultValue="">
-                    <option value="">Sin definir</option>
-                    <option value="Miraflores">Miraflores</option>
-                    <option value="San Borja">San Borja</option>
-                    <option value="Ambas">Ambas</option>
-                  </select>
-                </label>
-                <label className="atencionField atencionFieldWide">
-                  Observación
-                  <input name="observacion" placeholder="Ej. cambio solicitado por coordinación" />
-                </label>
-              </div>
-              <button className="primaryButton" type="submit" style={{ width: "100%", marginTop: "16px" }}>
-                Guardar cambio puntual
-              </button>
-            </form>
-          </section>
-        )}
+            <button className="primaryButton" type="submit" style={{ width: "100%", marginTop: "16px" }}>Guardar cambio puntual</button>
+          </form>
+        </section>}
 
         <section className="panel">
           <div className="panelTitle"><div><h2>Excepciones visibles</h2><p>Cambios puntuales dentro del período mostrado.</p></div></div>
           <div className="miniList">
-            {excepcionesResult.data.length === 0 ? (
-              <div className="miniItem"><span>Sin excepciones registradas en este período</span></div>
-            ) : excepcionesResult.data.map((row) => (
-              <div className="miniItem" key={row.excepcion_id} style={{ alignItems: "center", flexWrap: "wrap" }}>
-                <span>
-                  <strong style={{ display: "block", color: "var(--text)" }}>{therapistName.get(row.terapista_id) ?? "Terapista"} · {row.fecha}</strong>
-                  {row.tipo === "DESCANSO"
-                    ? "Descanso"
-                    : `${TIPO_LABEL[row.tipo] ?? row.tipo} · ${scheduleLabel(row)}`}
-                  {row.observacion ? ` · ${row.observacion}` : ""}
-                </span>
-                {canEdit && (
-                  <form action={deleteHorarioExcepcionAction}>
-                    <input type="hidden" name="terapista_id" value={row.terapista_id} />
-                    <input type="hidden" name="fecha" value={row.fecha} />
-                    <button className="ghostButton" type="submit">Quitar excepción</button>
-                  </form>
-                )}
-              </div>
-            ))}
+            {excepcionesResult.data.length === 0 ? <div className="miniItem"><span>Sin excepciones registradas en este período</span></div> : excepcionesResult.data.map((row) => <div className="miniItem" key={row.excepcion_id} style={{ alignItems: "center", flexWrap: "wrap" }}>
+              <span><strong style={{ display: "block", color: "var(--text)" }}>{therapistName.get(row.terapista_id) ?? "Terapista"} · {row.fecha}</strong>{row.tipo === "DESCANSO" ? "Descanso" : `${TIPO_LABEL[row.tipo] ?? row.tipo} · ${scheduleLabel(row)}`}{row.observacion ? ` · ${row.observacion}` : ""}</span>
+              {canEdit && <form action={deleteHorarioExcepcionAction}><input type="hidden" name="terapista_id" value={row.terapista_id} /><input type="hidden" name="fecha" value={row.fecha} /><button className="ghostButton" type="submit">Quitar excepción</button></form>}
+            </div>)}
           </div>
         </section>
 
         <section className="panel">
           <div className="panelTitle"><div><h2>Horario habitual</h2><p>Referencia base semanal de cada terapista.</p></div></div>
-          <div className="tableWrap">
-            <table style={{ minWidth: "920px" }}>
-              <thead>
-                <tr>
-                  <th style={{ position: "sticky", left: 0, zIndex: 4, background: "#fbf4e7" }}>Terapista</th>
-                  {DIAS.map(([, nombre]) => <th key={nombre}>{nombre}</th>)}
-                </tr>
-              </thead>
-              <tbody>
-                {terapistasResult.data.map((terapista) => {
-                  const schedule = habitualByTherapist.get(terapista.terapista_id);
-                  return (
-                    <tr key={terapista.terapista_id}>
-                      <td style={{ position: "sticky", left: 0, zIndex: 3, background: "white" }}><Link className="strong" href={`/terapistas/${terapista.terapista_id}/horario`}>{terapista.nombre}</Link></td>
-                      {DIAS.map(([dia, nombre]) => <td key={nombre}>{scheduleLabel(schedule?.get(dia))}</td>)}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <div className="tableWrap"><table style={{ minWidth: "920px" }}><thead><tr><th style={{ position: "sticky", left: 0, zIndex: 4, background: "#fbf4e7" }}>Terapista</th>{DIAS.map(([, nombre]) => <th key={nombre}>{nombre}</th>)}</tr></thead><tbody>{terapistasResult.data.map((terapista) => { const schedule = habitualByTherapist.get(terapista.terapista_id); return <tr key={terapista.terapista_id}><td style={{ position: "sticky", left: 0, zIndex: 3, background: "white" }}><Link className="strong" href={`/terapistas/${terapista.terapista_id}/horario`}>{terapista.nombre}</Link></td>{DIAS.map(([dia, nombre]) => <td key={nombre}>{scheduleLabel(schedule?.get(dia))}</td>)}</tr>; })}</tbody></table></div>
         </section>
       </section>
     </main>
