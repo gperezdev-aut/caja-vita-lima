@@ -5,8 +5,7 @@ import type { CajaSession } from "@/lib/auth";
 import { getVisibleNavItems } from "@/lib/auth";
 
 function roleLabel(role: CajaSession["rol"]) {
-  if (role === "ADMIN_GERALD") return "Administrador";
-  if (role === "SOCIO") return "Socio";
+  if (role === "ADMIN_GERALD" || role === "SOCIO") return "Administración";
   if (role === "VITA_OPERACION") return "Operación";
   return role;
 }
