@@ -40,6 +40,8 @@ async function updateTerapistaMaster(terapistaId: string, payload: Record<string
   }
 
   try {
+    // El maestro usa PATCH deliberadamente: no se permite renombrar la terapista
+    // desde esta ficha y así no se arriesgan config_listas ni referencias históricas.
     const response = await fetch(
       `${supabaseUrl.replace(/\/$/, "")}/rest/v1/terapistas?terapista_id=eq.${encodeURIComponent(terapistaId)}`,
       {
