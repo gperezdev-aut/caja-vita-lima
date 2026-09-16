@@ -11,8 +11,17 @@ function roleLabel(role: CajaSession["rol"]) {
 }
 
 export function CajaSidebar({ session }: { session: CajaSession }) {
-  const navItems = getVisibleNavItems(session.rol);
+  const visibleItems = getVisibleNavItems(session.rol);
+  const horariosItem = visibleItems.find((item) => item.key === "horarios");
+  const cierreItem = visibleItems.find((item) => item.key === "cierre-caja");
+  const navItems = [
+    ...visibleItems.filter((item) => item.key !== "horarios" && item.key !== "cierre-caja"),
+    ...(cierreItem ? [cierreItem] : []),
+    ...(horariosItem ? [horariosItem] : []),
+  ];
   const moduleItems = navItems.filter((item) => item.key !== "dashboard" && item.key !== "alertas");
+  const mobilePrimaryItems = navItems.filter((item) => item.key !== "horarios" && item.key !== "cierre-caja");
+  const mobileFinalItems = navItems.filter((item) => item.key === "cierre-caja" || item.key === "horarios");
 
   return (
     <>
@@ -101,12 +110,22 @@ export function CajaSidebar({ session }: { session: CajaSession }) {
 
           <div className="mobileMenuContent">
             <nav className="mobileMenuNav" aria-label="Navegación principal">
-              {navItems.map((item) => (
+              {mobilePrimaryItems.map((item) => (
                 <Link key={item.key} href={item.href}>
                   {item.label}
                 </Link>
               ))}
             </nav>
+
+            {mobileFinalItems.length > 0 && (
+              <nav className="mobileMenuNav mobileMenuFinalRow" aria-label="Navegación de cierre y horarios">
+                {mobileFinalItems.map((item) => (
+                  <Link key={item.key} href={item.href}>
+                    {item.label}
+                  </Link>
+                ))}
+              </nav>
+            )}
 
             <form action={logoutAction}>
               <button
