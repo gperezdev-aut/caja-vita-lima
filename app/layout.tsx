@@ -1,5 +1,6 @@
 import "./globals.css";
 import "./gift-card-qa-polish.css";
+import "./horarios-mobile-polish.css";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
