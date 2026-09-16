@@ -48,7 +48,10 @@ jobs:
           CREATE DATABASE caja_catalog_contract;
           CREATE DATABASE caja_ledger_contract;
           CREATE DATABASE caja_reserva_contract;
+          CREATE DATABASE caja_gift_card_reserva_contract;
           SQL
+
+      # El agregado local equivalente es: npm run test:sql
 
       - name: Validate catalog snapshot contract
         env:
@@ -64,3 +67,8 @@ jobs:
         env:
           DATABASE_URL: postgresql://caja_ci:caja_ci_only_password@localhost:5432/caja_reserva_contract
         run: node tests/run-reserva-atencion-postgres-validation.mjs
+
+      - name: Validate Gift Card reservation contract
+        env:
+          DATABASE_URL: postgresql://caja_ci:caja_ci_only_password@localhost:5432/caja_gift_card_reserva_contract
+        run: node tests/run-gift-card-reserva-postgres-validation.mjs

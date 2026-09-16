@@ -23,6 +23,7 @@ import {
   type PersonaPersonalizada,
 } from "@/lib/fichaCitaDominio";
 import { generarTokenFicha, normalizarTelefonoE164 } from "@/lib/fichaCitaPublica";
+import { calcularCoberturaGiftCard, calcularEfectivoMinimoAdicional } from "@/lib/giftCardReservations";
 import {
   supabaseRpc,
   supabaseSelect,
@@ -111,6 +112,7 @@ export async function prepararCitaAction(
   const pais = text(formData, "pais").toUpperCase();
   const telefono = normalizarTelefonoE164(text(formData, "telefono"), pais);
   const esGiftCard = text(formData, "es_gift_card") === "1";
+  const giftcardId = text(formData, "giftcard_id");
   const promoCode = text(formData, "promo_code");
   const montoPagado = number(formData, "monto_pagado");
   const distritoDomicilio = text(formData, "domicilio_distrito");
@@ -124,11 +126,28 @@ export async function prepararCitaAction(
   if (!telefono.ok) {
     return { ok: false, error: "No se pudo normalizar el teléfono para el país elegido." };
   }
-  const errorMvp = validarPreparacionMvp({ canal, esGiftCard, cuponPromocional: promoCode });
+  const errorMvp = esGiftCard
+    ? (canal !== "directo" || promoCode || esPersonalizada || text(formData, "tipo_atencion") !== "sede" ? "Las Gift Cards solo admiten citas normales en sede, sin promociones ni atención personalizada." : "")
+    : validarPreparacionMvp({ canal, esGiftCard, cuponPromocional: promoCode });
   if (errorMvp) return { ok: false, error: errorMvp };
   if (esPersonalizada && (canal !== "directo" || text(formData, "tipo_atencion") !== "sede")) return { ok: false, error: "La atención personalizada solo admite canal directo y atención presencial." };
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) {
     return { ok: false, error: "El identificador del intento no es válido. Recarga el formulario." };
+  }
+
+  let giftCard: Row | null = null;
+  let historicalService: Row | null = null;
+  if (esGiftCard) {
+    if (!giftcardId) return { ok: false, error: "Falta identificar la Gift Card." };
+    const giftResult = await supabaseSelectWhere<Row>("vista_gift_cards_operativa", `select=giftcard_id,codigo,tipo,service_code,service_name_snapshot,service_duration_min,service_price_pen,catalog_release_id,catalog_price_version,estado_efectivo,saldo_disponible&giftcard_id=eq.${encodeURIComponent(giftcardId)}&limit=1`);
+    giftCard = giftResult.data[0] ?? null;
+    if (giftResult.error || !giftCard || !["EMITIDA", "PARCIALMENTE_USADA"].includes(String(giftCard.estado_efectivo)) || Number(giftCard.saldo_disponible ?? 0) <= 0) return { ok: false, error: "La Gift Card ya no está disponible para reservar." };
+    if (giftCard.tipo === "SERVICIO") {
+      const history = await supabaseRpc<Row[]>("caja_gift_card_catalog_appointment_history_v1", { p_service_code: String(giftCard.service_code ?? ""), p_release_id: String(giftCard.catalog_release_id ?? ""), p_price_version: String(giftCard.catalog_price_version ?? "") });
+      const rows = history.data ?? [];
+      if (history.error || rows.length !== 1) return { ok: false, error: "No se pudo validar el servicio histórico exacto de la Gift Card." };
+      historicalService = rows[0];
+    }
   }
 
   let componentesPersonalizados: PersonaPersonalizada[] | null = null;
@@ -136,9 +155,10 @@ export async function prepararCitaAction(
     try { componentesPersonalizados = JSON.parse(text(formData, "componentes")); } catch { return { ok: false, error: "Los componentes personalizados no son válidos." }; }
     if (!Array.isArray(componentesPersonalizados)) return { ok: false, error: "Los componentes personalizados no son válidos." };
   }
-  const serviceCodes = esPersonalizada
+  let serviceCodes = esPersonalizada
     ? componentesPersonalizados!.flatMap((p) => p.componentes.filter((c) => c.tipo === "catalogo").map((c) => c.codigo ?? ""))
     : [text(formData, "servicio_1"), text(formData, "servicio_2")].filter(Boolean);
+  if (giftCard?.tipo === "SERVICIO") serviceCodes = [String(giftCard.service_code ?? "")];
   if (!esPersonalizada && !serviceCodes.length) return { ok: false, error: "Selecciona un servicio." };
 
   const [catalogResult, sedeResult, metodosResult] = await Promise.all([
@@ -159,7 +179,10 @@ export async function prepararCitaAction(
 
   if (!catalogResult.ok) return { ok: false, error: "El snapshot canónico local no está disponible." };
   const catalogByCode = new Map(catalogResult.services.map((service) => [service.serviceCode, service]));
-  const canonicalServices = serviceCodes.map((code) => catalogByCode.get(code));
+  const historicalCanonical = historicalService ? {
+    serviceCode: String(historicalService.service_code), nameEs: String(giftCard?.service_name_snapshot ?? historicalService.name_es), durationMin: Number(giftCard?.service_duration_min ?? historicalService.duration_min), pricePen: Number(giftCard?.service_price_pen ?? historicalService.price_pen), category: String(historicalService.category), commercialGroup: String(historicalService.commercial_group ?? ""), modality: String(historicalService.modality), peopleMin: Number(historicalService.people_min), peopleMax: Number(historicalService.people_max), selectionRule: String(historicalService.selection_rule), reservationBehavior: String(historicalService.reservation_behavior), releaseId: String(historicalService.release_id), priceVersion: String(historicalService.price_version), validFrom: String(historicalService.valid_from ?? ""), validTo: historicalService.valid_to ? String(historicalService.valid_to) : null,
+  } : null;
+  const canonicalServices = historicalCanonical ? [historicalCanonical] : serviceCodes.map((code) => catalogByCode.get(code));
   if (canonicalServices.some((service) => !service)) {
     return { ok: false, error: "Cada código debe corresponder a un servicio único del snapshot activo." };
   }
@@ -229,13 +252,15 @@ export async function prepararCitaAction(
     return { ok: false, error: "La hora seleccionada ya terminó. Elige una hora vigente antes de generar el enlace." };
   }
 
-  const adelantoRequerido = personalizada?.ok ? personalizada.adelantoRequerido : calcularAdelantoRequerido({
+  const adelantoEstandar = personalizada?.ok ? personalizada.adelantoRequerido : calcularAdelantoRequerido({
     canal,
     personas,
     montoTotal,
-    esGiftCard,
+    esGiftCard: false,
     esDomicilio,
   });
+  const coberturaGiftCard = giftCard ? calcularCoberturaGiftCard(Number(giftCard.saldo_disponible ?? 0), montoTotal) : 0;
+  const adelantoRequerido = giftCard ? calcularEfectivoMinimoAdicional(adelantoEstandar, coberturaGiftCard) : adelantoEstandar;
   const metodoPago = text(formData, "metodo_pago");
   const numeroOperacion = text(formData, "numero_operacion");
   const metodosPermitidos = metodosResult.data
@@ -251,6 +276,7 @@ export async function prepararCitaAction(
     metodosPermitidos,
   });
   if (errorPago) return { ok: false, error: errorPago };
+  if (giftCard && montoPagado > montoTotal - coberturaGiftCard) return { ok: false, error: "El dinero real recibido supera la diferencia no cubierta por la Gift Card." };
 
   const token = generarTokenFicha();
   const reservaId = crearId("RES");
@@ -258,7 +284,7 @@ export async function prepararCitaAction(
     ok: boolean;
     reserva_id: string;
     token: string;
-  }>(esPersonalizada ? "preparar_atencion_personalizada" : "preparar_ficha_cita", {
+  }>(esGiftCard ? "preparar_ficha_cita_gift_card_v1" : esPersonalizada ? "preparar_atencion_personalizada" : "preparar_ficha_cita", {
     p_payload: {
       request_id: requestId,
       canal,
@@ -294,6 +320,7 @@ export async function prepararCitaAction(
       observacion: text(formData, "observacion"),
       idioma: text(formData, "idioma") || "es",
       es_gift_card: esGiftCard,
+      giftcard_id: esGiftCard ? giftcardId : null,
       cupon_promocional: promoCode || null,
       cliente_id: crearId("CLI"),
       movimiento_id: crearId("MOV"),
@@ -319,7 +346,7 @@ export async function prepararCitaAction(
     : `en ${sede}`;
   const mensaje = esDomicilio
     ? `Hola ${cliente}, tu solicitud de atención a domicilio quedó registrada para el ${fecha} a las ${hora} y está pendiente de confirmación de cobertura y terapistas. ${ubicacionCliente}. Completa tu ficha aquí: ${enlace}`
-    : `Hola ${cliente}, tu cita en Vita Lima quedó registrada para el ${fecha} a las ${hora}. ${ubicacionCliente}. Completa tu ficha aquí: ${enlace}`;
+    : `Hola ${cliente}, tu cita en Vita Lima${esGiftCard ? " asociada a tu Gift Card" : ""} quedó registrada para el ${fecha} a las ${hora}. ${ubicacionCliente}. Completa tu ficha aquí: ${enlace}`;
 
   return { ok: true, mensaje, enlace, reservaId: reservaConfirmada };
 }

@@ -16,6 +16,12 @@ El saldo monetario se reconstruye como `gift_cards.monto - sum(gift_card_usos.mo
 
 La anulación es administrativa, conserva pago, movimiento e historial y no ejecuta devolución financiera automática.
 
+## Reserva y ficha (migración 028)
+
+`gift_card_reservas` separa el compromiso operativo del estado principal de la Gift Card. Un hold `ACTIVA` resta del saldo reservable; `LIBERADA` devuelve la cobertura sin crear uso; `CANJEADA` queda enlazada al uso creado al confirmar la atención. Las Gift Cards de servicio conservan exactamente su `service_code`, release, versión, nombre, duración y precio históricos. Las Gift Cards por monto usan el catálogo presencial activo y pueden comprometer sólo `min(saldo disponible, total de la cita)`.
+
+La política de adelanto se calcula primero como una cita directa normal. La cobertura del hold reduce el efectivo mínimo adicional, pero nunca se inserta en `caja_pagos`. En la reserva y atención, `total_pagado` continúa siendo la suma de dinero real; `pendiente` se concilia como total menos pagos reales menos cobertura Gift Card. Al concretar la atención, el wrapper atómico crea el uso por el monto exacto del hold y sólo registra un pago si hubo dinero real adicional.
+
 ## Seguridad y permisos
 
 Las tablas tienen RLS y no conceden acceso a `public`, `anon` ni `authenticated`. Las RPC usan `SECURITY DEFINER`, `search_path` fijo y ejecución exclusiva de `service_role`. La service role permanece solo en el servidor.

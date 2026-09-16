@@ -3,7 +3,7 @@
 import { useActionState, useMemo, useState } from "react";
 import {
   guardarAtencionReservadaAction,
-  INITIAL_ATENCION_RESERVADA_STATE,
+  type AtencionReservadaState,
 } from "@/app/citas-hoy/atencion-actions";
 import {
   calcularSaldoPosterior,
@@ -25,6 +25,11 @@ type Props = {
   terapistasActuales: Record<number, string>;
   comprobante: string;
   estadoActual: EstadoActualAtencion;
+  coberturaGiftCard: number;
+};
+
+const INITIAL_ATENCION_RESERVADA_STATE: AtencionReservadaState = {
+  ok: false,
 };
 
 function money(value: number) {
@@ -114,6 +119,7 @@ export function AtencionReservadaForm(props: Props) {
         <div className="atencionReservadaMoney">
           <div><span>Total</span><strong>{money(props.total)}</strong></div>
           <div><span>Pagado antes</span><strong>{money(props.pagado)}</strong></div>
+          {props.coberturaGiftCard > 0 && <div><span>Cobertura Gift Card</span><strong>{money(props.coberturaGiftCard)}</strong></div>}
           <div><span>Saldo actual</span><strong>{money(props.pendiente)}</strong></div>
           <div className={saldoPosterior > 0 ? "pending" : "complete"}><span>Saldo después</span><strong>{money(saldoPosterior)}</strong></div>
         </div>
@@ -144,6 +150,7 @@ export function AtencionReservadaForm(props: Props) {
           <strong>Extras</strong>
           <span>No disponibles en este cierre: el sistema aún no tiene un catálogo/ledger auditable de extras.</span>
         </div>
+        {props.coberturaGiftCard > 0 && <div className="atencionReservadaNotice"><strong>Canje Gift Card</strong><span>La cobertura se canjeará atómicamente al confirmar la atención; no crea un pago nuevo.</span></div>}
         <div className="atencionReservadaNotice">
           <strong>Comprobante</strong>
           <span>{props.comprobante}. Se conserva en el mismo movimiento.</span>

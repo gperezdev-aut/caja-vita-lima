@@ -8,7 +8,7 @@ import { OperationalWizardStepper } from "@/components/OperationalWizardStepper"
 import { Select } from "@/components/Select";
 import { SubmitButton } from "@/components/SubmitButton";
 import { Textarea } from "@/components/Textarea";
-import { validateSalidaStep, type SalidaDraft } from "./registrarSalidaWizard";
+import { validateSalidaStep, type SalidaDraft } from "./registrarSalidaDomain";
 
 type Props = {
   action: (formData: FormData) => void | Promise<void>;

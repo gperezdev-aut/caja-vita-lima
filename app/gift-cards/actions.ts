@@ -144,3 +144,20 @@ export async function anularGiftCardAction(formData: FormData) {
   revalidatePath("/gift-cards");
   redirect(`/gift-cards?ok=anulada&codigo=${encodeURIComponent(code)}`);
 }
+
+export async function liberarReservaGiftCardAction(formData: FormData) {
+  const session = await requireModuleAccess("gift-cards");
+  const giftcardId = clean(formData.get("giftcard_id"));
+  const response = await supabaseRpc("liberar_reserva_gift_card_v1", {
+    p_payload: {
+      request_id: clean(formData.get("request_id")),
+      giftcard_id: giftcardId,
+      reserva_id: clean(formData.get("reserva_id")),
+      responsable: session.nombre,
+    },
+  });
+  if (response.error) redirect(`/gift-cards/${encodeURIComponent(giftcardId)}?error=${encodeURIComponent(errorMessage(response.error))}`);
+  revalidatePath("/gift-cards");
+  revalidatePath(`/gift-cards/${giftcardId}`);
+  redirect(`/gift-cards/${encodeURIComponent(giftcardId)}?ok=hold-liberado`);
+}

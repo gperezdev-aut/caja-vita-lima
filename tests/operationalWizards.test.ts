@@ -4,12 +4,12 @@ import test from "node:test";
 import {
   validateSalidaStep,
   type SalidaDraft,
-} from "../app/registrar-salida/registrarSalidaWizard.ts";
+} from "../app/registrar-salida/registrarSalidaDomain.ts";
 import {
   physicalValue,
   validateCierreStep,
   type CierreDraft,
-} from "../app/cierre-caja/cierreCajaWizard.ts";
+} from "../app/cierre-caja/cierreCajaDomain.ts";
 
 const salidaCompleta: SalidaDraft = {
   fecha: "2026-09-13",

@@ -42,3 +42,7 @@ El modelo vigente sólo tiene `caja_movimientos.total_extras`, usado también pa
 - Con saldo posterior mayor que cero queda `En atención`; no existe excepción de crédito.
 - Dashboard y cierre siguen leyendo `caja_pagos.fecha`, de modo que adelanto y pago final aparecen en sus fechas reales.
 - “Nueva atención” permanece sin cambios; “Citas de hoy” abre un flujo contextual para la reserva existente.
+
+## Extensión Gift Card 028
+
+`iniciar_o_cerrar_atencion_reservada_gift_card_v1` envuelve el contrato anterior. Bloquea movimiento, reserva, hold y Gift Card; delega la conciliación de terapistas y pagos reales a la RPC v1, convierte el hold activo en un `gift_card_usos` y ajusta el saldo operativo sin insertar un pago por la cobertura. Por eso la reconciliación de una reserva Gift Card es `SUM(caja_pagos.monto) + gift_card_usos.monto_usado`, mientras dashboard, cierre y reportes financieros continúan leyendo únicamente `caja_pagos`.

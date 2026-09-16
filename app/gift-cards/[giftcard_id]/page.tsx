@@ -5,9 +5,10 @@ import { randomUUID } from "crypto";
 import { CajaSidebar } from "@/components/CajaSidebar";
 import { requireModuleAccess } from "@/lib/auth";
 import { formatGiftCardDate } from "@/lib/giftCards";
+import { tieneIdentidadHistoricaGiftCard } from "@/lib/giftCardReservations";
 import { normalizeGiftCardPresentationText } from "@/lib/giftCardTemplate";
 import { supabaseSelectWhere } from "@/lib/supabaseServer";
-import { anularGiftCardAction, canjearGiftCardAction } from "../actions";
+import { anularGiftCardAction, canjearGiftCardAction, liberarReservaGiftCardAction } from "../actions";
 import { GiftCardShareButton } from "../GiftCardShareButton";
 
 type Row = Record<string, unknown>;
@@ -29,7 +30,7 @@ export default async function GiftCardDetailPage({
   );
   const card = cards.data[0];
   if (!card) notFound();
-  const [uses, payments, movements] = await Promise.all([
+  const [uses, payments, movements, holds] = await Promise.all([
     supabaseSelectWhere<Row>(
       "gift_card_usos",
       `select=*&giftcard_id=eq.${encodeURIComponent(giftcardId)}&order=created_at.desc`,
@@ -42,11 +43,32 @@ export default async function GiftCardDetailPage({
       "caja_movimientos",
       `select=movimiento_id,tipo_movimiento,fecha,hora,sede,total_pagado,source_type,source_id&movimiento_id=eq.${encodeURIComponent(String(card.movimiento_id ?? ""))}&limit=1`,
     ),
+    supabaseSelectWhere<Row>(
+      "gift_card_reservas",
+      `select=id,reserva_id,movimiento_id,monto_reservado,estado,responsable,created_at,released_at,redeemed_at&giftcard_id=eq.${encodeURIComponent(giftcardId)}&order=created_at.desc`,
+    ),
   ]);
   const status = String(card.estado_efectivo ?? card.estado ?? "EMITIDA");
   const code = String(card.codigo ?? "");
-  const canRedeem = ["EMITIDA", "PARCIALMENTE_USADA"].includes(status);
   const isAmount = card.tipo === "MONTO";
+  const hasHistoricalServiceIdentity =
+    isAmount ||
+    tieneIdentidadHistoricaGiftCard(
+      card.service_code,
+      card.catalog_release_id,
+      card.catalog_price_version,
+    );
+  const activeHolds = holds.data.filter((hold) => hold.estado === "ACTIVA");
+  const activeHoldReservations = await Promise.all(activeHolds.map(async (hold) => ({
+    hold,
+    reservation: (await supabaseSelectWhere<Row>("citas_reservadas", `select=fecha_cita,hora_cita,sede&reserva_id=eq.${encodeURIComponent(String(hold.reserva_id))}&limit=1`)).data[0] ?? null,
+  })));
+  const hasActiveHolds = activeHolds.length > 0;
+  const canRedeem = ["EMITIDA", "PARCIALMENTE_USADA"].includes(status) && !hasActiveHolds && !holds.error;
+  const canPrepare = ["EMITIDA", "PARCIALMENTE_USADA"].includes(status)
+    && Number(card.saldo_disponible ?? card.saldo_restante ?? 0) > 0
+    && hasHistoricalServiceIdentity
+    && (isAmount || !hasActiveHolds);
   const phone = String(
     card.whatsapp_beneficiario ?? card.whatsapp_comprador ?? "",
   );
@@ -87,7 +109,17 @@ export default async function GiftCardDetailPage({
               phone={phone}
             />
           )}
+          {canPrepare && (
+            <Link className="primaryButton" href={`/preparar-cita?giftcard_id=${encodeURIComponent(giftcardId)}`}>
+              Preparar cita con esta Gift Card
+            </Link>
+          )}
         </div>
+        {!isAmount && !hasHistoricalServiceIdentity && (
+          <div className="alert">
+            Esta Gift Card histórica no tiene identificadores de catálogo suficientes para preparar una cita automáticamente. Mantén su atención por el flujo manual vigente.
+          </div>
+        )}
         <section className="giftCardDetailGrid">
           <div className="panel">
             <h2>Datos y saldo</h2>
@@ -132,6 +164,9 @@ export default async function GiftCardDetailPage({
                       : "Uso completo disponible"}
                 </dd>
               </div>
+              <div><dt>Saldo financiero</dt><dd>{money(card.saldo_restante)}</dd></div>
+              <div><dt>Saldo comprometido</dt><dd>{money(card.saldo_comprometido)}</dd></div>
+              <div><dt>Saldo disponible</dt><dd>{money(card.saldo_disponible ?? card.saldo_restante)}</dd></div>
             </dl>
             <details className="technicalDetails">
               <summary>Movimiento y pago asociados</summary>
@@ -149,6 +184,7 @@ export default async function GiftCardDetailPage({
           </div>
           <div className="panel">
             <h2>Canje</h2>
+            {hasActiveHolds && <div className="alert">El canje manual está bloqueado porque existe al menos una reserva activa.</div>}
             {canRedeem ? (
               <form
                 action={canjearGiftCardAction}
@@ -221,6 +257,28 @@ export default async function GiftCardDetailPage({
               )}
           </div>
         </section>
+        {activeHoldReservations.length > 0 && (
+          <section className="panel">
+            <h2>Reservas activas</h2>
+            {activeHoldReservations.map(({ hold, reservation }) => (
+              <article key={String(hold.id)} className="giftCardActionForm">
+                <dl className="giftCardData">
+                  <div><dt>Reserva</dt><dd>{String(hold.reserva_id)}</dd></div>
+                  <div><dt>Cobertura reservada</dt><dd>{money(hold.monto_reservado)}</dd></div>
+                  <div><dt>Estado del hold</dt><dd>{String(hold.estado)}</dd></div>
+                  <div><dt>Fecha y hora</dt><dd>{String(reservation?.fecha_cita ?? "—")} · {String(reservation?.hora_cita ?? "").slice(0,5)}</dd></div>
+                  <div><dt>Sede</dt><dd>{String(reservation?.sede ?? "—")}</dd></div>
+                </dl>
+                <form action={liberarReservaGiftCardAction}>
+                  <input type="hidden" name="request_id" value={randomUUID()} />
+                  <input type="hidden" name="giftcard_id" value={giftcardId} />
+                  <input type="hidden" name="reserva_id" value={String(hold.reserva_id)} />
+                  <button className="dangerButton" type="submit">Liberar esta reserva de Gift Card</button>
+                </form>
+              </article>
+            ))}
+          </section>
+        )}
         <section className="panel">
           <h2>Historial de usos</h2>
           {uses.data.length ? (

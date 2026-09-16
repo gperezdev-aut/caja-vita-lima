@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { displayText } from "@/lib/displayText";
 import { categoryLabel } from "../prepararCitaWizard";
 import type { Service } from "./types";
 
@@ -20,7 +21,8 @@ export function ServicePicker({ services, value, label, onChange, autofocus = fa
   const filtered = services.filter((service) => {
     const matchesCategory = category === "TODOS" || service.category === category;
     const normalizedQuery = query.trim().toLocaleLowerCase("es-PE");
-    return matchesCategory && (!normalizedQuery || service.name.toLocaleLowerCase("es-PE").includes(normalizedQuery));
+    const displayName = displayText(service.name);
+    return matchesCategory && (!normalizedQuery || displayName.toLocaleLowerCase("es-PE").includes(normalizedQuery));
   });
 
   return (
@@ -55,7 +57,7 @@ export function ServicePicker({ services, value, label, onChange, autofocus = fa
             onClick={() => onChange(service.code)}
           >
             <span>
-              <strong>{service.name}</strong>
+              <strong>{displayText(service.name)}</strong>
               <small>{categoryLabel(service.category)}</small>
             </span>
             <b>{service.duration} min · {money(service.price)}</b>
