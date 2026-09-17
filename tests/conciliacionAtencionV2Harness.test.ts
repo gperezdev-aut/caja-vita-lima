@@ -53,3 +53,11 @@ test("036 conserva ingresos y snapshot de propinas por separado", async () => {
   assert.match(source, /total_procesado\s*=\s*round\(coalesce\(total_ingresos,0\)\s*\+\s*coalesce\(total_propinas,0\),2\)/i);
   assert.doesNotMatch(source, /update\s+public\.caja_cierres/i);
 });
+
+test("QA ejecutable queda explícitamente fuera de los tests estáticos", async () => {
+  const packageJson = await readFile(new URL("../package.json", import.meta.url), "utf8");
+  assert.match(packageJson, /"test"/);
+  assert.match(packageJson, /"test:sql"/);
+  // El harness PostgreSQL 035 existe, pero no se declara PASS hasta correrlo
+  // contra un PostgreSQL temporal o un DATABASE_URL autorizado.
+});
