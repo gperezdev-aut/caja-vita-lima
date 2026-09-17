@@ -47,10 +47,9 @@ function hourLabel(value: any) {
 }
 
 function waHref(value: any) {
-  let digits = String(value ?? "").replace(/\D/g, "");
+  const digits = String(value ?? "").replace(/\D/g, "");
   if (!digits) return "";
-  if (digits.length > 9 && digits.startsWith("51")) digits = digits.slice(2);
-  return `https://wa.me/51${digits.slice(-9)}`;
+  return `https://wa.me/${digits.length === 9 ? `51${digits}` : digits}`;
 }
 
 function normalizeService(value: unknown) {
@@ -171,7 +170,7 @@ export default async function CitasHoyPage({ searchParams }: { searchParams: Sea
     catalogError = catalog.error;
   }
   const serviceByName = new Map<string, ServiceInfo>();
-  for (const service of catalogServices) serviceByName.set(normalizeService(service.name_es), { included: String(service.included_es ?? ""), duration: Number(service.duration_min ?? 0) });
+  for (const service of catalogServices) serviceByName.set(normalizeService(service.name_es), { included: displayText(service.included_es ?? ""), duration: Number(service.duration_min ?? 0) });
 
   const whatsappList = Array.from(new Set(movimientos.data.map((row) => String(row.whatsapp ?? "").trim()).filter(Boolean)));
   const alertasResult = whatsappList.length
@@ -244,7 +243,10 @@ export default async function CitasHoyPage({ searchParams }: { searchParams: Sea
           </form>
         </section>
 
-        {errors.length > 0 && <div className="alert"><strong>Revisar conexión:</strong><ul>{errors.map((error, index) => <li key={index}>{error}</li>)}</ul></div>}
+        {errors.length > 0 && (showTechnical
+          ? <div className="alert"><strong>Revisar conexión:</strong><ul>{errors.map((error, index) => <li key={index}>{error}</li>)}</ul></div>
+          : <div className="alert"><strong>No se pudo cargar parte del detalle operativo.</strong><p>Puedes seguir trabajando; administración puede revisar el detalle técnico.</p></div>
+        )}
 
         <section className="grid secondary">
           <div className="card good"><span>Total a cobrar</span><strong>{money(totalCobrar)}</strong></div>
@@ -279,7 +281,7 @@ export default async function CitasHoyPage({ searchParams }: { searchParams: Sea
                         </td>
                         <td style={{ minWidth: 220 }}>
                           <strong>{displayText(row.servicio)}</strong>
-                          {serviceInfo && <small style={{ display: "block", marginTop: 4, color: "var(--muted)", maxWidth: 330 }}>{serviceInfo.duration ? `${serviceInfo.duration} min` : ""}{serviceInfo.duration && serviceInfo.included ? " · " : ""}{shortText(serviceInfo.included)}</small>}
+                          {serviceInfo && <small style={{ display: "block", marginTop: 4, color: "var(--muted)", maxWidth: 330 }}>{serviceInfo.duration ? `${serviceInfo.duration} min` : ""}{serviceInfo.duration && serviceInfo.included ? " · " : ""}{shortText(serviceInfo.included, 72)}</small>}
                           {selectedSede === "TODAS" && <small style={{ display: "block", marginTop: 3 }}>{row.sede}</small>}
                         </td>
                         <td>{terapistas}</td>
@@ -289,7 +291,7 @@ export default async function CitasHoyPage({ searchParams }: { searchParams: Sea
                           {coberturaGiftCard > 0 && <div><small>Gift Card</small> {money(coberturaGiftCard)}</div>}
                           <Badge tone={pendiente > 0 ? "warn" : "good"}>Pendiente {money(row.pendiente)}</Badge>
                         </td>
-                        <td><Badge>{row.estado || "-"}</Badge><div style={{ marginTop: 6 }}><Badge tone={comprobante.toUpperCase().includes("OK") ? "good" : "warn"}>{comprobante}</Badge></div></td>
+                        <td><Badge>{row.estado || "-"}</Badge><div style={{ marginTop: 6 }}><Badge tone={comprobante.toUpperCase().includes("OK") ? "good" : "warn"}>Comprobante: {comprobante}</Badge></div></td>
                         {showTechnical && <td><details className="technicalDetails"><summary>Ver</summary><code>{movimientoId}</code></details></td>}
                         <td>{puedeAtender ? <a className="citasHoyTableAction" href={`/citas-hoy/${encodeURIComponent(movimientoId)}/atencion`}><ActionLabel cita={cita} /></a> : "-"}</td>
                       </tr>
