@@ -68,7 +68,7 @@ test("el harness 022 cubre los casos obligatorios y revierte", async () => {
   }
 });
 
-test("Citas de hoy integra un flujo contextual y no reutiliza Nueva atención", async () => {
+test("Citas de hoy integra conciliación V2 y no reutiliza Nueva atención", async () => {
   const [today, action, form] = await Promise.all([
     readFile(new URL("../app/citas-hoy/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/citas-hoy/atencion-actions.ts", import.meta.url), "utf8"),
@@ -76,9 +76,16 @@ test("Citas de hoy integra un flujo contextual y no reutiliza Nueva atención", 
   ]);
   assert.match(today, /Iniciar atención/);
   assert.match(today, /reservaRelacionada/);
-  assert.match(action, /iniciar_o_cerrar_atencion_reservada_v1/);
-  assert.match(action, /extras: \[\]/);
-  assert.match(form, /Pagado antes/);
-  assert.match(form, /Saldo después/);
+  assert.match(action, /conciliar_atencion_v2/);
+  assert.match(action, /extras_json/);
+  assert.match(action, /ajustes_json/);
+  assert.match(action, /coberturas_json/);
+  assert.match(action, /pagos_json/);
+  assert.match(action, /propina_json/);
+  assert.match(form, /Otro método de pago/);
+  assert.match(form, /Agregar upselling \/ extra/);
+  assert.match(form, /Bee Beneficios \/ Cuponidad/);
+  assert.match(form, /Propina/);
+  assert.doesNotMatch(action, /iniciar_o_cerrar_atencion_reservada_v1/);
   assert.doesNotMatch(action, /nueva-atencion/);
 });
