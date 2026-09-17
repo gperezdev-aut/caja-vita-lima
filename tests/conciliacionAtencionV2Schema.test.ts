@@ -37,10 +37,20 @@ test("modelo V2 queda restringido a service_role", async () => {
   assert.match(sql, /to service_role/i);
 });
 
-test("distribución de propina enlaza al maestro de terapistas", async () => {
+test("distribución de propina enlaza al maestro de terapistas sin romper columna legacy", async () => {
   const sql = await readFile(new URL("../sql/034_conciliacion_atencion_v2.sql", import.meta.url), "utf8");
-  assert.match(sql, /terapista_id uuid not null references public\.terapistas\(terapista_id\)/i);
-  assert.match(sql, /unique \(propina_id, terapista_id\)/i);
+  assert.match(sql, /terapista_id uuid references public\.terapistas\(terapista_id\)/i);
+  assert.match(sql, /uq_caja_propina_distribucion_terapista_id/i);
+  assert.match(sql, /terapista text not null/i);
+  assert.match(sql, /caja_sync_propina_distribucion_compat_v2/i);
+});
+
+test("propinas V2 conservan monto_total y fecha_operativa legacy sincronizados", async () => {
+  const sql = await readFile(new URL("../sql/034_conciliacion_atencion_v2.sql", import.meta.url), "utf8");
+  assert.match(sql, /monto_total numeric\(12,2\)/i);
+  assert.match(sql, /fecha_operativa date/i);
+  assert.match(sql, /caja_sync_propina_compat_v2/i);
+  assert.doesNotMatch(sql, /drop table public\.caja_propinas/i);
 });
 
 test("extras conservan trazabilidad de monto y responsable", async () => {
