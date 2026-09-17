@@ -6,7 +6,7 @@ type Props = {
   onNavigate: (step: number) => void;
 };
 
-const destination = [0, 1, 3, 4, 5];
+const destination = [0, 1, 2, 3, 4, 5];
 
 export function WizardStepper({ step, maxStep, onNavigate }: Props) {
   const current = progressIndex(step);
