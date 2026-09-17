@@ -36,17 +36,24 @@ export default async function AtencionReservadaPage({
   if (!movimiento) notFound();
 
   const reservaId = String(movimiento.source_id ?? "");
-  const [reservaResult, detallesResult, configResult, holdResult] = await Promise.all([
+  const [reservaResult, detallesResult, configResult, holdResult, terapistasMaestroResult] = await Promise.all([
     supabaseSelectWhere<Row>(
       "citas_reservadas",
-      `select=reserva_id,source_id,cliente_id,estado,estado_ficha,requiere_confirmacion,confirmado_en,atencion_personalizada,tipo_atencion&reserva_id=eq.${encodeURIComponent(reservaId)}&limit=1`
+      `select=reserva_id,source_id,cliente_id,estado,estado_ficha,requiere_confirmacion,confirmado_en,atencion_personalizada,tipo_atencion,canal&reserva_id=eq.${encodeURIComponent(reservaId)}&limit=1`
     ),
     supabaseSelectWhere<Row>(
       "caja_atencion_detalle",
       `select=persona_n,terapista,terapista_otro&movimiento_id=eq.${encodeURIComponent(movimientoId)}&order=persona_n.asc`
     ),
     supabaseSelect<Row>("config_listas"),
-    supabaseSelectWhere<Row>("gift_card_reservas", `select=monto_reservado,estado,giftcard_id&reserva_id=eq.${encodeURIComponent(reservaId)}&estado=in.(ACTIVA,CANJEADA)&limit=1`),
+    supabaseSelectWhere<Row>(
+      "gift_card_reservas",
+      `select=monto_reservado,estado,giftcard_id&reserva_id=eq.${encodeURIComponent(reservaId)}&estado=in.(ACTIVA,CANJEADA)&limit=1`
+    ),
+    supabaseSelectWhere<Row>(
+      "terapistas",
+      "select=terapista_id,nombre,estado&estado=eq.ACTIVA&order=nombre.asc"
+    ),
   ]);
   const reserva = reservaResult.data[0];
   const relacionValida = Boolean(
@@ -67,16 +74,27 @@ export default async function AtencionReservadaPage({
     if (Number.isInteger(persona) && terapeuta && terapeuta !== "Por asignar") terapeutasActuales[persona] = terapeuta;
   }
   const hold = holdResult.data[0];
+  const giftCardSatisfecha = !hold || String(hold.estado ?? "") === "CANJEADA";
   const atencionCompletada = Boolean(
     relacionValida &&
     movimiento.estado === "Atendido" &&
     reserva?.estado === "ATENDIDA_APP" &&
-    hold?.estado === "CANJEADA"
+    giftCardSatisfecha
   );
-  const errors = [movimientoResult.error, reservaResult.error, detallesResult.error, configResult.error, holdResult.error].filter(Boolean);
+  const errors = [
+    movimientoResult.error,
+    reservaResult.error,
+    detallesResult.error,
+    configResult.error,
+    holdResult.error,
+    terapistasMaestroResult.error,
+  ].filter(Boolean);
   const comprobante = String(
     movimiento.estado_comprobante_manual || movimiento.estado_boleta || movimiento.tipo_comprobante || "No definido"
   );
+  const terapistasMaestro = terapistasMaestroResult.data
+    .map((row) => ({ id: String(row.terapista_id ?? ""), nombre: String(row.nombre ?? "") }))
+    .filter((row) => row.id && row.nombre);
 
   return (
     <main className="appShell">
@@ -85,7 +103,7 @@ export default async function AtencionReservadaPage({
         <section className="hero atencionReservadaHero">
           <div>
             <p className="eyebrow">Reserva existente</p>
-            <h1>{atencionCompletada ? "Atención completada" : "Iniciar atención"}</h1>
+            <h1>{atencionCompletada ? "Atención completada" : "Conciliar atención"}</h1>
             <p className="subtitle">{String(movimiento.cliente ?? "-")} · {displayText(movimiento.servicio ?? "-")}</p>
           </div>
           <Badge>{String(movimiento.estado ?? "-")}</Badge>
@@ -97,7 +115,8 @@ export default async function AtencionReservadaPage({
           <div><span>Reserva</span><strong>{reservaId}</strong></div>
           <div><span>Movimiento</span><strong>{movimientoId}</strong></div>
           <div><span>Ficha</span><strong>{String(reserva?.estado_ficha ?? "-")}</strong></div>
-          <div><span>Adelanto/pagado</span><strong>{money(movimiento.total_pagado)}</strong></div>
+          <div><span>Canal</span><strong>{String(reserva?.canal ?? "directo")}</strong></div>
+          <div><span>Pagado a Vita Lima</span><strong>{money(movimiento.total_pagado)}</strong></div>
           {hold && <div><span>Cobertura Gift Card</span><strong>{money(hold.monto_reservado)} · {String(hold.estado)}</strong></div>}
         </section>
 
@@ -105,11 +124,11 @@ export default async function AtencionReservadaPage({
         {atencionCompletada ? (
           <section className="panel">
             <div className="formMessage ok" style={{ marginBottom: "16px" }}>
-              Atención completada. La Gift Card se canjeó correctamente y no generó un pago adicional.
+              Atención completada y conciliada correctamente.
             </div>
             <div className="reviewGrid" style={{ marginBottom: "18px" }}>
-              <div><span>Cobertura Gift Card</span><strong>{money(hold?.monto_reservado)}</strong></div>
-              <div><span>Estado Gift Card</span><strong>Canjeada</strong></div>
+              {hold && <div><span>Cobertura Gift Card</span><strong>{money(hold.monto_reservado)}</strong></div>}
+              {hold && <div><span>Estado Gift Card</span><strong>{String(hold.estado)}</strong></div>}
               <div className="reviewImportant"><span>Saldo pendiente</span><strong>{money(movimiento.pendiente)}</strong></div>
             </div>
             <a className="ghostButton" href="/citas-hoy">Volver a Citas de hoy</a>
@@ -131,11 +150,13 @@ export default async function AtencionReservadaPage({
             pagado={Number(movimiento.total_pagado ?? 0)}
             pendiente={Number(movimiento.pendiente ?? 0)}
             terapistas={orderedValues(configResult.data, "TERAPISTAS")}
+            terapistasMaestro={terapistasMaestro}
             metodos={orderedValues(configResult.data, "METODOS_PAGO")}
             terapistasActuales={terapeutasActuales}
             comprobante={comprobante}
             estadoActual={movimiento.estado === "En atención" ? "En atención" : "Reservado"}
             coberturaGiftCard={Number(hold?.monto_reservado ?? 0)}
+            giftCardId={String(hold?.estado ?? "") === "ACTIVA" ? String(hold?.giftcard_id ?? "") || null : null}
           />
         )}
       </section>
