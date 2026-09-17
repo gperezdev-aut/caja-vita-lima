@@ -1,4 +1,4 @@
-import { requireModuleAccess } from "@/lib/auth";
+import { requireModuleAccess, getVisibleNavItems } from "@/lib/auth";
 import { CajaSidebar } from "@/components/CajaSidebar";
 import { supabaseSelect } from "@/lib/supabaseServer";
 import Link from "next/link";
@@ -49,14 +49,34 @@ function comprobanteLabel(row: Row) {
   return [estado, tipo].filter(Boolean).join(" · ") || "Comprobantes";
 }
 
+function navIcon(key: string) {
+  const icons: Record<string, string> = {
+    dashboard: "⌂",
+    "citas-hoy": "▣",
+    "preparar-cita": "✚",
+    "nueva-atencion": "+",
+    clientes: "◎",
+    terapistas: "✿",
+    "registrar-salida": "↪",
+    "gift-cards": "◇",
+    comprobantes: "▤",
+    alertas: "♢",
+    "cierre-caja": "▭",
+    horarios: "◷",
+  };
+  return icons[key] ?? "•";
+}
+
 function KpiCard({
   label,
   value,
   tone = "default",
+  icon,
 }: {
   label: string;
   value: string;
   tone?: "default" | "good" | "blue" | "warn" | "exit";
+  icon: string;
 }) {
   const toneClass =
     tone === "good"
@@ -71,17 +91,23 @@ function KpiCard({
 
   return (
     <div className={`${styles.kpiCard} ${toneClass}`}>
-      <span>{label}</span>
-      <strong>{value}</strong>
+      <span className={styles.kpiIcon} aria-hidden="true">{icon}</span>
+      <div>
+        <span>{label}</span>
+        <strong>{value}</strong>
+      </div>
     </div>
   );
 }
 
-function SmallCard({ label, value }: { label: string; value: string }) {
+function SmallCard({ label, value, icon }: { label: string; value: string; icon: string }) {
   return (
     <div className={styles.smallCard}>
-      <span>{label}</span>
-      <strong>{value}</strong>
+      <span className={styles.smallIcon} aria-hidden="true">{icon}</span>
+      <div>
+        <span>{label}</span>
+        <strong>{value}</strong>
+      </div>
     </div>
   );
 }
@@ -163,6 +189,25 @@ export default async function HomePage({
     : "Todo lo cargado";
   const sedeLabel = selectedSede === TODAS_LAS_SEDES ? "Todas las sedes" : selectedSede;
 
+  const visibleItems = getVisibleNavItems(session.rol);
+  const preferredOrder = [
+    "dashboard",
+    "citas-hoy",
+    "preparar-cita",
+    "nueva-atencion",
+    "clientes",
+    "terapistas",
+    "registrar-salida",
+    "gift-cards",
+    "comprobantes",
+    "alertas",
+    "cierre-caja",
+    "horarios",
+  ];
+  const quickItems = [...visibleItems].sort(
+    (a, b) => preferredOrder.indexOf(a.key) - preferredOrder.indexOf(b.key)
+  );
+
   return (
     <main className="appShell">
       <CajaSidebar session={session} />
@@ -170,7 +215,6 @@ export default async function HomePage({
       <section className={`page dashboardPage ${styles.dashboardPage}`}>
         <section className={`hero dashboardHero ${styles.heroCompact}`} id="dashboard">
           <div className={styles.heroCopy}>
-            <p className={styles.kicker}>Vita Lima Spa</p>
             <div className={styles.heroTitleRow}>
               <h1>Caja Vita Lima</h1>
               <span className={styles.protectedBadge}>Protegido</span>
@@ -184,6 +228,16 @@ export default async function HomePage({
           </div>
         </section>
 
+        <nav className={styles.quickGrid} aria-label="Accesos rápidos de Caja">
+          {quickItems.map((item) => (
+            <Link className={styles.quickItem} href={item.href} key={item.key}>
+              <span className={styles.quickIcon} aria-hidden="true">{navIcon(item.key)}</span>
+              <strong>{item.label}</strong>
+              <span className={styles.quickArrow} aria-hidden="true">›</span>
+            </Link>
+          ))}
+        </nav>
+
         {errors.length > 0 && (
           <AlertBox>
             <strong>Revisar conexión:</strong>
@@ -196,10 +250,10 @@ export default async function HomePage({
         )}
 
         <section className={styles.kpiGrid} aria-label="Resumen financiero principal">
-          <KpiCard label="Ingresos confirmados" value={money(dashboardTotals.ingresos)} tone="good" />
-          <KpiCard label="Total salidas" value={money(dashboardTotals.salidas)} tone="exit" />
-          <KpiCard label="Resultado neto" value={money(dashboardTotals.neto)} tone="blue" />
-          <KpiCard label="Pendientes migración" value={numberFmt(dashboardTotals.pendientes)} tone="warn" />
+          <KpiCard label="Ingresos confirmados" value={money(dashboardTotals.ingresos)} tone="good" icon="▥" />
+          <KpiCard label="Total salidas" value={money(dashboardTotals.salidas)} tone="exit" icon="↓" />
+          <KpiCard label="Resultado neto" value={money(dashboardTotals.neto)} tone="blue" icon="↗" />
+          <KpiCard label="Pendientes migración" value={numberFmt(dashboardTotals.pendientes)} tone="warn" icon="▤" />
         </section>
 
         <section className={styles.filterPanel}>
@@ -249,10 +303,10 @@ export default async function HomePage({
         </section>
 
         <section className={styles.smallGrid} aria-label="Desglose de ingresos">
-          <SmallCard label="Servicios" value={money(dashboardTotals.servicios)} />
-          <SmallCard label="Gift Cards" value={money(dashboardTotals.giftCards)} />
-          <SmallCard label="Préstamos de caja" value={money(dashboardTotals.prestamos)} />
-          <SmallCard label="Cuponidad en caja" value={money(dashboardTotals.cuponidad)} />
+          <SmallCard label="Servicios" value={money(dashboardTotals.servicios)} icon="✿" />
+          <SmallCard label="Gift Cards" value={money(dashboardTotals.giftCards)} icon="◇" />
+          <SmallCard label="Préstamos de caja" value={money(dashboardTotals.prestamos)} icon="▭" />
+          <SmallCard label="Cuponidad en caja" value={money(dashboardTotals.cuponidad)} icon="⌑" />
         </section>
 
         <section className={styles.infoGrid}>
