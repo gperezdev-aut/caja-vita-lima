@@ -64,39 +64,11 @@ function errorAmigable(error: string) {
   return "No se pudo conciliar la atención. La transacción no guardó cambios parciales.";
 }
 
-type ExtraPayload = {
-  tipo: string;
-  concepto: string;
-  cantidad: number;
-  monto_unitario: number;
-  duracion_extra_min?: number;
-  persona_n?: number | null;
-};
-
-type AjustePayload = {
-  tipo: string;
-  monto: number;
-  motivo: string;
-};
-
-type CoberturaPayload = {
-  tipo: string;
-  referencia_id?: string | null;
-  monto: number;
-};
-
-type PagoPayload = {
-  metodo: string;
-  monto: number;
-  numero_operacion?: string | null;
-};
-
-type PropinaPayload = {
-  monto: number;
-  metodo: string;
-  numero_operacion?: string | null;
-  distribucion: Array<{ terapista_id: string; monto: number }>;
-};
+type ExtraPayload = { tipo: string; concepto: string; cantidad: number; monto_unitario: number; duracion_extra_min?: number; persona_n?: number | null };
+type AjustePayload = { tipo: string; monto: number; motivo: string };
+type CoberturaPayload = { tipo: string; referencia_id?: string | null; monto: number };
+type PagoPayload = { metodo: string; monto: number; numero_operacion?: string | null };
+type PropinaPayload = { monto: number; metodo: string; numero_operacion?: string | null; distribucion: Array<{ terapista_id: string; monto: number }> };
 
 export async function guardarAtencionReservadaAction(
   _previousState: AtencionReservadaState,
@@ -112,8 +84,8 @@ export async function guardarAtencionReservadaAction(
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) {
     return { ok: false, error: "El identificador del intento no es válido. Recarga el flujo." };
   }
-  if (!movimientoId || !reservaId || !Number.isInteger(personas) || personas < 1 || personas > 5) {
-    return { ok: false, error: "La reserva no tiene datos suficientes para iniciar la atención." };
+  if (!movimientoId || !Number.isInteger(personas) || personas < 1 || personas > 5) {
+    return { ok: false, error: "La atención no tiene datos suficientes para conciliarse." };
   }
 
   const extras = parseJson<ExtraPayload[]>(formData, "extras_json", []);
@@ -132,15 +104,9 @@ export async function guardarAtencionReservadaAction(
     const monto = Number(pago?.monto ?? 0);
     const metodo = String(pago?.metodo ?? "").trim();
     const operacion = String(pago?.numero_operacion ?? "").trim();
-    if (!Number.isFinite(monto) || monto <= 0) {
-      return { ok: false, error: "Cada pago debe tener un monto mayor a S/0." };
-    }
-    if (!metodo) {
-      return { ok: false, error: "Selecciona el método de pago para cada monto ingresado." };
-    }
-    if (metodo.toUpperCase() !== "EFECTIVO" && !operacion) {
-      return { ok: false, error: `Ingresa el número de operación del pago por ${metodo}.` };
-    }
+    if (!Number.isFinite(monto) || monto <= 0) return { ok: false, error: "Cada pago debe tener un monto mayor a S/0." };
+    if (!metodo) return { ok: false, error: "Selecciona el método de pago para cada monto ingresado." };
+    if (metodo.toUpperCase() !== "EFECTIVO" && !operacion) return { ok: false, error: `Ingresa el número de operación del pago por ${metodo}.` };
   }
 
   const terapistas = Array.from({ length: personas }, (_, index) => ({
@@ -148,9 +114,7 @@ export async function guardarAtencionReservadaAction(
     terapista: text(formData, `terapista_${index + 1}`),
     terapista_otro: text(formData, `terapista_otro_${index + 1}`) || null,
   }));
-  if (terapistas.some((item) => !item.terapista)) {
-    return { ok: false, error: "Asigna una terapista a cada persona." };
-  }
+  if (terapistas.some((item) => !item.terapista)) return { ok: false, error: "Asigna una terapista a cada persona." };
 
   const rpc = await supabaseRpc<{
     ok: boolean;
@@ -165,7 +129,7 @@ export async function guardarAtencionReservadaAction(
     p_payload: {
       request_id: requestId,
       movimiento_id: movimientoId,
-      reserva_id: reservaId,
+      ...(reservaId ? { reserva_id: reservaId } : {}),
       terapistas,
       extras,
       ajustes,
@@ -177,9 +141,7 @@ export async function guardarAtencionReservadaAction(
     },
   });
 
-  if (rpc.error || !rpc.data?.ok) {
-    return { ok: false, error: errorAmigable(rpc.error ?? "") };
-  }
+  if (rpc.error || !rpc.data?.ok) return { ok: false, error: errorAmigable(rpc.error ?? "") };
 
   revalidatePath("/citas-hoy");
   revalidatePath(`/citas-hoy/${encodeURIComponent(movimientoId)}/atencion`);
