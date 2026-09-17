@@ -663,3 +663,87 @@ body {
 .giftCardSubmitFeedback,.giftCardSubmitReady{margin:0;padding:11px 13px;border-radius:13px}.giftCardSubmitFeedback{display:grid;gap:3px;border:1px solid rgba(173,48,48,.24);background:var(--danger);color:var(--danger-text)}.giftCardSubmitReady{background:var(--success-soft);color:var(--success);font-weight:800}
 
 @media(max-width:760px){.giftCardShareControl,.giftCardShareControl>button{width:100%}}
+
+
+/* QA V2 — búsqueda rápida de clientes y éxito operativo */
+.clientQuickSearch{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto auto;
+  gap:10px;
+  align-items:end;
+  margin-bottom:12px;
+}
+.clientQuickSearch .ghostButton{min-height:var(--control-height);white-space:nowrap}
+.clientSearchResults{
+  display:grid;
+  gap:7px;
+  margin:0 0 14px;
+  padding:9px;
+  border:1px solid var(--line);
+  border-radius:14px;
+  background:rgba(255,255,255,.75);
+}
+.clientSearchResults button{
+  min-height:48px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:10px 12px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:white;
+  color:var(--charcoal);
+  text-align:left;
+  cursor:pointer;
+}
+.clientSearchResults button:hover{border-color:var(--brand-primary);background:var(--brand-primary-soft)}
+.clientSearchResults span{color:var(--muted);font-size:13px}
+.clientSelectedNotice{
+  margin:10px 0 0;
+  padding:10px 12px;
+  border-radius:12px;
+  background:var(--success-soft);
+  color:var(--success);
+  font-size:13px;
+  font-weight:800;
+}
+.nuevaAtencionSuccess{
+  display:grid;
+  gap:16px;
+  max-width:860px;
+  margin-inline:auto;
+}
+.nuevaAtencionSuccess .successMark{
+  display:grid;
+  place-items:center;
+  width:52px;
+  height:52px;
+  border-radius:50%;
+  background:var(--success);
+  color:white;
+  font-size:28px;
+  font-weight:900;
+}
+.nuevaAtencionSuccess h2{margin:0 0 5px}
+.nuevaAtencionSuccess p{margin:0;color:var(--muted)}
+.nuevaAtencionSuccessSummary{margin:0}
+.nuevaAtencionSuccess .successActions{display:flex;gap:10px;flex-wrap:wrap}
+.nuevaAtencionSuccess .successActions a{text-decoration:none}
+
+.citasHoyDesktopTable td:nth-child(3) small{
+  display:-webkit-box !important;
+  overflow:hidden;
+  -webkit-line-clamp:2;
+  -webkit-box-orient:vertical;
+  line-height:1.3;
+}
+.citasHoyDesktopTable td:nth-child(3){max-width:310px}
+
+@media(max-width:700px){
+  .clientQuickSearch{grid-template-columns:1fr 1fr}
+  .clientQuickSearch .atencionField{grid-column:1/-1}
+  .clientSearchResults button{align-items:flex-start;flex-direction:column;gap:3px}
+  .nuevaAtencionSuccess .successActions{display:grid;grid-template-columns:1fr}
+  .nuevaAtencionSuccess .successActions a{width:100%;text-align:center}
+}
