@@ -39,3 +39,17 @@ test("harness 035 prueba que propina y convenio no crean ingresos falsos", async
   assert.match(source, /CASE_A_REPLAY_NO_IDEMPOTENTE/i);
   assert.match(source, /CASE_A_REPLAY_DUPLICO_PAGOS/i);
 });
+
+test("036 conserva ingresos y snapshot de propinas por separado", async () => {
+  const source = await readFile(
+    new URL("../sql/036_cierre_caja_propinas_v2.sql", import.meta.url),
+    "utf8"
+  );
+
+  assert.match(source, /total_propinas/i);
+  assert.match(source, /total_procesado/i);
+  assert.match(source, /propinas_por_metodo/i);
+  assert.match(source, /dinero_procesado_por_metodo/i);
+  assert.match(source, /total_procesado\s*=\s*round\(coalesce\(total_ingresos,0\)\s*\+\s*coalesce\(total_propinas,0\),2\)/i);
+  assert.doesNotMatch(source, /update\s+public\.caja_cierres/i);
+});
