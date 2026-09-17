@@ -57,7 +57,7 @@ function errorAmigable(error: string) {
     ["EXTRA_INVALIDO", "Revisa el extra: concepto, importe, cantidad y duración deben ser válidos."],
     ["AJUSTE_INVALIDO", "Revisa el descuento o ajuste e indica un motivo."],
     ["COBERTURA_INVALIDA", "La cobertura ingresada no es válida."],
-    ["PAGO_INVALIDO", "Revisa los importes de los pagos ingresados."],
+    ["PAGO_INVALIDO", "Revisa los importes y métodos de los pagos ingresados."],
     ["METODO_PAGO_NO_PERMITIDO", "Uno de los métodos de pago no está configurado en Caja."],
   ];
   for (const [code, message] of pairs) if (error.includes(code)) return message;
@@ -126,6 +126,21 @@ export async function guardarAtencionReservadaAction(
   }
   if (!Array.isArray(extras) || !Array.isArray(ajustes) || !Array.isArray(coberturas) || !Array.isArray(pagos)) {
     return { ok: false, error: "El detalle económico de la atención no tiene el formato esperado." };
+  }
+
+  for (const pago of pagos) {
+    const monto = Number(pago?.monto ?? 0);
+    const metodo = String(pago?.metodo ?? "").trim();
+    const operacion = String(pago?.numero_operacion ?? "").trim();
+    if (!Number.isFinite(monto) || monto <= 0) {
+      return { ok: false, error: "Cada pago debe tener un monto mayor a S/0." };
+    }
+    if (!metodo) {
+      return { ok: false, error: "Selecciona el método de pago para cada monto ingresado." };
+    }
+    if (metodo.toUpperCase() !== "EFECTIVO" && !operacion) {
+      return { ok: false, error: `Ingresa el número de operación del pago por ${metodo}.` };
+    }
   }
 
   const terapistas = Array.from({ length: personas }, (_, index) => ({
