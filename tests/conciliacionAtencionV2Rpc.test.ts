@@ -87,6 +87,13 @@ test("cierre V2 toma propinas desde su ledger separado", async () => {
   assert.match(migration, /Dinero de terceros; no forma parte de total_ingresos/i);
 });
 
+test("Citas de hoy llama exclusivamente al RPC V2 desde la nueva acción", async () => {
+  const action = await readFile(new URL("../app/citas-hoy/atencion-actions.ts", import.meta.url), "utf8");
+  assert.match(action, /supabaseRpc[\s\S]*"conciliar_atencion_v2"/i);
+  assert.doesNotMatch(action, /iniciar_o_cerrar_atencion_reservada_v1/);
+  assert.doesNotMatch(action, /iniciar_o_cerrar_atencion_reservada_gift_card_v1/);
+});
+
 test("V1 permanece intacto y V2 usa su propio contrato", async () => {
   const source = await sql();
   assert.doesNotMatch(source, /create or replace function public\.iniciar_o_cerrar_atencion_reservada_v1/i);
