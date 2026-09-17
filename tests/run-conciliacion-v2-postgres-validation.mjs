@@ -31,7 +31,7 @@ const baseMigrations = [
 
 const fixture = resolve(root, "sql/tests/catalog_snapshot_active_fixture.sql");
 
-const postFixtureMigrations = [
+const preV2Migrations = [
   "021_pagos_fecha_real_ledger.sql",
   "022_reserva_a_atencion.sql",
   "023_gift_cards_v1.sql",
@@ -41,10 +41,15 @@ const postFixtureMigrations = [
   "027_ledger_full_join_nullsafe.sql",
   "028_gift_card_reserva_ficha.sql",
   "029_terapistas_maestro_ficha.sql",
-  "034_conciliacion_atencion_v2.sql",
-  "035_conciliar_atencion_v2.sql",
+  "030_terapistas_ficha_personal.sql",
+  "031_terapistas_horario_habitual.sql",
+  "032_terapistas_horario_excepciones.sql",
+  "033_seed_horarios_septiembre_2026.sql",
 ].map((name) => resolve(root, "sql", name));
 
+const legacyPropinasFixture = resolve(root, "sql/tests/034_propinas_legacy_empty_fixture.sql");
+const migration034 = resolve(root, "sql/034_conciliacion_atencion_v2.sql");
+const migration035 = resolve(root, "sql/035_conciliar_atencion_v2.sql");
 const contract035 = resolve(root, "sql/tests/035_conciliar_atencion_v2_rollback.sql");
 const migration036 = resolve(root, "sql/036_cierre_caja_propinas_v2.sql");
 const migration037 = resolve(root, "sql/037_convenio_cobertura_guard_v2.sql");
@@ -55,7 +60,10 @@ const contract038 = resolve(root, "sql/tests/038_propina_terapista_atencion_guar
 const files = [
   ...baseMigrations,
   fixture,
-  ...postFixtureMigrations,
+  ...preV2Migrations,
+  legacyPropinasFixture,
+  migration034,
+  migration035,
   contract035,
   migration036,
   migration037,
