@@ -66,7 +66,7 @@ create table if not exists public.caja_atencion_coberturas (
   constraint caja_atencion_coberturas_referencia_check check (
     tipo = 'OTRA_COBERTURA' or btrim(coalesce(referencia_id, '')) <> ''
   ),
-  constraint caja_atencion_coberturas_estado_check check (
+  constraint caja_atencion_coberturas_reversion_check check (
     (estado = 'APLICADA' and reversed_at is null and reversed_by is null)
     or
     (estado = 'REVERSADA' and reversed_at is not null and btrim(coalesce(reversed_by, '')) <> '')
