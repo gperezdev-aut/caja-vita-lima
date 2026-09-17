@@ -118,7 +118,9 @@ test("Nueva atención busca clientes existentes y solo guarda con acción explí
   assert.match(wizard, /buscarClientesAction/);
   assert.match(wizard, /Buscar cliente/);
   assert.match(wizard, /\+ Nuevo cliente/);
-  assert.match(wizard, /Guardar atención/);
+  assert.match(wizard, /Confirmar guardado/);
+  assert.match(wizard, /Confirmo que revisé los datos y quiero guardar esta atención ahora/);
+  assert.match(wizard, /disabled=\{pending \|\| !confirmSave\}/);
   assert.match(wizard, /event\.key === "Enter"[\s\S]*preventDefault\(\)/);
   assert.match(action, /export async function buscarClientesAction/);
   assert.match(action, /confirmar_guardado/);
@@ -138,4 +140,12 @@ test("Preparar cita expone seis pasos coherentes", async () => {
   assert.match(stepper, /\[0, 1, 2, 3, 4, 5\]/);
   assert.match(form, /Paso 5 de 6/);
   assert.match(form, /Paso 6 de 6/);
+});
+
+
+test("Nueva atención usa el catálogo canónico y no el staging legado", async () => {
+  const page = await readFile(new URL("../app/nueva-atencion/page.tsx", import.meta.url), "utf8");
+  assert.match(page, /leerCatalogoPrepararCita/);
+  assert.match(page, /servicios canónicos/);
+  assert.doesNotMatch(page, /supabaseSelect<Row>\("stg_services_catalog_v5"\)/);
 });
