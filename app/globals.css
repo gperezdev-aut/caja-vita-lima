@@ -747,3 +747,38 @@ body {
   .nuevaAtencionSuccess .successActions{display:grid;grid-template-columns:1fr}
   .nuevaAtencionSuccess .successActions a{width:100%;text-align:center}
 }
+
+
+/* QA final — confirmación explícita y alineación de nueva atención */
+.finalConfirmationCheck{
+  margin-top:14px;
+  min-height:52px;
+  display:flex;
+  align-items:flex-start;
+  gap:10px;
+  padding:12px 14px;
+  border:1px solid rgba(241,142,23,.35);
+  border-radius:14px;
+  background:var(--brand-primary-soft);
+  color:var(--charcoal-deep);
+  font-weight:850;
+  line-height:1.35;
+}
+.finalConfirmationCheck input{width:18px;height:18px;margin-top:1px;accent-color:var(--brand-primary)}
+.nuevaAtencionPage .wizardPanel .atencionGrid{align-items:start}
+.nuevaAtencionPage .atencionField.atencionFieldWide{min-width:0}
+.nuevaAtencionPage .atencionField small{display:block}
+.nuevaAtencionPage .wizardActions .primaryButton:disabled{
+  cursor:not-allowed;
+  opacity:.52;
+  filter:saturate(.65);
+}
+
+@media(max-width:900px){
+  .nuevaAtencionPage .atencionGrid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .nuevaAtencionPage .atencionFieldWide{grid-column:span 2}
+}
+@media(max-width:620px){
+  .nuevaAtencionPage .atencionGrid{grid-template-columns:1fr}
+  .nuevaAtencionPage .atencionFieldWide{grid-column:auto}
+}
