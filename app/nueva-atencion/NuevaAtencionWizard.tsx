@@ -13,6 +13,11 @@ type CatalogService = {
   price: number;
   paxType: string;
   sortOrder: number;
+  peopleMin: number;
+  peopleMax: number;
+  selectionRule: string;
+  reservationBehavior: string;
+  modality: string;
 };
 
 type Promotion = {
@@ -480,6 +485,7 @@ export function NuevaAtencionWizard({
         <div className="atencionGrid">
           <label className="atencionField atencionFieldWide">
             Servicio
+            <small>{filteredServices.length} servicios compatibles para {pax} persona{pax === 1 ? "" : "s"}</small>
             <select value={customService ? "__CUSTOM__" : serviceCode} onChange={(e) => selectService(e.target.value)} disabled={Boolean(promotionCode)}>
               <option value="">Selecciona un servicio</option>
               {filteredServices.map((item) => (
