@@ -74,6 +74,19 @@ test("extras y descuentos recalculan total antes de coberturas y pagos", async (
   assert.match(source, /COBERTURAS_O_PAGOS_SUPERAN_TOTAL/i);
 });
 
+test("cierre V2 toma propinas desde su ledger separado", async () => {
+  const [action, migration] = await Promise.all([
+    readFile(new URL("../app/cierre-caja/actions.ts", import.meta.url), "utf8"),
+    readFile(new URL("../sql/036_cierre_caja_propinas_v2.sql", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(action, /"caja_propinas"/i);
+  assert.match(action, /total_ingresos:\s*totalIngresos/i);
+  assert.match(action, /total_propinas:\s*dineroProcesado\.propinas\.total/i);
+  assert.match(action, /total_procesado:\s*dineroProcesado\.totalProcesado/i);
+  assert.match(migration, /Dinero de terceros; no forma parte de total_ingresos/i);
+});
+
 test("V1 permanece intacto y V2 usa su propio contrato", async () => {
   const source = await sql();
   assert.doesNotMatch(source, /create or replace function public\.iniciar_o_cerrar_atencion_reservada_v1/i);
