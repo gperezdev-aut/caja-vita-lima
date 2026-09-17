@@ -76,6 +76,7 @@ export function AtencionReservadaForm(props: Props) {
   const [propinaMetodo, setPropinaMetodo] = useState("");
   const [propinaOperacion, setPropinaOperacion] = useState("");
   const [propinaDistribucion, setPropinaDistribucion] = useState<Record<string, string>>({});
+  const [confirmFinal, setConfirmFinal] = useState(false);
 
   const totalExtras = useMemo(
     () => extras.reduce((sum, row) => sum + num(row.cantidad || "1") * num(row.montoUnitario), 0),
@@ -151,6 +152,7 @@ export function AtencionReservadaForm(props: Props) {
         if (pago.metodo !== "EFECTIVO" && !pago.numeroOperacion.trim()) return `Ingresa el número de operación del pago por ${pago.metodo}.`;
       }
       if (totalPagosNuevos > saldoAntesPagos) return "Los pagos ingresados superan el saldo disponible.";
+      if (saldoEstimado > 0.009) return `Para conciliar y cerrar la atención debes cobrar o cubrir todo el saldo. Aún faltan ${money(saldoEstimado)}.`;
     }
     if (step === 4 && propinaActiva) {
       const monto = num(propinaMonto);
@@ -210,7 +212,20 @@ export function AtencionReservadaForm(props: Props) {
   }
 
   return (
-    <form action={action} className={styles.form}>
+    <form
+      action={action}
+      className={styles.form}
+      onSubmit={(event) => {
+        if (saldoEstimado > 0.009 || !confirmFinal) {
+          event.preventDefault();
+          setClientError(
+            saldoEstimado > 0.009
+              ? `No puedes finalizar con saldo pendiente. Aún faltan ${money(saldoEstimado)}.`
+              : "Confirma que revisaste el resumen antes de guardar."
+          );
+        }
+      }}
+    >
       <input type="hidden" name="request_id" value={props.requestId} />
       <input type="hidden" name="movimiento_id" value={props.movimientoId} />
       <input type="hidden" name="reserva_id" value={props.reservaId} />
@@ -355,15 +370,23 @@ export function AtencionReservadaForm(props: Props) {
           </div>
           <div className={styles.coverage}><strong>Comprobante</strong><span>{props.comprobante}. Se conserva en el mismo movimiento.</span></div>
           <label className={styles.observation}>Observación<textarea name="observacion" maxLength={500} rows={3} placeholder="Opcional" /></label>
+          <label className="finalConfirmationCheck">
+            <input type="checkbox" checked={confirmFinal} onChange={(event) => setConfirmFinal(event.target.checked)} />
+            <span>Confirmo que revisé el resumen y quiero finalizar esta atención ahora.</span>
+          </label>
         </section>
       )}
 
       {(clientError || state.error) && <div className="alert" role="alert"><strong>{clientError || state.error}</strong></div>}
-      {step === 5 && saldoEstimado > 0 && <div className="alert">Quedará saldo pendiente y la atención seguirá “En atención”.</div>}
+      {step === 5 && saldoEstimado > 0 && <div className="alert">No se puede finalizar mientras quede saldo pendiente.</div>}
 
       <div className={styles.sticky}>
         {step === 1 ? <a href="/citas-hoy">Cancelar</a> : <button type="button" className="ghostButton" onClick={() => { setClientError(""); setStep((current) => Math.max(1, current - 1)); }}>← Atrás</button>}
-        {step < 5 ? <button type="button" className={styles.primary} onClick={goNext}>Continuar</button> : <button type="submit" className={styles.primary} disabled={pending}>{pending ? "Conciliando…" : saldoEstimado === 0 ? "Finalizar atención" : props.estadoActual === "En atención" ? "Actualizar atención" : "Iniciar atención"}</button>}
+        {step < 5
+          ? <button type="button" className={styles.primary} onClick={goNext}>Continuar</button>
+          : <button type="submit" className={styles.primary} disabled={pending || saldoEstimado > 0.009 || !confirmFinal}>
+              {pending ? "Conciliando…" : "Finalizar atención"}
+            </button>}
       </div>
     </form>
   );
