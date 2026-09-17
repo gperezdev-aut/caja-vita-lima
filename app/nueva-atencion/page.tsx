@@ -1,6 +1,6 @@
 import { requireModuleAccess } from "@/lib/auth";
 import { CajaSidebar } from "@/components/CajaSidebar";
-import { supabaseSelect } from "@/lib/supabaseServer";
+import { supabaseSelect, supabaseSelectWhere } from "@/lib/supabaseServer";
 import { createAtencionAction } from "./actions";
 import { NuevaAtencionWizard } from "./NuevaAtencionWizard";
 import { getCountries, getCountryCallingCode } from "libphonenumber-js/max";
@@ -142,6 +142,13 @@ export default async function NuevaAtencionPage({
 
   const services = normalizeServices(catalog.data);
   const promotions = normalizePromotions(promotionsResult.data);
+  const successMovement = params?.ok && params?.id
+    ? await supabaseSelectWhere<Row>(
+        "caja_movimientos",
+        `select=movimiento_id,cliente,servicio,total_cobrar,total_pagado,pendiente,sede,fecha,hora&movimiento_id=eq.${encodeURIComponent(params.id)}&limit=1`
+      )
+    : { data: [] as Row[], error: null };
+  const successRow = successMovement.data[0];
   const regionNames = new Intl.DisplayNames(["es"], { type: "region" });
   const countries = getCountries()
     .map((code) => ({ code, name: regionNames.of(code) ?? code, callingCode: getCountryCallingCode(code) }))
@@ -167,10 +174,25 @@ export default async function NuevaAtencionPage({
           </div>
         </section>
 
-        {params?.ok && (
-          <div className="formMessage ok" role="alert">
-            Registro guardado correctamente. Movimiento: <strong>{params.id}</strong>
-          </div>
+        {params?.ok && successRow && (
+          <section className="panel nuevaAtencionSuccess" aria-live="polite">
+            <div className="successMark" aria-hidden="true">✓</div>
+            <div>
+              <p className="eyebrow">Atención registrada</p>
+              <h2>Todo quedó guardado correctamente</h2>
+              <p>{String(successRow.cliente ?? "")} · {String(successRow.servicio ?? "")}</p>
+            </div>
+            <div className="operationalReview nuevaAtencionSuccessSummary">
+              <div><span>Total</span><strong>S/ {Number(successRow.total_cobrar ?? 0).toFixed(2)}</strong></div>
+              <div><span>Pagado</span><strong>S/ {Number(successRow.total_pagado ?? 0).toFixed(2)}</strong></div>
+              <div><span>Pendiente</span><strong>S/ {Number(successRow.pendiente ?? 0).toFixed(2)}</strong></div>
+              <div><span>Sede</span><strong>{String(successRow.sede ?? "")}</strong></div>
+            </div>
+            <div className="successActions">
+              <a className="primaryButton" href="/citas-hoy">Ir a Citas de hoy</a>
+              <a className="ghostButton" href="/nueva-atencion">Registrar otra atención</a>
+            </div>
+          </section>
         )}
 
         {params?.error && (
@@ -185,7 +207,7 @@ export default async function NuevaAtencionPage({
           </div>
         )}
 
-        <form action={createAtencionAction} className="atencionForm">
+        {!params?.ok && <form action={createAtencionAction} className="atencionForm">
           <NuevaAtencionWizard
             services={services}
             promotions={promotions}
@@ -199,7 +221,7 @@ export default async function NuevaAtencionPage({
             defaultTime={currentTimeInLima()}
             canSaveCatalog={canSaveServices(session)}
           />
-        </form>
+        </form>}
       </section>
     </main>
   );
