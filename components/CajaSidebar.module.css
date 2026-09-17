@@ -1,0 +1,142 @@
+.desktopShell {}
+
+.mobileShell {
+  display: none;
+}
+
+.mobileDetails {
+  border: 0;
+}
+
+.mobileSummary {
+  min-height: 72px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #d7dce4;
+  background: rgba(255, 252, 247, .96);
+  backdrop-filter: blur(14px);
+  list-style: none;
+  cursor: pointer;
+}
+
+.mobileSummary::-webkit-details-marker { display: none; }
+
+.brandBlock {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brandBlock img {
+  width: 104px;
+  height: auto;
+  object-fit: contain;
+}
+
+.brandBlock small {
+  padding-left: 10px;
+  border-left: 1px solid #cbbca8;
+  color: #724518;
+  font-size: 14px;
+  font-weight: 950;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.menuButton {
+  min-width: 90px;
+  min-height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 14px;
+  border: 1px solid #cbd2dc;
+  border-radius: 16px;
+  background: #fff;
+  color: #7c4a17;
+  font-weight: 950;
+  font-size: 17px;
+}
+
+.menuButton::after {
+  content: "▾";
+  font-size: 12px;
+}
+
+.mobileDetails[open] .menuButton::after { content: "▴"; }
+
+.mobileContent {
+  padding: 10px 10px 14px;
+  border-bottom: 1px solid #d7dce4;
+  background: rgba(255, 252, 247, .98);
+}
+
+.mobileNav {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.mobileNav a {
+  min-height: 50px;
+  display: flex;
+  align-items: center;
+  padding: 10px 13px;
+  border: 1px solid #cbd2dc;
+  border-radius: 14px;
+  background: #fff;
+  color: #263247;
+  text-decoration: none;
+  font-size: 15px;
+  font-weight: 900;
+  line-height: 1.15;
+}
+
+.mobileNav a::before {
+  content: "›";
+  order: 2;
+  margin-left: auto;
+  color: #e48418;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.mobileLogout {
+  width: 100%;
+  min-height: 46px;
+  margin-top: 10px;
+  border: 1px solid #263247;
+  border-radius: 14px;
+  background: transparent;
+  color: #263247;
+  font-weight: 900;
+}
+
+.identity {
+  display: none;
+}
+
+@media (max-width: 1060px) {
+  .desktopShell { display: none !important; }
+  .mobileShell {
+    display: block;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+  }
+}
+
+@media (max-width: 430px) {
+  .mobileSummary { min-height: 68px; padding: 8px 10px; }
+  .brandBlock img { width: 94px; }
+  .brandBlock small { font-size: 12px; padding-left: 8px; }
+  .menuButton { min-width: 82px; min-height: 44px; padding: 8px 11px; font-size: 16px; }
+  .mobileContent { padding: 8px; }
+  .mobileNav { gap: 7px; }
+  .mobileNav a { min-height: 48px; padding: 9px 10px; font-size: 14px; border-radius: 13px; }
+}
