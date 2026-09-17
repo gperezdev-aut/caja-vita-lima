@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireModuleAccess } from "@/lib/auth";
-import { supabaseRpc } from "@/lib/supabaseServer";
+import { supabaseRpc, supabaseSelectWhere } from "@/lib/supabaseServer";
 
 export type AtencionReservadaState = {
   ok: boolean;
@@ -107,6 +107,35 @@ export async function guardarAtencionReservadaAction(
     if (!Number.isFinite(monto) || monto <= 0) return { ok: false, error: "Cada pago debe tener un monto mayor a S/0." };
     if (!metodo) return { ok: false, error: "Selecciona el método de pago para cada monto ingresado." };
     if (metodo.toUpperCase() !== "EFECTIVO" && !operacion) return { ok: false, error: `Ingresa el número de operación del pago por ${metodo}.` };
+  }
+
+  const movimientoActual = await supabaseSelectWhere<Record<string, unknown>>(
+    "caja_movimientos",
+    `select=pendiente&movimiento_id=eq.${encodeURIComponent(movimientoId)}&limit=1`
+  );
+  if (movimientoActual.error || !movimientoActual.data[0]) {
+    return { ok: false, error: "No se pudo validar el saldo actual de la atención. Recarga el flujo." };
+  }
+
+  const pendienteActual = Number(movimientoActual.data[0].pendiente ?? 0);
+  const totalExtras = extras.reduce(
+    (sum, item) => sum + Number(item?.cantidad ?? 0) * Number(item?.monto_unitario ?? 0),
+    0
+  );
+  const totalAjustes = ajustes.reduce((sum, item) => sum + Number(item?.monto ?? 0), 0);
+  const totalConvenios = coberturas
+    .filter((item) => ["CONVENIO_BEE", "CONVENIO_CUPONIDAD"].includes(String(item?.tipo ?? "")))
+    .reduce((sum, item) => sum + Number(item?.monto ?? 0), 0);
+  const totalPagosNuevos = pagos.reduce((sum, item) => sum + Number(item?.monto ?? 0), 0);
+  const pendienteEstimado = Math.max(
+    0,
+    Math.round((pendienteActual + totalExtras - totalAjustes - totalConvenios - totalPagosNuevos) * 100) / 100
+  );
+  if (pendienteEstimado > 0.009) {
+    return {
+      ok: false,
+      error: `Para conciliar y cerrar la atención debes cancelar todo el saldo. Aún faltan S/ ${pendienteEstimado.toFixed(2)}.`,
+    };
   }
 
   const terapistas = Array.from({ length: personas }, (_, index) => ({
