@@ -51,6 +51,7 @@ const legacyPropinasFixture = resolve(root, "sql/tests/034_propinas_legacy_empty
 const migration034 = resolve(root, "sql/034_conciliacion_atencion_v2.sql");
 const migration035 = resolve(root, "sql/035_conciliar_atencion_v2.sql");
 const contract035 = resolve(root, "sql/tests/035_conciliar_atencion_v2_rollback.sql");
+const contract035Directa = resolve(root, "sql/tests/035_conciliar_atencion_directa_v2_rollback.sql");
 const migration036 = resolve(root, "sql/036_cierre_caja_propinas_v2.sql");
 const migration037 = resolve(root, "sql/037_convenio_cobertura_guard_v2.sql");
 const contract037 = resolve(root, "sql/tests/037_convenio_cobertura_guard_v2_rollback.sql");
@@ -65,6 +66,7 @@ const files = [
   migration034,
   migration035,
   contract035,
+  contract035Directa,
   migration036,
   migration037,
   contract037,
