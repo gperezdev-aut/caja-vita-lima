@@ -106,3 +106,36 @@ test("los wizards operativos mantienen una sola columna, targets táctiles y saf
   assert.match(css, /bottom:\s*max\(8px, env\(safe-area-inset-bottom\)\)/);
   assert.match(css, /\.operationalReview strong \{ display: block; overflow-wrap: anywhere; \}/);
 });
+
+
+test("Nueva atención busca clientes existentes y solo guarda con acción explícita", async () => {
+  const [wizard, action, page] = await Promise.all([
+    readFile(new URL("../app/nueva-atencion/NuevaAtencionWizard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/nueva-atencion/actions.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/nueva-atencion/page.tsx", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(wizard, /buscarClientesAction/);
+  assert.match(wizard, /Buscar cliente/);
+  assert.match(wizard, /\+ Nuevo cliente/);
+  assert.match(wizard, /Guardar atención/);
+  assert.match(wizard, /event\.key === "Enter"[\s\S]*preventDefault\(\)/);
+  assert.match(action, /export async function buscarClientesAction/);
+  assert.match(action, /confirmar_guardado/);
+  assert.match(page, /Todo quedó guardado correctamente/);
+  assert.match(page, /Ir a Citas de hoy/);
+  assert.doesNotMatch(page, /Registro guardado correctamente\. Movimiento:/);
+});
+
+test("Preparar cita expone seis pasos coherentes", async () => {
+  const [wizardDomain, stepper, form] = await Promise.all([
+    readFile(new URL("../app/preparar-cita/prepararCitaWizard.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/preparar-cita/components/WizardStepper.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/preparar-cita/PrepararCitaForm.tsx", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(wizardDomain, /\["Cliente", "Tipo", "Servicio", "Horario", "Pago", "Confirmar"\]/);
+  assert.match(stepper, /\[0, 1, 2, 3, 4, 5\]/);
+  assert.match(form, /Paso 5 de 6/);
+  assert.match(form, /Paso 6 de 6/);
+});
