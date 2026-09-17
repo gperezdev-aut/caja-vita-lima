@@ -72,18 +72,24 @@
 .mobileDetails[open] .menuButton::after { content: "▴"; }
 
 .mobileContent {
-  position: absolute;
-  top: 100%;
+  display: none;
+}
+
+.mobileDetails[open] .mobileContent {
+  display: block;
+  position: fixed;
+  top: 72px;
   left: 0;
   right: 0;
-  z-index: 60;
+  z-index: 1000;
   max-height: calc(100dvh - 72px);
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 10px 10px 14px;
   border-bottom: 1px solid #d7dce4;
   background: rgba(255, 252, 247, .995);
-  box-shadow: 0 18px 34px rgba(38, 50, 71, .14);
+  box-shadow: 0 18px 34px rgba(38, 50, 71, .18);
+  -webkit-overflow-scrolling: touch;
 }
 
 .mobileNav {
@@ -138,7 +144,7 @@
     display: block;
     position: sticky;
     top: 0;
-    z-index: 50;
+    z-index: 999;
   }
 }
 
@@ -147,7 +153,11 @@
   .brandBlock img { width: 92px; }
   .brandBlock small { font-size: 12px; padding-left: 8px; }
   .menuButton { min-width: 80px; min-height: 42px; padding: 7px 10px; font-size: 15px; }
-  .mobileContent { max-height: calc(100dvh - 66px); padding: 7px; }
+  .mobileDetails[open] .mobileContent {
+    top: 66px;
+    max-height: calc(100dvh - 66px);
+    padding: 7px;
+  }
   .mobileNav { gap: 6px; }
   .mobileNav a { min-height: 44px; padding: 8px 9px; font-size: 13px; border-radius: 12px; }
 }
