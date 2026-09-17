@@ -144,7 +144,7 @@ export default async function AtencionReservadaPage({ params }: { params: Promis
 
   const comprobante = String(movimiento.estado_comprobante_manual || movimiento.estado_boleta || movimiento.tipo_comprobante || "No definido");
   const servicioNombre = displayText(movimiento.servicio ?? "-");
-  const included = String(servicioCatalogo?.included_es ?? "").trim();
+  const included = displayText(servicioCatalogo?.included_es ?? "").trim();
   const duration = Number(servicioCatalogo?.duration_min ?? 0);
 
   return (
