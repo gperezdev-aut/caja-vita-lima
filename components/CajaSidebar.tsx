@@ -5,14 +5,20 @@ import type { CajaSession } from "@/lib/auth";
 import { getVisibleNavItems } from "@/lib/auth";
 
 function roleLabel(role: CajaSession["rol"]) {
-  if (role === "ADMIN_GERALD") return "Administrador";
-  if (role === "SOCIO") return "Socio";
+  if (role === "ADMIN_GERALD" || role === "SOCIO") return "Administración";
   if (role === "VITA_OPERACION") return "Operación";
   return role;
 }
 
 export function CajaSidebar({ session }: { session: CajaSession }) {
-  const navItems = getVisibleNavItems(session.rol);
+  const visibleItems = getVisibleNavItems(session.rol);
+  const horariosItem = visibleItems.find((item) => item.key === "horarios");
+  const cierreItem = visibleItems.find((item) => item.key === "cierre-caja");
+  const navItems = [
+    ...visibleItems.filter((item) => item.key !== "horarios" && item.key !== "cierre-caja"),
+    ...(cierreItem ? [cierreItem] : []),
+    ...(horariosItem ? [horariosItem] : []),
+  ];
   const moduleItems = navItems.filter((item) => item.key !== "dashboard" && item.key !== "alertas");
 
   return (

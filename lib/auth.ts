@@ -12,6 +12,8 @@ export type CajaRole = "ADMIN_GERALD" | "SOCIO" | "VITA_OPERACION";
 export type CajaModule =
   | "dashboard"
   | "clientes"
+  | "terapistas"
+  | "horarios"
   | "citas-hoy"
   | "preparar-cita"
   | "nueva-atencion"
@@ -40,6 +42,8 @@ const NAV_ITEMS: CajaNavItem[] = [
   { key: "preparar-cita", label: "Preparar cita", href: "/preparar-cita" },
   { key: "nueva-atencion", label: "Nueva atención", href: "/nueva-atencion" },
   { key: "clientes", label: "Clientes", href: "/clientes" },
+  { key: "terapistas", label: "Terapistas", href: "/terapistas" },
+  { key: "horarios", label: "Horarios", href: "/horarios" },
   { key: "registrar-salida", label: "Registrar salida", href: "/registrar-salida" },
   { key: "gift-cards", label: "Gift Cards", href: "/gift-cards" },
   { key: "comprobantes", label: "Comprobantes", href: "/comprobantes" },
@@ -51,6 +55,8 @@ const PERMISSIONS: Record<CajaRole, CajaModule[]> = {
   ADMIN_GERALD: [
     "dashboard",
     "clientes",
+    "terapistas",
+    "horarios",
     "citas-hoy",
     "preparar-cita",
     "nueva-atencion",
@@ -63,6 +69,8 @@ const PERMISSIONS: Record<CajaRole, CajaModule[]> = {
   SOCIO: [
     "dashboard",
     "clientes",
+    "terapistas",
+    "horarios",
     "citas-hoy",
     "preparar-cita",
     "nueva-atencion",
@@ -72,6 +80,7 @@ const PERMISSIONS: Record<CajaRole, CajaModule[]> = {
     "alertas",
   ],
   VITA_OPERACION: [
+    "horarios",
     "citas-hoy",
     "preparar-cita",
     "nueva-atencion",
@@ -130,8 +139,6 @@ export function createSessionToken(session: CajaSession) {
 }
 
 function parseSessionToken(token: string, sessionSecret: string): CajaSession | null {
-  // Compatibilidad temporal con el login antiguo.
-  // Si todavía existe una cookie vieja con el secret plano, entra como Gerald.
   if (token === sessionSecret) {
     return {
       usuario: "gerald",
