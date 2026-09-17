@@ -104,6 +104,7 @@ export function NuevaAtencionWizard({
   const [responsable, setResponsable] = useState("Gerald");
   const [observacion, setObservacion] = useState("");
   const [error, setError] = useState("");
+  const [confirmSave, setConfirmSave] = useState(false);
 
   const selectedService = useMemo(
     () => services.find((item) => item.codeId === serviceCode),
@@ -116,12 +117,7 @@ export function NuevaAtencionWizard({
   );
 
   const filteredServices = useMemo(() => {
-    const expected = pax === 2 ? "2p" : "1p";
-    return services.filter((item) => {
-      const category = item.category.toLowerCase();
-      const paxType = item.paxType.toLowerCase();
-      return category === expected || paxType === expected;
-    });
+    return services.filter((item) => pax >= item.peopleMin && pax <= item.peopleMax);
   }, [services, pax]);
 
   const serviceName = customService
@@ -495,7 +491,7 @@ export function NuevaAtencionWizard({
             </select>
           </label>
 
-          <label className="atencionField">
+          <label className="atencionField atencionFieldWide">
             Promoción vigente
             <select value={promotionCode} onChange={(e) => selectPromotion(e.target.value)}>
               <option value="">Sin promoción</option>
@@ -534,7 +530,7 @@ export function NuevaAtencionWizard({
             <input name="monto_total" type="number" min="0" step="0.01" value={total} onChange={(e) => setTotal(Number(e.target.value || 0))} />
           </label>
 
-          <label className="atencionField">
+          <label className="atencionField atencionFieldWide">
             Terapista 1
             <select name="terapista_1" value={terapista1} onChange={(e) => setTerapista1(e.target.value)}>
               <option value="">Selecciona una terapista</option>
@@ -542,7 +538,7 @@ export function NuevaAtencionWizard({
             </select>
           </label>
 
-          <label className="atencionField">
+          <label className="atencionField atencionFieldWide">
             Terapista 2
             <select name="terapista_2" value={terapista2} onChange={(e) => setTerapista2(e.target.value)} disabled={pax < 2}>
               <option value="">{pax < 2 ? "No aplica" : "Selecciona una terapista"}</option>
@@ -651,6 +647,15 @@ export function NuevaAtencionWizard({
               : " Solo se utilizará en esta atención."}
           </div>
         )}
+
+        <label className="finalConfirmationCheck">
+          <input
+            type="checkbox"
+            checked={confirmSave}
+            onChange={(e) => setConfirmSave(e.target.checked)}
+          />
+          <span>Confirmo que revisé los datos y quiero guardar esta atención ahora.</span>
+        </label>
       </section>
 
       <div className="wizardActions">
@@ -668,9 +673,9 @@ export function NuevaAtencionWizard({
             name="confirmar_guardado"
             value="SI"
             className="primaryButton"
-            disabled={pending}
+            disabled={pending || !confirmSave}
           >
-            {pending ? "Guardando…" : "Guardar atención"}
+            {pending ? "Guardando…" : "Confirmar guardado"}
           </button>
         )}
       </div>
