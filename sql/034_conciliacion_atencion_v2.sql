@@ -12,6 +12,39 @@
 
 begin;
 
+-- Compatibilidad con el esquema legacy de propinas que existió antes de V2.
+-- Ese modelo usaba monto_total/fecha_operativa y terapista como texto.
+-- Solo se reemplaza automáticamente cuando ambas tablas están vacías.
+-- Si hubiera datos históricos, se aborta para no perder ni inventar información.
+do $$
+begin
+  if to_regclass('public.caja_propinas') is not null
+     and exists (
+       select 1 from information_schema.columns
+       where table_schema='public' and table_name='caja_propinas' and column_name='monto_total'
+     )
+     and not exists (
+       select 1 from information_schema.columns
+       where table_schema='public' and table_name='caja_propinas' and column_name='monto'
+     ) then
+    if exists (select 1 from public.caja_propinas limit 1) then
+      raise exception using
+        errcode='23514',
+        message='CAJA_PROPINAS_LEGACY_CON_DATOS_REQUIERE_MIGRACION_MANUAL';
+    end if;
+
+    if to_regclass('public.caja_propina_distribucion') is not null
+       and exists (select 1 from public.caja_propina_distribucion limit 1) then
+      raise exception using
+        errcode='23514',
+        message='CAJA_PROPINA_DISTRIBUCION_LEGACY_CON_DATOS_REQUIERE_MIGRACION_MANUAL';
+    end if;
+
+    drop table if exists public.caja_propina_distribucion cascade;
+    drop table public.caja_propinas cascade;
+  end if;
+end $$;
+
 create table if not exists public.caja_atencion_extras (
   extra_id uuid primary key default extensions.gen_random_uuid(),
   movimiento_id text not null references public.caja_movimientos(movimiento_id) on delete restrict,
