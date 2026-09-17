@@ -1,6 +1,7 @@
 import { requireModuleAccess } from "@/lib/auth";
 import { CajaSidebar } from "@/components/CajaSidebar";
 import { supabaseSelect, supabaseSelectWhere } from "@/lib/supabaseServer";
+import { leerCatalogoPrepararCita } from "@/lib/catalogoPrepararCita";
 import { createAtencionAction } from "./actions";
 import { NuevaAtencionWizard } from "./NuevaAtencionWizard";
 import { getCountries, getCountryCallingCode } from "libphonenumber-js/max";
@@ -21,6 +22,11 @@ type CatalogService = {
   price: number;
   paxType: string;
   sortOrder: number;
+  peopleMin: number;
+  peopleMax: number;
+  selectionRule: string;
+  reservationBehavior: string;
+  modality: string;
 };
 
 type Promotion = {
@@ -89,6 +95,11 @@ function normalizeServices(rows: Row[]): CatalogService[] {
       price: parseNumber(row.price_pen ?? row.price),
       paxType: String(row.pax_type ?? row.category ?? "").trim(),
       sortOrder: parseNumber(row.sort_order),
+      peopleMin: parseNumber(row.people_min) || 1,
+      peopleMax: parseNumber(row.people_max) || 1,
+      selectionRule: String(row.selection_rule ?? "").trim(),
+      reservationBehavior: String(row.reservation_behavior ?? "").trim(),
+      modality: String(row.modality ?? row.service_mode ?? "").trim(),
     }))
     .filter((row) => row.codeId && row.name)
     .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
@@ -134,13 +145,31 @@ export default async function NuevaAtencionPage({
   const session = await requireModuleAccess("nueva-atencion");
   const params = await searchParams;
 
-  const [config, catalog, promotionsResult] = await Promise.all([
+  const [config, canonicalCatalog, promotionsResult] = await Promise.all([
     supabaseSelect<Row>("config_listas"),
-    supabaseSelect<Row>("stg_services_catalog_v5"),
+    leerCatalogoPrepararCita(),
     supabaseSelect<Row>("stg_promotions_v1"),
   ]);
 
-  const services = normalizeServices(catalog.data);
+  const services: CatalogService[] = canonicalCatalog.ok
+    ? canonicalCatalog.services
+        .filter((service) => service.reservationBehavior === "APPOINTMENT" && service.modality !== "HOME")
+        .map((service, index) => ({
+          codeId: service.serviceCode,
+          name: service.nameEs,
+          category: service.category,
+          duration: service.durationMin,
+          price: service.pricePen,
+          paxType: service.peopleMax === 2 ? "2p" : "1p",
+          sortOrder: index,
+          peopleMin: service.peopleMin,
+          peopleMax: service.peopleMax,
+          selectionRule: service.selectionRule,
+          reservationBehavior: service.reservationBehavior,
+          modality: service.modality,
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name, "es"))
+    : [];
   const promotions = normalizePromotions(promotionsResult.data);
   const successMovement = params?.ok && params?.id
     ? await supabaseSelectWhere<Row>(
@@ -201,7 +230,7 @@ export default async function NuevaAtencionPage({
           </div>
         )}
 
-        {(config.error || catalog.error || promotionsResult.error) && (
+        {(config.error || !canonicalCatalog.ok || promotionsResult.error) && (
           <div className="alert">
             <strong>Revisar conexión con Supabase.</strong>
           </div>
