@@ -2,6 +2,8 @@ begin;
 
 -- Una propina V2 debe seguir visible en total_propina_detalle,
 -- pero no generar diferencia financiera ni contaminar total_cobrar.
+-- El fixture no depende de que caja_movimientos tenga la columna legacy
+-- total_propina: V2 debe funcionar igual en ambos esquemas históricos.
 do $$
 declare
   v_hoy date := (now() at time zone 'America/Lima')::date;
@@ -16,10 +18,10 @@ begin
 
   insert into public.caja_movimientos(
     movimiento_id,fecha,hora,sede,tipo_movimiento,estado,cliente,n_pax,servicio,
-    monto_servicio,total_extras,total_propina,total_cobrar,total_pagado,pendiente,responsable,source_type,source_id
+    monto_servicio,total_extras,total_cobrar,total_pagado,pendiente,responsable,source_type,source_id
   ) values(
     'MOV-QA-V2-VISTA-PROPINA',v_hoy,v_ahora,'Miraflores','ATENCION_APP','Atendido','QA Vista',1,'Servicio QA',
-    88,0,0,88,88,0,'QA','QA_V2','CASE_039'
+    88,0,88,88,0,'QA','QA_V2','CASE_039'
   );
 
   insert into public.caja_pagos(
