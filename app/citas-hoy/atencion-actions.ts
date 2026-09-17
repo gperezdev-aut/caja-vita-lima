@@ -153,7 +153,7 @@ export async function guardarAtencionReservadaAction(
       ajustes,
       coberturas,
       pagos,
-      propina,
+      ...(propina ? { propina } : {}),
       observacion: text(formData, "observacion"),
       responsable: session.nombre,
     },
