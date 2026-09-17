@@ -5,8 +5,10 @@ import {
   cajaFisicaNoCalculable,
   esBoletaPendiente,
   normalizarMetodoCierre,
+  resumirDineroProcesadoCierre,
   resumirMovimientosOperativos,
   resumirPagosCierre,
+  resumirPropinasCierre,
   sumarSalidas,
 } from "../lib/cierreCaja.ts";
 
@@ -51,6 +53,27 @@ test("cierre agrupa los métodos del ledger sin confundir efectivo y digital", (
   assert.equal(normalizarMetodoCierre("transferencia"), "OTRO");
 });
 
+test("propinas se separan de ingresos pero sí forman parte del dinero procesado", () => {
+  const pagos = [
+    { metodo: "EFECTIVO", monto: 40 },
+    { metodo: "IZIPAY POS", monto: 70 },
+  ];
+  const propinas = [
+    { metodo: "IZIPAY POS", monto: 20, estado: "PENDIENTE" },
+    { metodo: "EFECTIVO", monto: 5, estado: "ANULADA" },
+  ];
+
+  const soloPropinas = resumirPropinasCierre(propinas);
+  const procesado = resumirDineroProcesadoCierre(pagos, propinas);
+
+  assert.equal(soloPropinas.total, 20);
+  assert.equal(procesado.ingresos.total, 110);
+  assert.equal(procesado.propinas.total, 20);
+  assert.equal(procesado.totalProcesado, 130);
+  assert.equal(procesado.porMetodo.EFECTIVO, 40);
+  assert.equal(procesado.porMetodo["IZIPAY POS"], 90);
+});
+
 test("cierre mantiene salidas y métricas operativas separadas de pagos", () => {
   assert.equal(sumarSalidas([{ monto: 12.5 }, { monto: "7.50" }]), 20);
   assert.equal(esBoletaPendiente({ estado_boleta: "Pendiente" }), true);
@@ -78,20 +101,30 @@ test("casos E/F: el adelanto entra solo en el cierre de su fecha real", () => {
   assert.equal(cierre20.total, 0);
 });
 
-test("la app recalcula el cierre server-side y exporta caja_pagos", async () => {
-  const [action, page, exportRoute] = await Promise.all([
+test("la app recalcula el cierre server-side y separa propinas de ingresos", async () => {
+  const [action, page, exportRoute, migration036] = await Promise.all([
     readFile(new URL("../app/cierre-caja/actions.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/cierre-caja/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/dashboard/export/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../sql/036_cierre_caja_propinas_v2.sql", import.meta.url), "utf8"),
   ]);
 
   assert.match(action, /supabaseSelectAllWhere[\s\S]*"caja_pagos"/);
+  assert.match(action, /supabaseSelectAllWhere[\s\S]*"caja_propinas"/);
+  assert.match(action, /resumirDineroProcesadoCierre\(pagos\.data, propinas\.data\)/);
+  assert.match(action, /total_ingresos:\s*totalIngresos/);
+  assert.match(action, /total_propinas:\s*dineroProcesado\.propinas\.total/);
+  assert.match(action, /total_procesado:\s*dineroProcesado\.totalProcesado/);
   assert.doesNotMatch(action, /money\(formData\.get\("total_ingresos"\)\)/);
   assert.match(action, /cajaFisicaNoCalculable\(\)/);
   assert.doesNotMatch(action, /efectivoContado\s*-\s*cajaEsperada/);
   assert.match(page, /resumirPagosCierre\(pagos\.data\)/);
   assert.match(page, /value == null \? "No calculable"/);
   assert.match(exportRoute, /supabaseSelectAllWhere<Row>\("caja_pagos", ingresosQuery\)/);
+  assert.match(migration036, /total_propinas/);
+  assert.match(migration036, /total_procesado/);
+  assert.match(migration036, /propinas_por_metodo/);
+  assert.match(migration036, /dinero_procesado_por_metodo/);
 });
 
 test("021 fija hora de cobro en PostgreSQL y conserva contrato idempotente", async () => {
