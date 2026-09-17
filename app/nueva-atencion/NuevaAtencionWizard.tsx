@@ -152,7 +152,15 @@ export function NuevaAtencionWizard({
     setError("");
     try {
       const result = await buscarClientesAction(term);
-      setClienteResults(result.clientes);
+      setClienteResults(result.clientes.map((row) => ({
+        cliente_id: String(row.cliente_id ?? ""),
+        cliente: String(row.cliente ?? ""),
+        whatsapp: String(row.whatsapp ?? ""),
+        whatsapp_e164: String(row.whatsapp_e164 ?? ""),
+        pais_telefono: String(row.pais_telefono ?? ""),
+        dni: String(row.dni ?? ""),
+        alerta_atencion: String(row.alerta_atencion ?? ""),
+      })));
       if (result.error) setError(result.error);
       else if (!result.clientes.length) setClienteMode("nuevo");
     } catch {
