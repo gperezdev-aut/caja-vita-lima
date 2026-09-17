@@ -2,101 +2,218 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
-  anadirAnoCalendario,
-  buscarClientesGiftCard,
-  buscarServiciosGiftCard,
-  estadoEfectivoGiftCard,
-  filtrarGiftCards,
-  giftCardMensajeWhatsApp,
-  normalizarTextoGiftCard,
-  validarPagoGiftCard,
+  addOneCalendarYear,
+  GIFT_CARD_CODE_PATTERN,
+  giftCardEffectiveStatus,
+  validateGiftCardPayment,
 } from "../lib/giftCards.ts";
 
-async function source(path: string) {
-  return readFile(new URL(`../${path}`, import.meta.url), "utf8");
-}
-
-// NOTE: This file preserves the existing Gift Card tests. The navigation assertion
-// below was updated when Terapistas/Horarios became first-class Caja modules.
-
-// The following broad static assertions intentionally read implementation files
-// because Gift Cards combine SQL, server actions, rendering and responsive UI.
+const root = process.cwd();
+const source = (path: string) => readFile(`${root}/${path}`, "utf8");
 
 test("vigencia usa un año calendario y resuelve 29 de febrero", () => {
-  assert.equal(anadirAnoCalendario("2024-02-29"), "2025-02-28");
-  assert.equal(anadirAnoCalendario("2026-09-13"), "2027-09-13");
+  assert.equal(addOneCalendarYear("2026-09-13"), "2027-09-13");
+  assert.equal(addOneCalendarYear("2024-02-29"), "2025-02-28");
 });
 
 test("estado efectivo conserva terminales y detecta vencimiento", () => {
-  assert.equal(estadoEfectivoGiftCard({ estado: "ANULADA", fechaVencimiento: "2025-01-01" }, "2026-01-01"), "ANULADA");
-  assert.equal(estadoEfectivoGiftCard({ estado: "EMITIDA", fechaVencimiento: "2025-01-01" }, "2026-01-01"), "VENCIDA");
-  assert.equal(estadoEfectivoGiftCard({ estado: "PARCIALMENTE_USADA", fechaVencimiento: "2027-01-01" }, "2026-01-01"), "PARCIALMENTE_USADA");
+  assert.equal(
+    giftCardEffectiveStatus("EMITIDA", "2026-09-12", "2026-09-13"),
+    "VENCIDA",
+  );
+  assert.equal(
+    giftCardEffectiveStatus("ANULADA", "2026-09-12", "2026-09-13"),
+    "ANULADA",
+  );
+  assert.equal(
+    giftCardEffectiveStatus("USADA", "2026-09-12", "2026-09-13"),
+    "USADA",
+  );
 });
 
 test("pago reutiliza reglas de total, método y operación", () => {
-  assert.equal(validarPagoGiftCard({ valor: 70, recibido: 70, metodo: "EFECTIVO", operacion: "" }), null);
-  assert.equal(validarPagoGiftCard({ valor: 70, recibido: 60, metodo: "EFECTIVO", operacion: "" }), "PAGO_TOTAL_REQUERIDO");
-  assert.equal(validarPagoGiftCard({ valor: 70, recibido: 70, metodo: "YAPE", operacion: "" }), "NUMERO_OPERACION_REQUERIDO");
+  assert.match(
+    validateGiftCardPayment({
+      value: 100,
+      received: 90,
+      method: "YAPE",
+      operation: "1",
+    }),
+    /pago total/i,
+  );
+  assert.match(
+    validateGiftCardPayment({
+      value: 100,
+      received: 100,
+      method: "",
+      operation: "",
+    }),
+    /método/i,
+  );
+  assert.match(
+    validateGiftCardPayment({
+      value: 100,
+      received: 100,
+      method: "PLIN",
+      operation: "",
+    }),
+    /operación/i,
+  );
+  assert.equal(
+    validateGiftCardPayment({
+      value: 100,
+      received: 100,
+      method: "EFECTIVO",
+      operation: "",
+    }),
+    "",
+  );
 });
 
 test("migración define modelo, estados y código único", async () => {
   const sql = await source("sql/023_gift_cards_v1.sql");
-  for (const token of ["gift_card_usos", "gift_card_eventos", "GC-VITA-", "PARCIALMENTE_USADA", "fecha_vencimiento", "request_fingerprint"]) assert.match(sql, new RegExp(token, "i"));
+  assert.match(
+    sql,
+    /EMITIDA[\s\S]*PARCIALMENTE_USADA[\s\S]*USADA[\s\S]*VENCIDA[\s\S]*ANULADA/,
+  );
+  assert.match(sql, /GC-VITA-/);
+  assert.ok(GIFT_CARD_CODE_PATTERN.test("GC-VITA-A1B2C3D4"));
+  assert.match(sql, /(fecha_venta|v_fecha) \+ interval '1 year'/);
+  assert.match(
+    sql,
+    /service_code[\s\S]*service_name_snapshot[\s\S]*service_duration_min[\s\S]*service_price_pen[\s\S]*catalog_release_id[\s\S]*catalog_price_version/,
+  );
 });
 
 test("emisión es atómica, server-side e idempotente", async () => {
   const sql = await source("sql/023_gift_cards_v1.sql");
-  assert.match(sql, /emitir_gift_card_v1/i);
-  assert.match(sql, /pg_advisory_xact_lock/i);
-  assert.match(sql, /request_fingerprint/i);
-  assert.match(sql, /insert into public\.caja_movimientos/i);
-  assert.match(sql, /insert into public\.caja_pagos/i);
-  assert.match(sql, /grant execute on function public\.emitir_gift_card_v1\(jsonb\) to service_role/i);
+  assert.match(sql, /create or replace function public\.emitir_gift_card_v1/);
+  assert.match(sql, /pg_advisory_xact_lock/);
+  assert.match(sql, /REQUEST_ID_PAYLOAD_CONFLICTO/);
+  assert.match(
+    sql,
+    /from public\.caja_catalog_services s join public\.caja_catalog_releases/,
+  );
+  assert.match(
+    sql,
+    /insert into public\.caja_movimientos[\s\S]*'GIFT_CARD_VENTA'/,
+  );
+  assert.match(sql, /insert into public\.caja_pagos[\s\S]*'GIFT_CARD_VENTA'/);
 });
 
 test("pgcrypto se califica sin ampliar el search_path y 024 reemplaza las RPC afectadas", async () => {
-  const [sql023, sql024] = await Promise.all([source("sql/023_gift_cards_v1.sql"), source("sql/024_gift_cards_pgcrypto_schema_patch.sql")]);
-  assert.match(sql024, /extensions\.digest/i);
-  assert.match(sql024, /extensions\.gen_random_uuid/i);
-  assert.match(sql024, /extensions\.gen_random_bytes/i);
-  assert.doesNotMatch(sql024, /search_path\s*=\s*public\s*,\s*extensions/i);
-  assert.match(sql023, /digest\(/i);
+  const [base, patch] = await Promise.all([
+    source("sql/023_gift_cards_v1.sql"),
+    source("sql/024_gift_cards_pgcrypto_schema_patch.sql"),
+  ]);
+  for (const sql of [base, patch]) {
+    assert.doesNotMatch(sql, /(?<!extensions\.)\bdigest\s*\(/);
+    assert.doesNotMatch(sql, /(?<!extensions\.)\bgen_random_bytes\s*\(/);
+    assert.doesNotMatch(sql, /(?<!extensions\.)\bgen_random_uuid\s*\(/);
+    assert.doesNotMatch(sql, /search_path\s*=\s*[^\n]*extensions/i);
+  }
+  assert.match(patch, /create or replace function public\.emitir_gift_card_v1/);
+  assert.match(
+    patch,
+    /create or replace function public\.canjear_gift_card_v1/,
+  );
+  assert.doesNotMatch(
+    patch,
+    /create or replace function public\.anular_gift_card_v1/,
+  );
 });
 
 test("emisión por monto no depende de un record de catálogo sin asignar", async () => {
-  const sql = await source("sql/025_gift_cards_catalog_record_patch.sql");
-  assert.match(sql, /v_catalog_service_code/i);
-  assert.match(sql, /TIPO_GIFT_CARD_INVALIDO/i);
+  const [base, pgcryptoPatch, catalogPatch, harness] = await Promise.all([
+    source("sql/023_gift_cards_v1.sql"),
+    source("sql/024_gift_cards_pgcrypto_schema_patch.sql"),
+    source("sql/025_gift_cards_catalog_record_patch.sql"),
+    source("sql/tests/023_gift_cards_v1_rollback.sql"),
+  ]);
+  for (const sql of [base, pgcryptoPatch, catalogPatch]) {
+    assert.doesNotMatch(sql, /v_catalog\s+record/i);
+    assert.doesNotMatch(sql, /v_catalog\./);
+    assert.match(
+      sql,
+      /v_catalog_service_code public\.caja_catalog_services\.service_code%type/,
+    );
+    assert.match(
+      sql,
+      /into v_catalog_service_code,v_catalog_name,v_catalog_duration_min,v_catalog_price,v_catalog_release_id,v_catalog_price_version/,
+    );
+  }
+  assert.match(
+    catalogPatch,
+    /create or replace function public\.emitir_gift_card_v1/,
+  );
+  assert.doesNotMatch(
+    catalogPatch,
+    /create or replace function public\.(canjear|anular)_gift_card_v1/,
+  );
+  assert.match(catalogPatch, /security definer set search_path=public,pg_temp/);
+  assert.match(catalogPatch, /extensions\.digest/);
+  assert.match(catalogPatch, /extensions\.gen_random_bytes/);
+  assert.match(catalogPatch, /extensions\.gen_random_uuid/);
+  assert.match(harness, /-- B\. Emisión por monto\.[\s\S]*"tipo":"MONTO"/);
 });
 
 test("canje conserva historial, saldo parcial y locking sin nuevo pago", async () => {
   const sql = await source("sql/023_gift_cards_v1.sql");
-  const block = sql.match(/create or replace function public\.canjear_gift_card_v1[\s\S]*?end \$\$;/i)?.[0] ?? sql;
-  assert.match(block, /for update/i);
-  assert.match(block, /gift_card_usos/i);
-  assert.doesNotMatch(block, /insert into public\.caja_pagos/i);
+  const redeem = sql.slice(
+    sql.indexOf("create or replace function public.canjear_gift_card_v1"),
+    sql.indexOf("create or replace function public.anular_gift_card_v1"),
+  );
+  assert.match(redeem, /for update/i);
+  assert.match(redeem, /insert into public\.gift_card_usos/);
+  assert.match(redeem, /PARCIALMENTE_USADA/);
+  assert.doesNotMatch(redeem, /insert into public\.caja_pagos/);
+  assert.match(sql, /monto emitido menos usos/);
 });
 
 test("anulación es auditable y no automatiza devoluciones", async () => {
   const sql = await source("sql/023_gift_cards_v1.sql");
-  assert.match(sql, /ANULACION/i);
-  assert.match(sql, /motivo_anulacion/i);
+  assert.match(sql, /motivo_anulacion/);
+  assert.match(sql, /reembolso_automatico',false/);
+  assert.match(sql, /No genera devolución financiera automática/);
 });
 
 test("wizard tiene cuatro pasos y persiste solo en confirmación", async () => {
-  const page = await source("app/gift-cards/nueva/GiftCardWizard.tsx");
-  for (const step of [1, 2, 3, 4]) assert.match(page, new RegExp(`step === ${step}`));
-  assert.match(page, /emitirGiftCardAction/);
+  const ui = await source("app/gift-cards/GiftCardsModule.tsx");
+  assert.match(
+    ui,
+    /const steps = \["Personas", "Regalo", "Pago", "Confirmar"\]/,
+  );
+  assert.match(
+    ui,
+    /step === 0[\s\S]*step === 1[\s\S]*step === 2[\s\S]*step === 3/,
+  );
+  assert.match(ui, /EMITIR GIFT CARD/);
+  assert.equal((ui.match(/type="submit"/g) ?? []).length, 1);
+  assert.match(ui, /pending \|\| disabled/);
+  assert.match(ui, /setStep\(\(current\) => Math\.max\(0, current - 1\)\)/);
 });
 
 test("wizard cubre servicio, monto, catálogo, listado y filtros", async () => {
-  const [wizard, page] = await Promise.all([
-    source("app/gift-cards/nueva/GiftCardWizard.tsx"),
+  const [ui, page] = await Promise.all([
+    source("app/gift-cards/GiftCardsModule.tsx"),
     source("app/gift-cards/page.tsx"),
   ]);
-  assert.match(wizard, /SERVICIO/);
-  assert.match(wizard, /MONTO/);
-  assert.match(page, /Gift Cards/);
+  assert.match(ui, /Por servicio/);
+  assert.match(ui, /Por monto/);
+  assert.match(ui, /serviceMatches\.results\.map/);
+  for (const field of [
+    "codigo",
+    "estado",
+    "tipo",
+    "desde",
+    "hasta",
+    "beneficiario",
+    "whatsapp_beneficiario",
+    "whatsapp_comprador",
+  ])
+    assert.match(page, new RegExp(`name=\\"${field}\\"`));
+  assert.match(page, /desktopData/);
+  assert.match(page, /giftCardMobileList/);
 });
 
 test("detalle cubre canje, saldo, anulación y descarga segura", async () => {
@@ -116,7 +233,9 @@ test("detalle cubre canje, saldo, anulación y descarga segura", async () => {
 test("navegación comparte orden y limita permisos explícitamente", async () => {
   const auth = await source("lib/auth.ts");
   const nav = auth.match(/const NAV_ITEMS[\s\S]*?\n\];/)?.[0] ?? "";
-  const labels = [...nav.matchAll(/label: "([^"]+)"/g)].map((match) => match[1]);
+  const labels = [...nav.matchAll(/label: "([^"]+)"/g)].map(
+    (match) => match[1],
+  );
   assert.deepEqual(labels, [
     "Dashboard",
     "Citas de hoy",
@@ -139,19 +258,31 @@ test("navegación comparte orden y limita permisos explícitamente", async () =>
 
 test("harness SQL cubre contrato obligatorio y revierte", async () => {
   const harness = await source("sql/tests/023_gift_cards_v1_rollback.sql");
-  assert.match(harness, /rollback;/i);
+  for (const marker of [
+    "EMISION_SERVICIO_INVALIDA",
+    "EMISION_MONTO_INVALIDA",
+    "IDEMPOTENCIA_FALLO",
+    "CANJE_SERVICIO_INVALIDO",
+    "SALDO_PARCIAL_INVALIDO",
+    "SALDO_INSUFICIENTE_NO_RECHAZADO",
+    "VENCIMIENTO_LECTURA_INVALIDO",
+    "ANULACION_INVALIDA",
+    "CANJE_SIN_LOCK",
+    "DOBLE_CONTABILIZACION",
+    "PERMISOS_INVALIDOS",
+  ])
+    assert.match(harness, new RegExp(marker));
+  assert.match(harness, /^begin;/m);
+  assert.match(harness, /rollback;\s*$/);
 });
 
 test("responsive conserva targets táctiles y layout móvil", async () => {
   const css = await source("app/globals.css");
-  assert.match(css, /gift/i);
-});
-
-// Keep helper functions exercised so future changes do not silently remove search/filter behavior.
-test("helpers de búsqueda y normalización conservan comportamiento básico", () => {
-  assert.equal(normalizarTextoGiftCard("ÁÉÍÓÚ Ñ"), "aeiou n");
-  assert.ok(Array.isArray(buscarClientesGiftCard([], "x")));
-  assert.ok(Array.isArray(buscarServiciosGiftCard([], "x")));
-  assert.ok(Array.isArray(filtrarGiftCards([], {})));
-  assert.equal(typeof giftCardMensajeWhatsApp({ codigo: "GC-VITA-12345678", beneficiario: "Ana" } as never), "string");
+  assert.match(css, /\.giftCardWizardActions>\*\{min-height:46px\}/);
+  assert.match(
+    css,
+    /@media\(max-width:760px\)[\s\S]*\.giftCardMobileList\{display:grid/,
+  );
+  assert.match(css, /env\(safe-area-inset-bottom\)/);
+  assert.match(css, /@media\(max-width:390px\)/);
 });
