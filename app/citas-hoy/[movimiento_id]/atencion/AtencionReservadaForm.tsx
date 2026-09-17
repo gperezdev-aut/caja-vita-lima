@@ -174,10 +174,10 @@ export function AtencionReservadaForm(props: Props) {
             {extras.map((row, index) => (
               <div className="atencionReservadaTherapist" key={`extra-${index}`}>
                 <label>Tipo<select value={row.tipo} onChange={(e) => setExtras((items) => items.map((item, i) => i === index ? { ...item, tipo: e.target.value as ExtraRow["tipo"] } : item))}><option value="MINUTOS_EXTRA">Minutos extra</option><option value="PRODUCTO">Producto</option><option value="DECORACION">Decoración</option><option value="OTRO">Otro</option></select></label>
-                <label>Concepto<input value={row.concepto} onChange={(e) => setExtras((items) => items.map((item, i) => i === index ? { ...item, concepto: e.target.value } : item))} placeholder="Ej. +10 minutos" /></label>
-                <label>Precio unitario<input type="number" min="0" step="0.01" value={row.montoUnitario} onChange={(e) => setExtras((items) => items.map((item, i) => i === index ? { ...item, montoUnitario: e.target.value } : item))} /></label>
-                <label>Cantidad<input type="number" min="0.01" step="0.01" value={row.cantidad} onChange={(e) => setExtras((items) => items.map((item, i) => i === index ? { ...item, cantidad: e.target.value } : item))} /></label>
-                {row.tipo === "MINUTOS_EXTRA" && <label>Minutos añadidos<input type="number" min="0" step="1" value={row.duracion} onChange={(e) => setExtras((items) => items.map((item, i) => i === index ? { ...item, duracion: e.target.value } : item))} /></label>}
+                <label>Concepto<input required value={row.concepto} onChange={(e) => setExtras((items) => items.map((item, i) => i === index ? { ...item, concepto: e.target.value } : item))} placeholder="Ej. +10 minutos" /></label>
+                <label>Precio unitario<input required type="number" min="0.01" step="0.01" value={row.montoUnitario} onChange={(e) => setExtras((items) => items.map((item, i) => i === index ? { ...item, montoUnitario: e.target.value } : item))} /></label>
+                <label>Cantidad<input required type="number" min="0.01" step="0.01" value={row.cantidad} onChange={(e) => setExtras((items) => items.map((item, i) => i === index ? { ...item, cantidad: e.target.value } : item))} /></label>
+                {row.tipo === "MINUTOS_EXTRA" && <label>Minutos añadidos<input required type="number" min="1" step="1" value={row.duracion} onChange={(e) => setExtras((items) => items.map((item, i) => i === index ? { ...item, duracion: e.target.value } : item))} /></label>}
                 <button type="button" className="ghostButton" onClick={() => setExtras((items) => items.filter((_, i) => i !== index))}>Quitar</button>
               </div>
             ))}
@@ -191,8 +191,8 @@ export function AtencionReservadaForm(props: Props) {
             {ajustes.map((row, index) => (
               <div className="atencionReservadaTherapist" key={`ajuste-${index}`}>
                 <label>Tipo<select value={row.tipo} onChange={(e) => setAjustes((items) => items.map((item, i) => i === index ? { ...item, tipo: e.target.value as AdjustmentRow["tipo"] } : item))}><option value="DESCUENTO">Descuento</option><option value="CORTESIA">Cortesía</option><option value="AJUSTE_PRECIO">Ajuste de precio</option></select></label>
-                <label>Monto<input type="number" min="0" step="0.01" value={row.monto} onChange={(e) => setAjustes((items) => items.map((item, i) => i === index ? { ...item, monto: e.target.value } : item))} /></label>
-                <label className="wide">Motivo<input value={row.motivo} onChange={(e) => setAjustes((items) => items.map((item, i) => i === index ? { ...item, motivo: e.target.value } : item))} placeholder="Ej. cliente frecuente" /></label>
+                <label>Monto<input required type="number" min="0.01" step="0.01" value={row.monto} onChange={(e) => setAjustes((items) => items.map((item, i) => i === index ? { ...item, monto: e.target.value } : item))} /></label>
+                <label className="wide">Motivo<input required value={row.motivo} onChange={(e) => setAjustes((items) => items.map((item, i) => i === index ? { ...item, motivo: e.target.value } : item))} placeholder="Ej. cliente frecuente" /></label>
                 <button type="button" className="ghostButton" onClick={() => setAjustes((items) => items.filter((_, i) => i !== index))}>Quitar</button>
               </div>
             ))}
@@ -204,8 +204,8 @@ export function AtencionReservadaForm(props: Props) {
           <summary onClick={(e) => { e.preventDefault(); setConvenioActivo((value) => !value); }}><strong>Bee Beneficios / Cuponidad</strong></summary>
           {convenioActivo && <div className="atencionReservadaFields" style={{ marginTop: 14 }}>
             <label>Convenio<select value={convenioTipo} onChange={(e) => setConvenioTipo(e.target.value as typeof convenioTipo)}><option value="CONVENIO_BEE">Bee Beneficios</option><option value="CONVENIO_CUPONIDAD">Cuponidad</option></select></label>
-            <label>ID / registro del convenio<input value={convenioReferencia} onChange={(e) => setConvenioReferencia(e.target.value)} /></label>
-            <label>Monto reconocido<input type="number" min="0" step="0.01" value={convenioMonto} onChange={(e) => setConvenioMonto(e.target.value)} /></label>
+            <label>ID / registro del convenio<input required value={convenioReferencia} onChange={(e) => setConvenioReferencia(e.target.value)} /></label>
+            <label>Monto reconocido<input required type="number" min="0.01" step="0.01" value={convenioMonto} onChange={(e) => setConvenioMonto(e.target.value)} /></label>
             <small className="wide">Debe coincidir con el monto reconocido guardado en el registro del convenio.</small>
           </div>}
         </details>
@@ -228,14 +228,17 @@ export function AtencionReservadaForm(props: Props) {
         </div>
 
         <div className="atencionReservadaFields">
-          {pagos.map((row, index) => (
-            <div className="atencionReservadaTherapist" key={`pago-${index}`}>
-              <label>Método<select value={row.metodo} onChange={(e) => setPagos((items) => items.map((item, i) => i === index ? { ...item, metodo: e.target.value } : item))}><option value="">Selecciona</option>{props.metodos.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
-              <label>Monto<input type="number" min="0" step="0.01" value={row.monto} onChange={(e) => setPagos((items) => items.map((item, i) => i === index ? { ...item, monto: e.target.value } : item))} /></label>
-              {row.metodo && row.metodo !== "EFECTIVO" && <label>Número de operación<input value={row.numeroOperacion} onChange={(e) => setPagos((items) => items.map((item, i) => i === index ? { ...item, numeroOperacion: e.target.value } : item))} /></label>}
-              {pagos.length > 1 && <button type="button" className="ghostButton" onClick={() => setPagos((items) => items.filter((_, i) => i !== index))}>Quitar pago</button>}
-            </div>
-          ))}
+          {pagos.map((row, index) => {
+            const filaUsada = Boolean(row.metodo || row.monto || row.numeroOperacion);
+            return (
+              <div className="atencionReservadaTherapist" key={`pago-${index}`}>
+                <label>Método<select required={filaUsada} value={row.metodo} onChange={(e) => setPagos((items) => items.map((item, i) => i === index ? { ...item, metodo: e.target.value } : item))}><option value="">Selecciona</option>{props.metodos.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+                <label>Monto<input required={filaUsada} type="number" min="0.01" step="0.01" value={row.monto} onChange={(e) => setPagos((items) => items.map((item, i) => i === index ? { ...item, monto: e.target.value } : item))} /></label>
+                {row.metodo && row.metodo !== "EFECTIVO" && <label>Número de operación<input required value={row.numeroOperacion} onChange={(e) => setPagos((items) => items.map((item, i) => i === index ? { ...item, numeroOperacion: e.target.value } : item))} /></label>}
+                {pagos.length > 1 && <button type="button" className="ghostButton" onClick={() => setPagos((items) => items.filter((_, i) => i !== index))}>Quitar pago</button>}
+              </div>
+            );
+          })}
           <button type="button" className="ghostButton" onClick={() => setPagos((items) => [...items, { metodo: "", monto: "", numeroOperacion: "" }])}>+ Otro método de pago</button>
         </div>
       </section>
@@ -244,9 +247,9 @@ export function AtencionReservadaForm(props: Props) {
         <div className="panelTitle"><div><p className="eyebrow">Paso 4</p><h2>Propina</h2><p>Opcional. Se registra aparte y no aumenta la venta de Vita Lima.</p></div></div>
         <label style={{ display: "flex", gap: 10, alignItems: "center" }}><input type="checkbox" checked={propinaActiva} onChange={(e) => setPropinaActiva(e.target.checked)} /> El cliente dejó propina</label>
         {propinaActiva && <div className="atencionReservadaFields" style={{ marginTop: 14 }}>
-          <label>Monto de propina<input type="number" min="0" step="0.01" value={propinaMonto} onChange={(e) => setPropinaMonto(e.target.value)} /></label>
-          <label>Método<select value={propinaMetodo} onChange={(e) => setPropinaMetodo(e.target.value)}><option value="">Selecciona</option>{props.metodos.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
-          {propinaMetodo && propinaMetodo !== "EFECTIVO" && <label>Número de operación<input value={propinaOperacion} onChange={(e) => setPropinaOperacion(e.target.value)} /></label>}
+          <label>Monto de propina<input required type="number" min="0.01" step="0.01" value={propinaMonto} onChange={(e) => setPropinaMonto(e.target.value)} /></label>
+          <label>Método<select required value={propinaMetodo} onChange={(e) => setPropinaMetodo(e.target.value)}><option value="">Selecciona</option>{props.metodos.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+          {propinaMetodo && propinaMetodo !== "EFECTIVO" && <label>Número de operación<input required value={propinaOperacion} onChange={(e) => setPropinaOperacion(e.target.value)} /></label>}
           <div className="wide"><strong>Distribución a terapistas</strong>{props.terapistasMaestro.map((terapista) => <label key={terapista.id} style={{ marginTop: 8 }}>{terapista.nombre}<input type="number" min="0" step="0.01" value={propinaDistribucion[terapista.id] ?? ""} onChange={(e) => setPropinaDistribucion((current) => ({ ...current, [terapista.id]: e.target.value }))} placeholder="S/ 0.00" /></label>)}</div>
           <small className="wide">La suma distribuida debe ser exactamente igual al monto de propina.</small>
         </div>}
