@@ -49,3 +49,14 @@ test("extras conservan trazabilidad de monto y responsable", async () => {
   assert.match(sql, /responsable text not null/i);
   assert.match(sql, /request_id uuid not null/i);
 });
+
+test("migración 036 amplía cierre sin reescribir históricos", async () => {
+  const sql = await readFile(new URL("../sql/036_cierre_caja_propinas_v2.sql", import.meta.url), "utf8");
+  assert.match(sql, /alter table public\.caja_cierres/i);
+  assert.match(sql, /total_propinas numeric\(12,2\) not null default 0/i);
+  assert.match(sql, /total_procesado numeric\(12,2\) not null default 0/i);
+  assert.match(sql, /propinas_por_metodo jsonb not null default '\{\}'::jsonb/i);
+  assert.match(sql, /dinero_procesado_por_metodo jsonb not null default '\{\}'::jsonb/i);
+  assert.doesNotMatch(sql, /update public\.caja_cierres/i);
+  assert.doesNotMatch(sql, /delete from public\.caja_cierres/i);
+});
