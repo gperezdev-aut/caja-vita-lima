@@ -199,7 +199,7 @@ export default async function NuevaAtencionPage({
 
           <div className="badge">
             <span>Catálogo</span>
-            <strong>{services.length} opciones activas</strong>
+            <strong>{canonicalCatalog.ok ? canonicalCatalog.services.length : 0} servicios canónicos</strong>
           </div>
         </section>
 
