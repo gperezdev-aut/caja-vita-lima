@@ -149,3 +149,25 @@ test("Nueva atención usa el catálogo canónico y no el staging legado", async 
   assert.match(page, /servicios canónicos/);
   assert.doesNotMatch(page, /supabaseSelect<Row>\("stg_services_catalog_v5"\)/);
 });
+
+
+test("Conciliar atención exige saldo cero y confirmación final explícita", async () => {
+  const [wizard, action, page] = await Promise.all([
+    readFile(new URL("../app/citas-hoy/[movimiento_id]/atencion/AtencionReservadaForm.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/citas-hoy/atencion-actions.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/citas-hoy/[movimiento_id]/atencion/page.tsx", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(wizard, /Para conciliar y cerrar la atención debes cobrar o cubrir todo el saldo/);
+  assert.match(wizard, /Confirmo que revisé el resumen y quiero finalizar esta atención ahora/);
+  assert.match(wizard, /disabled=\{pending \|\| saldoEstimado > 0\.009 \|\| !confirmFinal\}/);
+  assert.match(wizard, /No se puede finalizar mientras quede saldo pendiente/);
+  assert.match(action, /pendienteEstimado > 0\.009/);
+  assert.match(action, /cancelar todo el saldo/);
+  assert.match(page, /displayText\(servicioCatalogo\?\.included_es/);
+});
+
+test("Nueva atención repara nombres canónicos solo para presentación", async () => {
+  const page = await readFile(new URL("../app/nueva-atencion/page.tsx", import.meta.url), "utf8");
+  assert.match(page, /displayText\(service\.nameEs\)/);
+});
