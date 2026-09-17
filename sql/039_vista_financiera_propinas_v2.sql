@@ -1,7 +1,11 @@
 -- 039_vista_financiera_propinas_v2.sql
 -- Las propinas V2 viven en su ledger propio y NO forman parte de total_cobrar.
 -- La vista conserva sus columnas/contrato, pero solo compara contra
--- caja_movimientos.total_propina las propinas legacy (request_id IS NULL).
+-- caja_movimientos.total_propina cuando esa columna legacy existe.
+--
+-- Compatibilidad: algunos entornos históricos no tienen total_propina en
+-- caja_movimientos. to_jsonb(m)->>'total_propina' permite leerla cuando existe
+-- sin hacer que la vista falle al crearse cuando no existe.
 
 create or replace view public.vista_caja_movimiento_financiero_v2 as
 with pagos_por_movimiento as (
@@ -40,7 +44,7 @@ with pagos_por_movimiento as (
     coalesce(m.monto_servicio, 0) as monto_servicio,
     coalesce(e.total_extras, 0) as total_extras,
     coalesce(m.total_extras, 0) as total_extras_movimiento,
-    coalesce(m.total_propina, 0) as total_propina,
+    coalesce(nullif(to_jsonb(m)->>'total_propina', '')::numeric, 0) as total_propina,
     coalesce(pr.total_propina_detalle, 0) as total_propina_detalle,
     coalesce(pr.total_propina_v2, 0) as total_propina_v2,
     coalesce(pr.total_propina_legacy, 0) as total_propina_legacy,
