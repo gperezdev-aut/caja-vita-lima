@@ -68,24 +68,35 @@ test("el harness 022 cubre los casos obligatorios y revierte", async () => {
   }
 });
 
-test("Citas de hoy integra conciliación V2 y no reutiliza Nueva atención", async () => {
-  const [today, action, form] = await Promise.all([
+test("Citas de hoy integra conciliación V2, wizard real y atención directa", async () => {
+  const [today, page, action, form, css] = await Promise.all([
     readFile(new URL("../app/citas-hoy/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/citas-hoy/[movimiento_id]/atencion/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/citas-hoy/atencion-actions.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/citas-hoy/[movimiento_id]/atencion/AtencionReservadaForm.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/citas-hoy/[movimiento_id]/atencion/AtencionReservadaForm.module.css", import.meta.url), "utf8"),
   ]);
+
   assert.match(today, /Iniciar atención/);
-  assert.match(today, /reservaRelacionada/);
+  assert.match(today, /puedeAtenderDirecta/);
+  assert.match(today, /showTechnical/);
+  assert.match(today, /included_es/);
+  assert.match(page, /esDirecta/);
+  assert.match(page, /Detalle administrativo \/ técnico/);
+  assert.match(page, /included_es/);
   assert.match(action, /conciliar_atencion_v2/);
-  assert.match(action, /extras_json/);
-  assert.match(action, /ajustes_json/);
-  assert.match(action, /coberturas_json/);
-  assert.match(action, /pagos_json/);
-  assert.match(action, /propina_json/);
-  assert.match(form, /Otro método de pago/);
-  assert.match(form, /Agregar upselling \/ extra/);
-  assert.match(form, /Bee Beneficios \/ Cuponidad/);
-  assert.match(form, /Propina/);
+  assert.match(action, /\.\.\.\(reservaId \? \{ reserva_id: reservaId \} : \{\}\)/);
+  for (const token of ["extras_json", "ajustes_json", "coberturas_json", "pagos_json", "propina_json"]) assert.match(action, new RegExp(token));
+  for (const step of [1, 2, 3, 4, 5]) assert.match(form, new RegExp(`step === ${step}`));
+  assert.match(form, /\+ Otro método de pago/);
+  assert.match(form, /\+ Extra/);
+  assert.match(form, /Bee \/ Cuponidad/);
+  assert.match(form, /No hay saldo por cobrar/);
+  assert.match(form, /Dividir por igual/);
+  assert.match(form, /participantes/);
+  assert.match(form, /Finalizar atención/);
+  assert.match(css, /@media \(max-width: 599px\)/);
+  assert.match(css, /min-height:\s*48px/);
   assert.doesNotMatch(action, /iniciar_o_cerrar_atencion_reservada_v1/);
   assert.doesNotMatch(action, /nueva-atencion/);
 });
