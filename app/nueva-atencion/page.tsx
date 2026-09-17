@@ -2,6 +2,7 @@ import { requireModuleAccess } from "@/lib/auth";
 import { CajaSidebar } from "@/components/CajaSidebar";
 import { supabaseSelect, supabaseSelectWhere } from "@/lib/supabaseServer";
 import { leerCatalogoPrepararCita } from "@/lib/catalogoPrepararCita";
+import { displayText } from "@/lib/displayText";
 import { createAtencionAction } from "./actions";
 import { NuevaAtencionWizard } from "./NuevaAtencionWizard";
 import { getCountries, getCountryCallingCode } from "libphonenumber-js/max";
@@ -156,7 +157,7 @@ export default async function NuevaAtencionPage({
         .filter((service) => service.reservationBehavior === "APPOINTMENT" && service.modality !== "HOME")
         .map((service, index) => ({
           codeId: service.serviceCode,
-          name: service.nameEs,
+          name: displayText(service.nameEs),
           category: service.category,
           duration: service.durationMin,
           price: service.pricePen,
