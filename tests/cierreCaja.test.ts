@@ -118,7 +118,10 @@ test("la app recalcula el cierre server-side y separa propinas de ingresos", asy
   assert.doesNotMatch(action, /money\(formData\.get\("total_ingresos"\)\)/);
   assert.match(action, /cajaFisicaNoCalculable\(\)/);
   assert.doesNotMatch(action, /efectivoContado\s*-\s*cajaEsperada/);
-  assert.match(page, /resumirPagosCierre\(pagos\.data\)/);
+  assert.match(page, /resumirDineroProcesadoCierre\(pagos\.data, propinas\.data\)/);
+  assert.match(page, /Ingresos Vita Lima/);
+  assert.match(page, /Propinas terapistas/);
+  assert.match(page, /Dinero procesado/);
   assert.match(page, /value == null \? "No calculable"/);
   assert.match(exportRoute, /supabaseSelectAllWhere<Row>\("caja_pagos", ingresosQuery\)/);
   assert.match(migration036, /total_propinas/);
