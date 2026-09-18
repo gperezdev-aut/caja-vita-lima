@@ -95,28 +95,43 @@ function ActionLabel({ cita }: { cita: CitaPresentation }) {
 function CitaMobileCard({ cita, showTechnical }: { cita: CitaPresentation; showTechnical: boolean }) {
   const { row, movimientoId, terapistas, pendiente, comprobante, alerta, puedeAtender, coberturaGiftCard, serviceInfo } = cita;
   const comprobanteOk = comprobante.toUpperCase().includes("OK");
+  const pagadoCompleto = pendiente <= 0.009;
   return (
-    <article className="citasHoyCard">
-      <div className="citasHoyCardHeader"><strong className="citasHoyCardHour">{hourLabel(row.hora)}</strong><Badge>{row.estado || "-"}</Badge></div>
+    <article className="citasHoyCard citasHoyCardCompact">
+      <div className="citasHoyCardHeader">
+        <div>
+          <strong className="citasHoyCardHour">{hourLabel(row.hora)}</strong>
+          <h3>{row.cliente}</h3>
+        </div>
+        <Badge>{row.estado || "-"}</Badge>
+      </div>
+
       <div className="citasHoyCardIdentity">
-        <h3>{row.cliente}</h3>
-        <p><strong>{displayText(row.servicio)}</strong></p>
-        {serviceInfo && <small>{serviceInfo.duration ? `${serviceInfo.duration} min` : ""}{serviceInfo.duration && serviceInfo.included ? " · " : ""}{shortText(serviceInfo.included, 120)}</small>}
-        {alerta && <div style={{ marginTop: 8 }}><AlertaBadge alerta={alerta} /></div>}
+        <p className="citasHoyCardService"><strong>{displayText(row.servicio)}</strong></p>
+        {serviceInfo && <small>{serviceInfo.duration ? `${serviceInfo.duration} min` : ""}{serviceInfo.duration && serviceInfo.included ? " · " : ""}{shortText(serviceInfo.included, 92)}</small>}
+        <p className="citasHoyCardOperationalMeta">{terapistas} · {row.sede}</p>
+        {alerta && <div style={{ marginTop: 7 }}><AlertaBadge alerta={alerta} /></div>}
       </div>
-      <div className="citasHoyCardTherapist"><span>Terapista</span><strong>{terapistas}</strong></div>
-      <div className="citasHoyMoneyGrid">
-        <div><span>Total</span><strong>{money(row.total_cobrar)}</strong></div>
-        <div><span>Pagado</span><strong>{money(row.total_pagado)}</strong></div>
-        {coberturaGiftCard > 0 && <div><span>Gift Card</span><strong>{money(coberturaGiftCard)}</strong></div>}
-        <div className={pendiente > 0 ? "citasHoyMoneyPending" : ""}><span>Pendiente</span><strong>{money(row.pendiente)}</strong></div>
+
+      <div className={`citasHoyPaymentSummary ${pagadoCompleto ? "isPaid" : "hasPending"}`}>
+        <div className="citasHoyPaymentPrimary">
+          <span>{pagadoCompleto ? "Pago" : "Pendiente"}</span>
+          <strong>{pagadoCompleto ? "Completo" : money(row.pendiente)}</strong>
+        </div>
+        <div className="citasHoyPaymentSecondary">
+          <span>Total {money(row.total_cobrar)}</span>
+          <span>Pagado {money(row.total_pagado)}</span>
+          {coberturaGiftCard > 0 && <span>Gift Card {money(coberturaGiftCard)}</span>}
+        </div>
       </div>
-      <div className="citasHoyCardMeta">
-        <div><span>Sede</span><strong>{row.sede}</strong></div>
-        <div><span>Comprobante</span><Badge tone={comprobanteOk ? "good" : "warn"}>{comprobante}</Badge></div>
+
+      <div className="citasHoyCardStatusLine">
+        <span>Comprobante</span>
+        <Badge tone={comprobanteOk ? "good" : "warn"}>{comprobante}</Badge>
       </div>
-      <div className="citasHoyCardActions">
-        {row.whatsapp && <a href={waHref(row.whatsapp)} target="_blank" rel="noopener noreferrer">WhatsApp</a>}
+
+      <div className="citasHoyCardActions citasHoyCardActionsCompact">
+        {row.whatsapp && <a className="citasHoyWhatsappButton" href={waHref(row.whatsapp)} target="_blank" rel="noopener noreferrer">WhatsApp</a>}
         {puedeAtender && <a className="citasHoyStartButton" href={`/citas-hoy/${encodeURIComponent(movimientoId)}/atencion`}><ActionLabel cita={cita} /></a>}
       </div>
       {showTechnical && <details className="technicalDetails"><summary>Referencia interna</summary><code>{movimientoId}</code></details>}
