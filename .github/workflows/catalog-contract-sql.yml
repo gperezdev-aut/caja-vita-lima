@@ -50,6 +50,7 @@ jobs:
           CREATE DATABASE caja_reserva_contract;
           CREATE DATABASE caja_gift_card_reserva_contract;
           CREATE DATABASE caja_conciliacion_v2_contract;
+          CREATE DATABASE caja_ficha_google_contacts_contract;
           SQL
 
       # El agregado local equivalente de contratos existentes es: npm run test:sql
@@ -78,3 +79,8 @@ jobs:
         env:
           DATABASE_URL: postgresql://caja_ci:caja_ci_only_password@localhost:5432/caja_conciliacion_v2_contract
         run: node tests/run-conciliacion-v2-postgres-validation.mjs
+
+      - name: Validate ficha to Google Contacts outbox contract
+        env:
+          DATABASE_URL: postgresql://caja_ci:caja_ci_only_password@localhost:5432/caja_ficha_google_contacts_contract
+        run: node tests/run-ficha-google-contacts-postgres-validation.mjs
