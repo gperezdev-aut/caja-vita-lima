@@ -378,6 +378,79 @@ revoke all on function public.caja_contact_sync_claim_v3(integer,integer)
 grant execute on function public.caja_contact_sync_claim_v3(integer,integer)
   to service_role;
 
+create or replace function public.caja_contact_sync_finish_v3(
+  p_sync_id bigint,
+  p_processing_token text,
+  p_ok boolean,
+  p_resource_name text default null,
+  p_error text default null,
+  p_retry_seconds integer default 300
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $
+declare
+  v_result jsonb;
+  v_cliente public.clientes%rowtype;
+  v_resource text := nullif(btrim(p_resource_name), '');
+begin
+  v_result := public.caja_contact_sync_finish_v2(
+    p_sync_id,
+    p_processing_token,
+    p_ok,
+    p_resource_name,
+    p_error,
+    p_retry_seconds
+  );
+
+  if coalesce((v_result->>'ok')::boolean, false) = true
+     and v_result->>'status' = 'FINISHED'
+     and p_ok = true
+     and v_resource is not null then
+
+    select c.* into v_cliente
+    from public.cliente_contact_sync_outbox o
+    join public.clientes c on c.cliente_id = o.cliente_id
+    where o.sync_id = p_sync_id;
+
+    if v_cliente.cliente_id is not null
+       and v_cliente.telefono_estado = 'CANONICO'
+       and v_cliente.whatsapp_e164 ~ '^\+[1-9][0-9]{7,14}
+-- 2) batch del mismo resource con teléfono distinto => teléfono anterior desaparece.
+-- 3) finish snapshot marca deleted recursos no vistos; lookup ya no los devuelve.
+-- 4) anon/authenticated sin permisos; service_role sí.
+ then
+
+      perform public.caja_google_contacts_index_batch_v1(
+        'WORKER:' || p_sync_id::text,
+        jsonb_build_array(
+          jsonb_build_object(
+            'resource_name', v_resource,
+            'display_name', v_cliente.cliente,
+            'email', nullif(lower(btrim(v_cliente.email)), ''),
+            'phones', jsonb_build_array(
+              jsonb_build_object(
+                'e164', v_cliente.whatsapp_e164,
+                'raw', coalesce(nullif(btrim(v_cliente.whatsapp), ''), v_cliente.whatsapp_e164)
+              )
+            )
+          )
+        )
+      );
+    end if;
+  end if;
+
+  return v_result;
+end;
+$;
+
+revoke all on function public.caja_contact_sync_finish_v3(bigint,text,boolean,text,text,integer)
+  from public, anon, authenticated;
+grant execute on function public.caja_contact_sync_finish_v3(bigint,text,boolean,text,text,integer)
+  to service_role;
+
 -- QA mínimo:
 -- 1) batch con dos resource_name distintos y mismo E.164 => lookup match_count=2.
 -- 2) batch del mismo resource con teléfono distinto => teléfono anterior desaparece.
