@@ -1171,3 +1171,315 @@ body {
     font-size:18px;
   }
 }
+
+/* Alineación integral UI — desktop + mobile */
+.formField,
+.atencionField,
+.giftCardFormGrid label,
+.giftCardAmount label,
+.giftCardPersonGroup label,
+.giftCardDedication,
+.giftCardBuyerField > label,
+.giftCardFilters label {
+  min-width: 0;
+  align-content: start;
+}
+
+.formControl:not(textarea),
+.atencionField input,
+.atencionField select,
+.giftCardFormGrid input,
+.giftCardFormGrid select,
+.giftCardAmount input,
+.giftCardPersonGroup input,
+.giftCardFilters input,
+.giftCardFilters select {
+  height: var(--control-height);
+  min-height: var(--control-height);
+  box-sizing: border-box;
+}
+
+.formGrid,
+.operationalWizardGrid,
+.atencionGrid,
+.clientDetailsGrid,
+.scheduleGrid,
+.paymentInputGrid,
+.giftCardFormGrid,
+.giftCardPeopleGrid,
+.giftCardFilterMain,
+.giftCardFilterMore > div {
+  align-items: start;
+}
+
+.nuevaAtencionPage .atencionGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ghostButton,
+.primaryButton,
+.actionButton,
+.lookupButton,
+.citasHoyFilterButton,
+.operationalWizardActions button,
+.operationalWizardActions a,
+.giftCardWizardActions button,
+.giftCardWizardActions a {
+  min-height: var(--control-height);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  line-height: 1.15;
+}
+
+.wizardActions,
+.operationalWizardActions,
+.giftCardWizardActions,
+.citasHoyFilterActions,
+.filterActions {
+  align-items: center;
+}
+
+.registrarSalidaPage .operationalFilterActions,
+.cierreCajaPage .operationalFilterActions,
+.citasHoyPage .citasHoyFilterActions {
+  align-self: start;
+  margin-top: 21px;
+  flex-wrap: nowrap;
+}
+
+.registrarSalidaPage .operationalFilterActions > *,
+.cierreCajaPage .operationalFilterActions > *,
+.citasHoyPage .citasHoyFilterActions > * {
+  height: var(--control-height);
+  min-height: var(--control-height);
+  padding: 0 16px;
+  white-space: nowrap;
+}
+
+.clientLookupRow {
+  align-items: start;
+}
+
+.clientLookupRow .lookupButton {
+  align-self: start;
+  height: var(--control-height);
+  margin-top: 22px;
+  padding-block: 0;
+}
+
+.clientLookupRow .atencionField small {
+  margin-top: 0;
+}
+
+.prepararStepper button,
+.operationalStepper .wizardStep,
+.giftCardStepper button {
+  box-sizing: border-box;
+}
+
+.giftCardTypeGrid,
+.giftCardPeopleGrid {
+  align-items: stretch;
+}
+
+.giftCardPersonGroup {
+  height: 100%;
+}
+
+.giftCardWizardActions > *,
+.wizardActions > *,
+.operationalWizardActions > * {
+  min-width: 0;
+}
+
+.grid {
+  align-items: stretch;
+}
+
+.grid > .card {
+  height: 100%;
+  display: grid;
+  align-content: space-between;
+}
+
+.cierreCajaPage .grid.secondary {
+  grid-auto-rows: 1fr;
+}
+
+.citasHoyCardHeader,
+.citasHoyCardStatusLine {
+  align-items: flex-start;
+}
+
+.citasHoyPaymentSummary {
+  align-items: stretch;
+}
+
+
+/* Ancho operativo consistente: filtros, formularios, resúmenes e historial comparten eje. */
+.registrarSalidaPage,
+.cierreCajaPage,
+.giftCardsPage {
+  --operational-content-width: 980px;
+}
+
+.registrarSalidaPage > .panel,
+.registrarSalidaPage > .operationalWizard,
+.cierreCajaPage > .panel,
+.cierreCajaPage > .operationalWizard,
+.cierreCajaPage > .grid.secondary,
+.giftCardsPage > .giftCardWizard,
+.giftCardsPage > .giftCardHistory {
+  width: min(100%, var(--operational-content-width));
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.registrarSalidaPage > .operationalWizard,
+.cierreCajaPage > .operationalWizard,
+.giftCardsPage > .giftCardWizard {
+  max-width: none;
+}
+
+.registrarSalidaPage > .panel,
+.cierreCajaPage > .panel,
+.giftCardsPage > .giftCardHistory {
+  box-sizing: border-box;
+}
+
+.cierreCajaPage > .grid.secondary {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.giftCardsPage > .giftCardHistory {
+  margin-top: 0;
+}
+
+
+/* Headers de módulos enfocados alineados con su columna operativa. */
+.prepararCitaPage > .prepararCitaHero,
+.registrarSalidaPage > .hero,
+.cierreCajaPage > .hero,
+.giftCardsPage > .giftCardsHero {
+  width: min(100%, 980px);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.prepararCitaPage > .formMessage,
+.registrarSalidaPage > .alert,
+.cierreCajaPage > .alert,
+.giftCardsPage > .formMessage {
+  width: min(100%, 980px);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+
+/* Unificación final de ancho: todos los módulos operativos usan la misma columna desktop. */
+.citasHoyPage,
+.nuevaAtencionPage,
+.prepararCitaPage,
+.registrarSalidaPage,
+.giftCardsPage,
+.cierreCajaPage {
+  width: min(1180px, calc(100% - 32px));
+}
+
+.prepararCitaPage > .prepararCitaHero,
+.prepararCitaPage > .prepararWizard,
+.prepararCitaPage > .formMessage,
+.registrarSalidaPage > .hero,
+.registrarSalidaPage > .panel,
+.registrarSalidaPage > .operationalWizard,
+.registrarSalidaPage > .alert,
+.giftCardsPage > .giftCardsHero,
+.giftCardsPage > .giftCardWizard,
+.giftCardsPage > .giftCardHistory,
+.giftCardsPage > .formMessage,
+.cierreCajaPage > .hero,
+.cierreCajaPage > .panel,
+.cierreCajaPage > .operationalWizard,
+.cierreCajaPage > .grid.secondary,
+.cierreCajaPage > .alert {
+  width: 100%;
+  max-width: none;
+  margin-left: 0;
+  margin-right: 0;
+}
+
+.prepararCitaPage > .prepararWizard,
+.registrarSalidaPage > .operationalWizard,
+.giftCardsPage > .giftCardWizard,
+.cierreCajaPage > .operationalWizard {
+  margin-bottom: 18px;
+}
+
+
+
+
+@media (max-width: 760px) {
+  .nuevaAtencionPage .atencionGrid,
+  .operationalWizardGrid,
+  .clientDetailsGrid,
+  .scheduleGrid,
+  .paymentInputGrid,
+  .giftCardFormGrid,
+  .giftCardPeopleGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .clientLookupRow {
+    align-items: start;
+  }
+
+  .clientLookupRow .lookupButton {
+    margin-top: 0;
+    width: 100%;
+  }
+
+  .registrarSalidaPage .operationalFilterActions,
+  .cierreCajaPage .operationalFilterActions,
+  .citasHoyPage .citasHoyFilterActions {
+    width: 100%;
+    margin-top: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .registrarSalidaPage .operationalFilterActions > *,
+  .cierreCajaPage .operationalFilterActions > *,
+  .citasHoyPage .citasHoyFilterActions > * {
+    width: 100%;
+    white-space: normal;
+  }
+
+  .wizardActions {
+    align-items: stretch;
+  }
+
+  .giftCardPersonGroup {
+    height: auto;
+  }
+
+  .cierreCajaPage > .grid.secondary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 420px) {
+  .registrarSalidaPage .operationalFilterActions,
+  .cierreCajaPage .operationalFilterActions,
+  .citasHoyPage .citasHoyFilterActions {
+    grid-template-columns: 1fr;
+  }
+
+  .cierreCajaPage > .grid.secondary {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Vercel preview rebuild marker — no functional styles. */

@@ -166,7 +166,7 @@ export default async function RegistrarSalidaPage({
     <main className="appShell">
       <CajaSidebar session={session} />
 
-      <section className="page">
+      <section className="page registrarSalidaPage">
         <section className="hero" style={{ minHeight: "150px" }}>
           <div>
             <p className="eyebrow">Operación</p>
@@ -237,34 +237,12 @@ export default async function RegistrarSalidaPage({
                 </Select>
               </FormField>
 
-              <div style={{ display: "flex", alignItems: "end", gap: "10px", flexWrap: "wrap" }}>
-                <button
-                  type="submit"
-                  style={{
-                    border: 0,
-                    borderRadius: "16px",
-                    padding: "14px 18px",
-                    fontWeight: 850,
-                    cursor: "pointer",
-                    background: "var(--brand-primary)",
-                    color: "var(--brand-primary-text)",
-                  }}
-                >
+              <div className="filterActions operationalFilterActions">
+                <button className="primaryButton" type="submit">
                   Aplicar filtros
                 </button>
 
-                <a
-                  href="/registrar-salida"
-                  style={{
-                    background: "white",
-                    color: "var(--charcoal)",
-                    border: "1px solid var(--line)",
-                    borderRadius: "16px",
-                    padding: "14px 18px",
-                    fontWeight: 850,
-                    textDecoration: "none",
-                  }}
-                >
+                <a className="ghostButton" href="/registrar-salida">
                   Ver hoy
                 </a>
               </div>
