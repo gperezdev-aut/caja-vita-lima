@@ -379,3 +379,118 @@
     flex: 1;
   }
 }
+
+
+/* QA mobile — densidad del flujo Completar atención */
+@media (max-width: 599px) {
+  .form {
+    gap: 12px;
+    padding-bottom: 84px;
+  }
+
+  .steps {
+    position: sticky;
+    top: 72px;
+    z-index: 12;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 4px;
+    padding: 7px 4px;
+    margin-inline: -2px;
+    border-bottom: 1px solid var(--line);
+    background: rgba(255,251,246,.97);
+    backdrop-filter: blur(10px);
+  }
+
+  .step {
+    min-height: 40px;
+    padding: 4px;
+    border-radius: 11px;
+  }
+
+  .step span {
+    width: 28px;
+    height: 28px;
+  }
+
+  .section {
+    padding: 15px 14px;
+    border-radius: 16px;
+  }
+
+  .section h2 {
+    font-size: 25px;
+    line-height: 1.05;
+  }
+
+  .help {
+    margin-bottom: 13px;
+    font-size: 14px;
+    line-height: 1.35;
+  }
+
+  .moneyGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .moneyGrid > div {
+    padding: 11px 12px;
+  }
+
+  .moneyGrid > div:nth-child(3) {
+    grid-column: 1 / -1;
+  }
+
+  .moneyGrid strong,
+  .reviewGrid strong,
+  .successGrid strong {
+    font-size: 17px;
+  }
+
+  .paymentList {
+    gap: 8px;
+    margin: 10px 0;
+  }
+
+  .paymentRow,
+  .lineItem,
+  .compactCard {
+    padding: 11px;
+    border-radius: 14px;
+  }
+
+  .tipGrid {
+    gap: 9px;
+    margin-top: 12px;
+  }
+
+  .balanceAfter {
+    margin-top: 10px;
+    padding: 12px;
+  }
+
+  .sticky {
+    bottom: max(6px, env(safe-area-inset-bottom));
+    gap: 8px;
+    padding: 9px;
+    border-radius: 16px;
+  }
+
+  .sticky > a,
+  .sticky > button {
+    min-height: 46px;
+    padding-inline: 12px;
+  }
+
+  .reviewGrid,
+  .successGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .reviewGrid > div,
+  .successGrid > div {
+    padding: 11px 12px;
+  }
+}
