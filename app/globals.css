@@ -1378,6 +1378,47 @@ body {
 }
 
 
+/* Unificación final de ancho: todos los módulos operativos usan la misma columna desktop. */
+.citasHoyPage,
+.nuevaAtencionPage,
+.prepararCitaPage,
+.registrarSalidaPage,
+.giftCardsPage,
+.cierreCajaPage {
+  width: min(1180px, calc(100% - 32px));
+}
+
+.prepararCitaPage > .prepararCitaHero,
+.prepararCitaPage > .prepararWizard,
+.prepararCitaPage > .formMessage,
+.registrarSalidaPage > .hero,
+.registrarSalidaPage > .panel,
+.registrarSalidaPage > .operationalWizard,
+.registrarSalidaPage > .alert,
+.giftCardsPage > .giftCardsHero,
+.giftCardsPage > .giftCardWizard,
+.giftCardsPage > .giftCardHistory,
+.giftCardsPage > .formMessage,
+.cierreCajaPage > .hero,
+.cierreCajaPage > .panel,
+.cierreCajaPage > .operationalWizard,
+.cierreCajaPage > .grid.secondary,
+.cierreCajaPage > .alert {
+  width: 100%;
+  max-width: none;
+  margin-left: 0;
+  margin-right: 0;
+}
+
+.prepararCitaPage > .prepararWizard,
+.registrarSalidaPage > .operationalWizard,
+.giftCardsPage > .giftCardWizard,
+.cierreCajaPage > .operationalWizard {
+  margin-bottom: 18px;
+}
+
+
+
 
 @media (max-width: 760px) {
   .nuevaAtencionPage .atencionGrid,
