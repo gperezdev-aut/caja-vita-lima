@@ -863,3 +863,53 @@ body {
     font-size:16px;
   }
 }
+
+
+/* iOS Safari — evitar desborde horizontal de campos fecha/hora */
+.formField,
+.atencionField,
+.citasHoyFilters > *{
+  min-width:0;
+  max-width:100%;
+}
+
+.formControl[type="date"],
+.formControl[type="time"],
+.atencionField input[type="date"],
+.atencionField input[type="time"]{
+  display:block;
+  width:100%;
+  max-width:100%;
+  min-width:0;
+  inline-size:100%;
+  max-inline-size:100%;
+  min-inline-size:0;
+  box-sizing:border-box;
+  overflow:hidden;
+  -webkit-min-logical-width:0;
+}
+
+.formControl[type="date"]::-webkit-date-and-time-value,
+.formControl[type="time"]::-webkit-date-and-time-value,
+.atencionField input[type="date"]::-webkit-date-and-time-value,
+.atencionField input[type="time"]::-webkit-date-and-time-value{
+  min-width:0;
+  max-width:100%;
+  text-align:left;
+  margin:0;
+}
+
+@media(max-width:620px){
+  .citasHoyFilters{
+    grid-template-columns:minmax(0,1fr);
+    width:100%;
+    max-width:100%;
+  }
+
+  .citasHoyFilters .formField,
+  .nuevaAtencionPage .atencionField{
+    width:100%;
+    max-width:100%;
+    min-width:0;
+  }
+}
