@@ -1358,6 +1358,27 @@ body {
 }
 
 
+/* Headers de módulos enfocados alineados con su columna operativa. */
+.prepararCitaPage > .prepararCitaHero,
+.registrarSalidaPage > .hero,
+.cierreCajaPage > .hero,
+.giftCardsPage > .giftCardsHero {
+  width: min(100%, 980px);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.prepararCitaPage > .formMessage,
+.registrarSalidaPage > .alert,
+.cierreCajaPage > .alert,
+.giftCardsPage > .formMessage {
+  width: min(100%, 980px);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+
+
 @media (max-width: 760px) {
   .nuevaAtencionPage .atencionGrid,
   .operationalWizardGrid,
