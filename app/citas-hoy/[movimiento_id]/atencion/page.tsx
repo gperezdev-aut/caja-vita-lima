@@ -193,7 +193,7 @@ export default async function AtencionReservadaPage({ params }: { params: Promis
 
         {atencionCompletada ? (
           <section className="panel">
-            <div className="formMessage ok" style={{ marginBottom: "16px" }}>Atención completada y conciliada correctamente.</div>
+            <div className="formMessage ok" style={{ marginBottom: "16px" }}>Atención completada correctamente.</div>
             <div className="reviewGrid" style={{ marginBottom: "18px" }}>
               <div><span>Total Vita Lima</span><strong>{money(movimiento.total_pagado)}</strong></div>
               {hold && <div><span>Gift Card</span><strong>{money(hold.monto_reservado)}</strong></div>}
