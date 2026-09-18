@@ -94,7 +94,7 @@ test("Citas de hoy integra conciliación V2, wizard real y atención directa", a
   assert.match(form, /No hay saldo por cobrar/);
   assert.match(form, /Dividir por igual/);
   assert.match(form, /participantes/);
-  assert.match(form, /Finalizar atención/);
+  assert.match(form, /Completar atención/);
   assert.match(css, /@media \(max-width: 599px\)/);
   assert.match(css, /min-height:\s*48px/);
   assert.doesNotMatch(action, /iniciar_o_cerrar_atencion_reservada_v1/);
