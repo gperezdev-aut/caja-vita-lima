@@ -319,7 +319,7 @@ returns jsonb
 language sql
 security definer
 set search_path = public
-as $
+as $$
   select jsonb_build_object(
     'ok', true,
     'bootstrap_ready', bootstrap_ready,
@@ -330,7 +330,7 @@ as $
   )
   from public.google_contacts_index_state
   where singleton = true;
-$;
+$$;
 
 revoke all on function public.caja_google_contacts_index_status_v1()
   from public, anon, authenticated;
@@ -356,7 +356,7 @@ returns table (
 language plpgsql
 security definer
 set search_path = public
-as $
+as $$
 begin
   if not exists (
     select 1
@@ -371,7 +371,7 @@ begin
   select *
   from public.caja_contact_sync_claim_v2(p_limit, p_lease_seconds);
 end;
-$;
+$$;
 
 revoke all on function public.caja_contact_sync_claim_v3(integer,integer)
   from public, anon, authenticated;
@@ -390,7 +390,7 @@ returns jsonb
 language plpgsql
 security definer
 set search_path = public
-as $
+as $$
 declare
   v_result jsonb;
   v_cliente public.clientes%rowtype;
@@ -417,11 +417,7 @@ begin
 
     if v_cliente.cliente_id is not null
        and v_cliente.telefono_estado = 'CANONICO'
-       and v_cliente.whatsapp_e164 ~ '^\+[1-9][0-9]{7,14}
--- 2) batch del mismo resource con teléfono distinto => teléfono anterior desaparece.
--- 3) finish snapshot marca deleted recursos no vistos; lookup ya no los devuelve.
--- 4) anon/authenticated sin permisos; service_role sí.
- then
+       and v_cliente.whatsapp_e164 ~ '^\+[1-9][0-9]{7,14}$' then
 
       perform public.caja_google_contacts_index_batch_v1(
         'WORKER:' || p_sync_id::text,
@@ -444,7 +440,7 @@ begin
 
   return v_result;
 end;
-$;
+$$;
 
 revoke all on function public.caja_contact_sync_finish_v3(bigint,text,boolean,text,text,integer)
   from public, anon, authenticated;
