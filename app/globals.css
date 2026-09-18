@@ -837,3 +837,29 @@ body {
     justify-self:start;
   }
 }
+
+
+/* iOS Safari — fecha/hora deben verse como campos editables, no tarjetas centradas */
+.nuevaAtencionPage input[type="date"],
+.nuevaAtencionPage input[type="time"]{
+  text-align:left;
+  font-variant-numeric:tabular-nums;
+  padding-inline:14px;
+}
+.nuevaAtencionPage input[type="date"]::-webkit-date-and-time-value,
+.nuevaAtencionPage input[type="time"]::-webkit-date-and-time-value{
+  text-align:left;
+  margin:0;
+}
+.nuevaAtencionPage input[type="date"]::-webkit-calendar-picker-indicator,
+.nuevaAtencionPage input[type="time"]::-webkit-calendar-picker-indicator{
+  opacity:.72;
+}
+
+@media(max-width:620px){
+  .nuevaAtencionPage input[type="date"],
+  .nuevaAtencionPage input[type="time"]{
+    min-height:50px;
+    font-size:16px;
+  }
+}
