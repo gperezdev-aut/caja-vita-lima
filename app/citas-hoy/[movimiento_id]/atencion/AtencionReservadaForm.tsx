@@ -385,7 +385,7 @@ export function AtencionReservadaForm(props: Props) {
         {step < 5
           ? <button type="button" className={styles.primary} onClick={goNext}>Continuar</button>
           : <button type="submit" className={styles.primary} disabled={pending || saldoEstimado > 0.009 || !confirmFinal}>
-              {pending ? "Conciliando…" : "Finalizar atención"}
+              {pending ? "Guardando…" : "Completar atención"}
             </button>}
       </div>
     </form>
