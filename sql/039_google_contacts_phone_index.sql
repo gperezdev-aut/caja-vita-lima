@@ -49,13 +49,31 @@ create index if not exists idx_google_contact_phones_e164
 create index if not exists idx_google_contact_resources_snapshot
   on public.google_contact_resources (last_snapshot_token, deleted, resource_name);
 
+create table if not exists public.google_contacts_index_state (
+  singleton boolean primary key default true,
+  bootstrap_ready boolean not null default false,
+  last_snapshot_token text,
+  last_snapshot_completed_at timestamptz,
+  last_snapshot_contacts integer not null default 0,
+  last_snapshot_phones integer not null default 0,
+  updated_at timestamptz not null default now(),
+  constraint chk_google_contacts_index_state_singleton check (singleton)
+);
+
+insert into public.google_contacts_index_state (singleton)
+values (true)
+on conflict (singleton) do nothing;
+
 alter table public.google_contact_resources enable row level security;
 alter table public.google_contact_phones enable row level security;
+alter table public.google_contacts_index_state enable row level security;
 
 revoke all on table public.google_contact_resources from anon, authenticated;
 revoke all on table public.google_contact_phones from anon, authenticated;
+revoke all on table public.google_contacts_index_state from anon, authenticated;
 grant all on table public.google_contact_resources to service_role;
 grant all on table public.google_contact_phones to service_role;
+grant all on table public.google_contacts_index_state to service_role;
 
 create or replace function public.caja_google_contacts_index_batch_v1(
   p_snapshot_token text,
@@ -211,10 +229,38 @@ begin
 
   get diagnostics v_deleted = row_count;
 
+  update public.google_contacts_index_state
+  set bootstrap_ready = true,
+      last_snapshot_token = v_snapshot,
+      last_snapshot_completed_at = now(),
+      last_snapshot_contacts = (
+        select count(*)::integer
+        from public.google_contact_resources
+        where deleted = false
+      ),
+      last_snapshot_phones = (
+        select count(*)::integer
+        from public.google_contact_phones p
+        join public.google_contact_resources r using (resource_name)
+        where r.deleted = false
+      ),
+      updated_at = now()
+  where singleton = true;
+
   return jsonb_build_object(
     'ok', true,
     'snapshot_token', v_snapshot,
-    'marked_deleted', v_deleted
+    'marked_deleted', v_deleted,
+    'bootstrap_ready', true,
+    'active_contacts', (
+      select count(*) from public.google_contact_resources where deleted = false
+    ),
+    'active_phones', (
+      select count(*)
+      from public.google_contact_phones p
+      join public.google_contact_resources r using (resource_name)
+      where r.deleted = false
+    )
   );
 end;
 $$;
@@ -266,6 +312,70 @@ $$;
 revoke all on function public.caja_google_contacts_lookup_phone_v1(text)
   from public, anon, authenticated;
 grant execute on function public.caja_google_contacts_lookup_phone_v1(text)
+  to service_role;
+
+create or replace function public.caja_google_contacts_index_status_v1()
+returns jsonb
+language sql
+security definer
+set search_path = public
+as $
+  select jsonb_build_object(
+    'ok', true,
+    'bootstrap_ready', bootstrap_ready,
+    'last_snapshot_token', last_snapshot_token,
+    'last_snapshot_completed_at', last_snapshot_completed_at,
+    'last_snapshot_contacts', last_snapshot_contacts,
+    'last_snapshot_phones', last_snapshot_phones
+  )
+  from public.google_contacts_index_state
+  where singleton = true;
+$;
+
+revoke all on function public.caja_google_contacts_index_status_v1()
+  from public, anon, authenticated;
+grant execute on function public.caja_google_contacts_index_status_v1()
+  to service_role;
+
+create or replace function public.caja_contact_sync_claim_v3(
+  p_limit integer default 10,
+  p_lease_seconds integer default 300
+)
+returns table (
+  sync_id bigint,
+  processing_token text,
+  cliente_id text,
+  cliente text,
+  whatsapp_e164 text,
+  email text,
+  fecha_nacimiento date,
+  resource_name text,
+  attempts integer,
+  payload_hash text
+)
+language plpgsql
+security definer
+set search_path = public
+as $
+begin
+  if not exists (
+    select 1
+    from public.google_contacts_index_state
+    where singleton = true
+      and bootstrap_ready = true
+  ) then
+    return;
+  end if;
+
+  return query
+  select *
+  from public.caja_contact_sync_claim_v2(p_limit, p_lease_seconds);
+end;
+$;
+
+revoke all on function public.caja_contact_sync_claim_v3(integer,integer)
+  from public, anon, authenticated;
+grant execute on function public.caja_contact_sync_claim_v3(integer,integer)
   to service_role;
 
 -- QA mínimo:
