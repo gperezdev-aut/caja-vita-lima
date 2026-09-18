@@ -88,7 +88,7 @@ type CitaPresentation = {
 
 function ActionLabel({ cita }: { cita: CitaPresentation }) {
   if (cita.row.estado === "En atención") return <>Continuar</>;
-  if (cita.esDirecta) return <>Conciliar</>;
+  if (cita.esDirecta) return <>Completar</>;
   return <>Iniciar atención</>;
 }
 
