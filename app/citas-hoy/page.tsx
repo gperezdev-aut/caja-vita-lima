@@ -240,7 +240,7 @@ export default async function CitasHoyPage({ searchParams }: { searchParams: Sea
   return (
     <main className="appShell">
       <CajaSidebar session={session} />
-      <section className="page">
+      <section className="page citasHoyPage">
         <section className="hero" style={{ minHeight: 150 }}>
           <div><p className="eyebrow">Operación diaria</p><h1>Citas de hoy</h1><p className="subtitle">Atenciones y reservas registradas para {dateLabel(selectedFecha)} en {sedeLabel}.</p></div>
           <div className="badge"><span>Registros</span><strong>{movimientos.data.length}</strong></div>
@@ -252,8 +252,8 @@ export default async function CitasHoyPage({ searchParams }: { searchParams: Sea
             <FormField label="Fecha"><Input name="fecha" type="date" defaultValue={selectedFecha} /></FormField>
             <FormField label="Sede"><Select name="sede" defaultValue={selectedSede}><option value="TODAS">Todas las sedes</option><Options rows={sedesRows} fallback={sedeFallback} /></Select></FormField>
             <div className="citasHoyFilterActions">
-              <button className="citasHoyFilterButton" type="submit" style={{ border: 0, borderRadius: 16, padding: "14px 18px", fontWeight: 850, cursor: "pointer", background: "var(--brand-primary)", color: "var(--brand-primary-text)" }}>Aplicar filtros</button>
-              <a className="citasHoyFilterButton" href="/citas-hoy" style={{ background: "white", color: "var(--charcoal)", border: "1px solid var(--line)", borderRadius: 16, padding: "14px 18px", fontWeight: 850, textDecoration: "none" }}>Ver hoy</a>
+              <button className="citasHoyFilterButton primaryButton" type="submit">Aplicar filtros</button>
+              <a className="citasHoyFilterButton ghostButton" href="/citas-hoy">Ver hoy</a>
             </div>
           </form>
         </section>
