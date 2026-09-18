@@ -13,6 +13,16 @@ type ClienteRow = {
   cliente_id: string;
 };
 
+type ClienteSearchRow = {
+  cliente_id?: string;
+  cliente?: string;
+  whatsapp?: string | null;
+  whatsapp_e164?: string | null;
+  pais_telefono?: string | null;
+  dni?: string | null;
+  alerta_atencion?: string | null;
+};
+
 function clean(value: FormDataEntryValue | null) {
   return String(value ?? "").trim();
 }
@@ -212,6 +222,45 @@ export async function lookupClienteAlertaAction(whatsapp: string, pais: string, 
   return {
     cliente: String(row?.cliente ?? "").trim(),
     alerta: String(row?.alerta_atencion ?? "").trim(),
+    error: "",
+  };
+}
+
+export async function buscarClientesAction(term: string) {
+  await requireModuleAccess("nueva-atencion");
+
+  const query = clean(term);
+  if (query.length < 2) return { clientes: [] as ClienteSearchRow[], error: "" };
+
+  const normalized = query.replace(/[^\p{L}\p{N}+]/gu, "");
+  const filters = [
+    `cliente.ilike.*${encodeURIComponent(query)}*`,
+    `whatsapp.ilike.*${encodeURIComponent(normalized)}*`,
+    `whatsapp_e164.ilike.*${encodeURIComponent(normalized)}*`,
+  ];
+
+  const result = await supabaseSelectWhere<ClienteSearchRow>(
+    "clientes",
+    [
+      "select=cliente_id,cliente,whatsapp,whatsapp_e164,pais_telefono,dni,alerta_atencion",
+      `or=(${filters.join(",")})`,
+      "order=cliente.asc",
+      "limit=8",
+    ].join("&")
+  );
+
+  if (result.error) return { clientes: [] as ClienteSearchRow[], error: "No se pudo buscar clientes." };
+
+  return {
+    clientes: result.data.map((row) => ({
+      cliente_id: String(row.cliente_id ?? ""),
+      cliente: String(row.cliente ?? "").trim(),
+      whatsapp: String(row.whatsapp ?? row.whatsapp_e164 ?? "").trim(),
+      whatsapp_e164: String(row.whatsapp_e164 ?? "").trim(),
+      pais_telefono: String(row.pais_telefono ?? "").trim(),
+      dni: String(row.dni ?? "").trim(),
+      alerta_atencion: String(row.alerta_atencion ?? "").trim(),
+    })),
     error: "",
   };
 }

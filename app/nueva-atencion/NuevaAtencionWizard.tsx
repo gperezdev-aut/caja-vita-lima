@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useFormStatus } from "react-dom";
 import Link from "next/link";
-import { lookupClienteAlertaAction } from "./actions";
+import { buscarClientesAction, lookupClienteAlertaAction } from "./actions";
 
 type CatalogService = {
   codeId: string;
@@ -13,6 +13,11 @@ type CatalogService = {
   price: number;
   paxType: string;
   sortOrder: number;
+  peopleMin: number;
+  peopleMax: number;
+  selectionRule: string;
+  reservationBehavior: string;
+  modality: string;
 };
 
 type Promotion = {
@@ -69,9 +74,21 @@ export function NuevaAtencionWizard({
 
   const [cliente, setCliente] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
-  const [paisTelefono, setPaisTelefono] = useState("");
+  const [paisTelefono, setPaisTelefono] = useState("PE");
   const [dni, setDni] = useState("");
   const [pax, setPax] = useState(1);
+  const [clienteSearch, setClienteSearch] = useState("");
+  const [clienteSearchPending, setClienteSearchPending] = useState(false);
+  const [clienteResults, setClienteResults] = useState<Array<{
+    cliente_id: string;
+    cliente: string;
+    whatsapp: string;
+    whatsapp_e164: string;
+    pais_telefono: string;
+    dni: string;
+    alerta_atencion: string;
+  }>>([]);
+  const [clienteMode, setClienteMode] = useState<"buscar" | "existente" | "nuevo">("buscar");
 
   const [serviceCode, setServiceCode] = useState("");
   const [promotionCode, setPromotionCode] = useState("");
@@ -92,6 +109,7 @@ export function NuevaAtencionWizard({
   const [responsable, setResponsable] = useState("Gerald");
   const [observacion, setObservacion] = useState("");
   const [error, setError] = useState("");
+  const [confirmSave, setConfirmSave] = useState(false);
 
   const selectedService = useMemo(
     () => services.find((item) => item.codeId === serviceCode),
@@ -104,12 +122,7 @@ export function NuevaAtencionWizard({
   );
 
   const filteredServices = useMemo(() => {
-    const expected = pax === 2 ? "2p" : "1p";
-    return services.filter((item) => {
-      const category = item.category.toLowerCase();
-      const paxType = item.paxType.toLowerCase();
-      return category === expected || paxType === expected;
-    });
+    return services.filter((item) => pax >= item.peopleMin && pax <= item.peopleMax);
   }, [services, pax]);
 
   const serviceName = customService
@@ -128,6 +141,65 @@ export function NuevaAtencionWizard({
         : paid < total
           ? "Pago parcial"
           : "Pagado completo";
+
+  async function searchClientes() {
+    const term = clienteSearch.trim();
+    if (term.length < 2) {
+      setError("Escribe al menos 2 caracteres del nombre o WhatsApp.");
+      return;
+    }
+
+    setClienteSearchPending(true);
+    setError("");
+    try {
+      const result = await buscarClientesAction(term);
+      setClienteResults(result.clientes.map((row) => ({
+        cliente_id: String(row.cliente_id ?? ""),
+        cliente: String(row.cliente ?? ""),
+        whatsapp: String(row.whatsapp ?? ""),
+        whatsapp_e164: String(row.whatsapp_e164 ?? ""),
+        pais_telefono: String(row.pais_telefono ?? ""),
+        dni: String(row.dni ?? ""),
+        alerta_atencion: String(row.alerta_atencion ?? ""),
+      })));
+      if (result.error) setError(result.error);
+      else if (!result.clientes.length) setClienteMode("nuevo");
+    } catch {
+      setError("No se pudo buscar clientes.");
+    } finally {
+      setClienteSearchPending(false);
+    }
+  }
+
+  function chooseCliente(row: {
+    cliente_id: string;
+    cliente: string;
+    whatsapp: string;
+    whatsapp_e164: string;
+    pais_telefono: string;
+    dni: string;
+    alerta_atencion: string;
+  }) {
+    setCliente(row.cliente);
+    setWhatsapp(row.whatsapp_e164 || row.whatsapp);
+    setPaisTelefono(row.pais_telefono || "PE");
+    setDni(row.dni || "");
+    setClienteMode("existente");
+    setClienteResults([]);
+    setClienteAlerta(row.alerta_atencion ? { cliente: row.cliente, alerta: row.alerta_atencion } : null);
+    setError("");
+  }
+
+  function newCliente() {
+    setCliente("");
+    setWhatsapp("");
+    setPaisTelefono("PE");
+    setDni("");
+    setClienteResults([]);
+    setClienteMode("nuevo");
+    setClienteAlerta(null);
+    setError("");
+  }
 
   async function checkClienteAlerta(nextWhatsapp: string, nextPais: string, nextDni: string) {
     const validWhatsapp = nextWhatsapp.trim();
@@ -253,7 +325,14 @@ export function NuevaAtencionWizard({
   const steps = ["Operación", "Cliente", "Servicio", "Pago", "Confirmar"];
 
   return (
-    <div className="wizardWrap">
+    <div
+      className="wizardWrap"
+      onKeyDown={(event) => {
+        if (event.key === "Enter" && (event.target as HTMLElement).tagName !== "TEXTAREA") {
+          event.preventDefault();
+        }
+      }}
+    >
       <div className="wizardProgress" aria-label={`Paso ${step} de 5`}>
         {steps.map((label, index) => {
           const number = index + 1;
@@ -310,55 +389,84 @@ export function NuevaAtencionWizard({
 
       <section className={`wizardPanel ${step === 2 ? "visible" : ""}`}>
         <h2>Paso 2 · Cliente</h2>
-        <p className="wizardIntro">Registra los datos básicos de la persona que será atendida.</p>
+        <p className="wizardIntro">Busca primero por nombre o WhatsApp. Si no existe, registra un cliente nuevo.</p>
 
-        <div className="atencionGrid">
-          <label className="atencionField atencionFieldWide">
-            Cliente
-            <input name="cliente" value={cliente} onChange={(e) => setCliente(e.target.value)} placeholder="Nombre del cliente" required />
-          </label>
-
+        <div className="clientQuickSearch">
           <label className="atencionField">
-            País del WhatsApp
-            <select name="pais_telefono" value={paisTelefono} onChange={(e) => { setPaisTelefono(e.target.value); setClienteAlerta(null); }}>
-              <option value="">Selecciona país</option>
-              {countries.map((country) => <option key={country.code} value={country.code}>{country.name} (+{country.callingCode})</option>)}
-            </select>
-          </label>
-
-          <label className="atencionField">
-            WhatsApp
+            Buscar cliente
             <input
-              name="whatsapp"
-              value={whatsapp}
-              onChange={(e) => setWhatsapp(e.target.value.replace(/[^\d+()\-\s]/g, ""))}
-              onBlur={() => checkClienteAlerta(whatsapp, paisTelefono, dni)}
-              inputMode="tel"
-              placeholder="Ej. 987654321 o +34 612 345 678"
-            />
-            <small>El país es obligatorio si ingresas un número local.</small>
-          </label>
-
-          <label className="atencionField">
-            DNI
-            <input
-              name="dni"
-              value={dni}
-              onChange={(e) => setDni(e.target.value.replace(/\D/g, "").slice(0, 8))}
-              onBlur={() => checkClienteAlerta(whatsapp, paisTelefono, dni)}
-              inputMode="numeric"
-              placeholder="Opcional"
+              value={clienteSearch}
+              onChange={(e) => setClienteSearch(e.target.value)}
+              placeholder="Ej. Gerald o 959..."
+              autoComplete="off"
             />
           </label>
-
-          <label className="atencionField">
-            N.º de personas
-            <select name="n_pax" value={pax} onChange={(e) => changePax(Number(e.target.value))}>
-              <option value={1}>1 persona</option>
-              <option value={2}>2 personas</option>
-            </select>
-          </label>
+          <button type="button" className="ghostButton" onClick={searchClientes} disabled={clienteSearchPending}>
+            {clienteSearchPending ? "Buscando…" : "Buscar"}
+          </button>
+          <button type="button" className="ghostButton" onClick={newCliente}>+ Nuevo cliente</button>
         </div>
+
+        {clienteResults.length > 0 && (
+          <div className="clientSearchResults" role="list">
+            {clienteResults.map((row) => (
+              <button key={row.cliente_id} type="button" onClick={() => chooseCliente(row)} role="listitem">
+                <strong>{row.cliente || "Sin nombre"}</strong>
+                <span>{row.whatsapp_e164 || row.whatsapp || "Sin WhatsApp"}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {clienteMode !== "buscar" && (
+          <div className="atencionGrid">
+            <label className="atencionField atencionFieldWide">
+              Cliente
+              <input name="cliente" value={cliente} onChange={(e) => setCliente(e.target.value)} placeholder="Nombre del cliente" required />
+            </label>
+
+            <label className="atencionField">
+              País del WhatsApp
+              <select name="pais_telefono" value={paisTelefono} onChange={(e) => { setPaisTelefono(e.target.value); setClienteAlerta(null); }}>
+                {countries.map((country) => <option key={country.code} value={country.code}>{country.name} (+{country.callingCode})</option>)}
+              </select>
+            </label>
+
+            <label className="atencionField">
+              WhatsApp
+              <input
+                name="whatsapp"
+                value={whatsapp}
+                onChange={(e) => setWhatsapp(e.target.value.replace(/[^\d+()\-\s]/g, ""))}
+                onBlur={() => checkClienteAlerta(whatsapp, paisTelefono, dni)}
+                inputMode="tel"
+                placeholder="987654321 o +34 612345678"
+              />
+            </label>
+
+            <label className="atencionField">
+              DNI
+              <input
+                name="dni"
+                value={dni}
+                onChange={(e) => setDni(e.target.value.replace(/\D/g, "").slice(0, 8))}
+                onBlur={() => checkClienteAlerta(whatsapp, paisTelefono, dni)}
+                inputMode="numeric"
+                placeholder="Opcional"
+              />
+            </label>
+
+            <label className="atencionField">
+              N.º de personas
+              <select name="n_pax" value={pax} onChange={(e) => changePax(Number(e.target.value))}>
+                <option value={1}>1 persona</option>
+                <option value={2}>2 personas</option>
+              </select>
+            </label>
+          </div>
+        )}
+
+        {clienteMode === "existente" && <p className="clientSelectedNotice">Cliente existente seleccionado. Puedes corregir los datos antes de continuar.</p>}
 
         {clienteAlerta?.alerta && (
           <div className="clienteAlertaNotice" role="alert">
@@ -377,6 +485,7 @@ export function NuevaAtencionWizard({
         <div className="atencionGrid">
           <label className="atencionField atencionFieldWide">
             Servicio
+            <small>{filteredServices.length} servicios compatibles para {pax} persona{pax === 1 ? "" : "s"}</small>
             <select value={customService ? "__CUSTOM__" : serviceCode} onChange={(e) => selectService(e.target.value)} disabled={Boolean(promotionCode)}>
               <option value="">Selecciona un servicio</option>
               {filteredServices.map((item) => (
@@ -388,7 +497,7 @@ export function NuevaAtencionWizard({
             </select>
           </label>
 
-          <label className="atencionField">
+          <label className="atencionField atencionFieldWide">
             Promoción vigente
             <select value={promotionCode} onChange={(e) => selectPromotion(e.target.value)}>
               <option value="">Sin promoción</option>
@@ -427,7 +536,7 @@ export function NuevaAtencionWizard({
             <input name="monto_total" type="number" min="0" step="0.01" value={total} onChange={(e) => setTotal(Number(e.target.value || 0))} />
           </label>
 
-          <label className="atencionField">
+          <label className="atencionField atencionFieldWide">
             Terapista 1
             <select name="terapista_1" value={terapista1} onChange={(e) => setTerapista1(e.target.value)}>
               <option value="">Selecciona una terapista</option>
@@ -435,7 +544,7 @@ export function NuevaAtencionWizard({
             </select>
           </label>
 
-          <label className="atencionField">
+          <label className="atencionField atencionFieldWide">
             Terapista 2
             <select name="terapista_2" value={terapista2} onChange={(e) => setTerapista2(e.target.value)} disabled={pax < 2}>
               <option value="">{pax < 2 ? "No aplica" : "Selecciona una terapista"}</option>
@@ -544,6 +653,15 @@ export function NuevaAtencionWizard({
               : " Solo se utilizará en esta atención."}
           </div>
         )}
+
+        <label className="finalConfirmationCheck">
+          <input
+            type="checkbox"
+            checked={confirmSave}
+            onChange={(e) => setConfirmSave(e.target.checked)}
+          />
+          <span>Confirmo que revisé los datos y quiero guardar esta atención ahora.</span>
+        </label>
       </section>
 
       <div className="wizardActions">
@@ -561,9 +679,9 @@ export function NuevaAtencionWizard({
             name="confirmar_guardado"
             value="SI"
             className="primaryButton"
-            disabled={pending}
+            disabled={pending || !confirmSave}
           >
-            {pending ? "Guardando..." : "Confirmar y guardar"}
+            {pending ? "Guardando…" : "Confirmar guardado"}
           </button>
         )}
       </div>

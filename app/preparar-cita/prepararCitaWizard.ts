@@ -1,11 +1,9 @@
 import type { AppointmentType, Service } from "./components/types";
 
-export const WIZARD_PROGRESS = ["Cliente", "Servicio", "Horario", "Pago", "Confirmar"] as const;
+export const WIZARD_PROGRESS = ["Cliente", "Tipo", "Servicio", "Horario", "Pago", "Confirmar"] as const;
 
 export function progressIndex(step: number) {
-  if (step <= 0) return 0;
-  if (step <= 2) return 1;
-  return Math.min(step - 1, WIZARD_PROGRESS.length - 1);
+  return Math.min(Math.max(step, 0), WIZARD_PROGRESS.length - 1);
 }
 export function categoryLabel(category: string) {
   const labels: Record<string, string> = {

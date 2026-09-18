@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { displayText } from "../lib/displayText";
+import { displayText } from "../lib/displayText.ts";
 
 test("displayText repara acentos UTF-8 interpretados como Windows-1252", () => {
   assert.equal(displayText("BioenergÃ©tico"), "Bioenergético");

@@ -10,7 +10,7 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     services:
       postgres:
         image: postgres:16-alpine
@@ -49,9 +49,10 @@ jobs:
           CREATE DATABASE caja_ledger_contract;
           CREATE DATABASE caja_reserva_contract;
           CREATE DATABASE caja_gift_card_reserva_contract;
+          CREATE DATABASE caja_conciliacion_v2_contract;
           SQL
 
-      # El agregado local equivalente es: npm run test:sql
+      # El agregado local equivalente de contratos existentes es: npm run test:sql
 
       - name: Validate catalog snapshot contract
         env:
@@ -72,3 +73,8 @@ jobs:
         env:
           DATABASE_URL: postgresql://caja_ci:caja_ci_only_password@localhost:5432/caja_gift_card_reserva_contract
         run: node tests/run-gift-card-reserva-postgres-validation.mjs
+
+      - name: Validate Conciliación V2 contract
+        env:
+          DATABASE_URL: postgresql://caja_ci:caja_ci_only_password@localhost:5432/caja_conciliacion_v2_contract
+        run: node tests/run-conciliacion-v2-postgres-validation.mjs

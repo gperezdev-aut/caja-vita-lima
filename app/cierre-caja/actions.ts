@@ -5,8 +5,8 @@ import { supabaseInsert, supabaseSelectAllWhere } from "@/lib/supabaseServer";
 import { requireModuleAccess } from "@/lib/auth";
 import {
   cajaFisicaNoCalculable,
+  resumirDineroProcesadoCierre,
   resumirMovimientosOperativos,
-  resumirPagosCierre,
   sumarSalidas,
 } from "@/lib/cierreCaja";
 
@@ -53,11 +53,7 @@ export async function createCierreCajaAction(formData: FormData) {
     redirect(`${baseUrl}${separator}error=${encodeURIComponent("Completa fecha y sede.")}`);
   }
 
-  if (
-    cajaInicial < 0 ||
-    efectivoContado < 0 ||
-    pozoFondo < 0
-  ) {
+  if (cajaInicial < 0 || efectivoContado < 0 || pozoFondo < 0) {
     redirect(`${baseUrl}${separator}error=${encodeURIComponent("Los montos no pueden ser negativos.")}`);
   }
 
@@ -65,10 +61,14 @@ export async function createCierreCajaAction(formData: FormData) {
     `fecha=eq.${fecha}`,
     `sede=eq.${encodeURIComponent(sede)}`,
   ];
-  const [pagos, salidas, movimientos] = await Promise.all([
+  const [pagos, propinas, salidas, movimientos] = await Promise.all([
     supabaseSelectAllWhere<Record<string, unknown>>(
       "caja_pagos",
       ["select=metodo,monto", ...filtroFechaSede].join("&")
+    ),
+    supabaseSelectAllWhere<Record<string, unknown>>(
+      "caja_propinas",
+      ["select=metodo,monto,estado", ...filtroFechaSede].join("&")
     ),
     supabaseSelectAllWhere<Record<string, unknown>>(
       "caja_salidas",
@@ -83,14 +83,16 @@ export async function createCierreCajaAction(formData: FormData) {
     ),
   ]);
 
-  const lecturaError = pagos.error || salidas.error || movimientos.error;
+  const lecturaError = pagos.error || propinas.error || salidas.error || movimientos.error;
   if (lecturaError) {
     redirect(`${baseUrl}${separator}error=${encodeURIComponent(lecturaError)}`);
   }
 
-  // Los importes automáticos se recalculan server-side. Los valores visibles
-  // del formulario no son parte del contrato financiero de escritura.
-  const totalIngresos = resumirPagosCierre(pagos.data).total;
+  // total_ingresos conserva únicamente dinero que pertenece a Vita Lima.
+  // Las propinas se guardan como snapshot separado y solo se suman en total_procesado
+  // para cuadrar medios físicos/digitales con lo realmente cobrado al cliente.
+  const dineroProcesado = resumirDineroProcesadoCierre(pagos.data, propinas.data);
+  const totalIngresos = dineroProcesado.ingresos.total;
   const totalSalidas = sumarSalidas(salidas.data);
   const { paxTotal, boletasPendientes } = resumirMovimientosOperativos(movimientos.data);
 
@@ -108,6 +110,10 @@ export async function createCierreCajaAction(formData: FormData) {
     efectivo_contado: efectivoContado,
     pozo_fondo: pozoFondo,
     total_ingresos: totalIngresos,
+    total_propinas: dineroProcesado.propinas.total,
+    total_procesado: dineroProcesado.totalProcesado,
+    propinas_por_metodo: dineroProcesado.propinas.porMetodo,
+    dinero_procesado_por_metodo: dineroProcesado.porMetodo,
     total_salidas: totalSalidas,
     caja_esperada: cajaEsperada,
     diferencia,

@@ -14,6 +14,10 @@ export type PagoCierre = {
   monto?: unknown;
 };
 
+export type PropinaCierre = PagoCierre & {
+  estado?: unknown;
+};
+
 export type MovimientoCierre = {
   n_pax?: unknown;
   estado_comprobante_manual?: unknown;
@@ -58,6 +62,38 @@ export function resumirPagosCierre(rows: PagoCierre[]) {
     total: METODOS_CIERRE.reduce((sum, metodo) => sum + porMetodo[metodo], 0),
     efectivo: porMetodo.EFECTIVO,
     digital: METODOS_CIERRE.filter((metodo) => metodo !== "EFECTIVO").reduce(
+      (sum, metodo) => sum + porMetodo[metodo],
+      0
+    ),
+    porMetodo,
+  };
+}
+
+export function resumirPropinasCierre(rows: PropinaCierre[]) {
+  return resumirPagosCierre(
+    rows.filter((row) => String(row.estado ?? "PENDIENTE").trim().toUpperCase() !== "ANULADA")
+  );
+}
+
+export function resumirDineroProcesadoCierre(
+  pagos: PagoCierre[],
+  propinas: PropinaCierre[]
+) {
+  const ingresos = resumirPagosCierre(pagos);
+  const tips = resumirPropinasCierre(propinas);
+  const porMetodo = Object.fromEntries(
+    METODOS_CIERRE.map((metodo) => [
+      metodo,
+      ingresos.porMetodo[metodo] + tips.porMetodo[metodo],
+    ])
+  ) as Record<MetodoCierre, number>;
+
+  return {
+    ingresos,
+    propinas: tips,
+    totalProcesado: ingresos.total + tips.total,
+    efectivoProcesado: porMetodo.EFECTIVO,
+    digitalProcesado: METODOS_CIERRE.filter((metodo) => metodo !== "EFECTIVO").reduce(
       (sum, metodo) => sum + porMetodo[metodo],
       0
     ),
