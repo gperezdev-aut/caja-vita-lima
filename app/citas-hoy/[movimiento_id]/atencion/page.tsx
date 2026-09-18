@@ -154,7 +154,7 @@ export default async function AtencionReservadaPage({ params }: { params: Promis
         <section className="hero atencionReservadaHero" style={{ minHeight: "120px" }}>
           <div>
             <p className="eyebrow">{esDirecta ? "Atención directa" : "Reserva existente"}</p>
-            <h1>{atencionCompletada ? "Atención completada" : "Conciliar atención"}</h1>
+            <h1>{atencionCompletada ? "Atención completada" : "Completar atención"}</h1>
             <p className="subtitle">{String(movimiento.cliente ?? "-")} · {servicioNombre}</p>
           </div>
           <Badge>{String(movimiento.estado ?? "-")}</Badge>
