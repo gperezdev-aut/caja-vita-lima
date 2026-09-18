@@ -195,6 +195,7 @@ export default async function CierreCajaPage({
 
   const errors = [config.error, pagos.error, propinas.error, movimientos.error, salidas.error, cierres.error].filter(Boolean);
   const dineroProcesado = resumirDineroProcesadoCierre(pagos.data, propinas.data);
+  const metodosConMovimiento = METODOS_CIERRE.filter((metodo) => Number(dineroProcesado.porMetodo[metodo] ?? 0) > 0.009);
   const resumenPagos = dineroProcesado.ingresos;
   const resumenPropinas = dineroProcesado.propinas;
   const totalIngresos = resumenPagos.total;
@@ -340,24 +341,31 @@ export default async function CierreCajaPage({
           <Card label="Boletas pendientes" value={numberFmt(boletasPendientes)} tone="warn" />
         </section>
 
-        <section className="panel" style={{ marginBottom: "24px" }}>
+        <section className="panel cierreMethodsPanel" style={{ marginBottom: "24px" }}>
           <div className="panelTitle">
             <div>
-              <h2>Dinero procesado por método</h2>
-              <p>Ingresos Vita Lima y propinas se muestran separados; el total sirve para cuadrar efectivo, Yape, Plin y POS.</p>
+              <h2>Resumen por método de pago</h2>
+              <p>Solo se muestran métodos con movimiento. El detalle separa ingresos de Vita Lima y propinas.</p>
             </div>
           </div>
-          <div className="miniList">
-            {METODOS_CIERRE.map((metodo) => (
-              <div className="miniItem" key={metodo}>
-                <span>{metodo}</span>
-                <strong>{money(dineroProcesado.porMetodo[metodo])}</strong>
-                <small>
-                  Vita {money(resumenPagos.porMetodo[metodo])} · Propina {money(resumenPropinas.porMetodo[metodo])}
-                </small>
-              </div>
-            ))}
-          </div>
+          {metodosConMovimiento.length === 0 ? (
+            <div className="cierreMethodsEmpty">Aún no hay movimientos registrados por método.</div>
+          ) : (
+            <div className="cierreMethodsList">
+              {metodosConMovimiento.map((metodo) => (
+                <div className="cierreMethodRow" key={metodo}>
+                  <div className="cierreMethodMain">
+                    <span>{metodo === "OTRO" ? "Otro" : metodo}</span>
+                    <strong>{money(dineroProcesado.porMetodo[metodo])}</strong>
+                  </div>
+                  <small>
+                    Vita Lima: {money(resumenPagos.porMetodo[metodo])}
+                    {Number(resumenPropinas.porMetodo[metodo] ?? 0) > 0.009 ? ` · Propina: ${money(resumenPropinas.porMetodo[metodo])}` : ""}
+                  </small>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
 
         <section className="panel">
