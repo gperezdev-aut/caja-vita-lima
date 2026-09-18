@@ -81,7 +81,7 @@ test("las citas priorizan acciones, contexto operativo y relegan IDs técnicos",
   assert.match(citas, /included_es/);
   assert.match(citas, /citasHoyTableAction/);
   assert.match(citas, /Iniciar atención/);
-  assert.match(citas, /Conciliar/);
+  assert.match(citas, /Completar/);
   assert.match(citas, /showTechnical/);
   assert.match(citas, /<details className="technicalDetails">/);
   assert.doesNotMatch(citas, />\s*Ver cliente\s*</);
