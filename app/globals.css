@@ -913,3 +913,74 @@ body {
     min-width:0;
   }
 }
+
+
+/* iPhone Safari — neutralizar ancho intrínseco del picker nativo */
+@supports (-webkit-touch-callout: none) {
+  .formField,
+  .atencionField {
+    overflow:hidden;
+    min-width:0;
+    max-width:100%;
+  }
+
+  .formControl[type="date"],
+  .formControl[type="time"],
+  .atencionField input[type="date"],
+  .atencionField input[type="time"] {
+    -webkit-appearance:none;
+    appearance:none;
+    display:block;
+    width:100%;
+    max-width:100%;
+    min-width:0;
+    inline-size:100%;
+    max-inline-size:100%;
+    min-inline-size:0;
+    box-sizing:border-box;
+    overflow:hidden;
+    text-align:left;
+    padding:12px 14px;
+    margin:0;
+  }
+
+  .formControl[type="date"]::-webkit-date-and-time-value,
+  .formControl[type="time"]::-webkit-date-and-time-value,
+  .atencionField input[type="date"]::-webkit-date-and-time-value,
+  .atencionField input[type="time"]::-webkit-date-and-time-value {
+    display:block;
+    width:100%;
+    min-width:0;
+    max-width:100%;
+    text-align:left;
+    margin:0;
+    padding:0;
+  }
+
+  .formControl[type="date"]::-webkit-calendar-picker-indicator,
+  .formControl[type="time"]::-webkit-calendar-picker-indicator,
+  .atencionField input[type="date"]::-webkit-calendar-picker-indicator,
+  .atencionField input[type="time"]::-webkit-calendar-picker-indicator {
+    position:absolute;
+    opacity:0;
+    width:100%;
+    height:100%;
+    inset:0;
+    cursor:pointer;
+  }
+}
+
+@media(max-width:620px){
+  .citasHoyFilters,
+  .atencionGrid{
+    overflow:hidden;
+  }
+
+  .citasHoyFilters .formControl[type="date"],
+  .citasHoyFilters .formControl[type="time"],
+  .nuevaAtencionPage .atencionField input[type="date"],
+  .nuevaAtencionPage .atencionField input[type="time"]{
+    width:calc(100% - 2px);
+    max-width:calc(100% - 2px);
+  }
+}
