@@ -36,12 +36,13 @@ const service = (selectionRule: string, category: string, modality = "IN_BRANCH"
   reservationBehavior: "APPOINTMENT",
 });
 
-test("el wizard inicia en Cliente y agrupa Tipo/Servicio en el progreso solicitado", () => {
+test("el wizard expone seis pasos consistentes de Cliente a Confirmar", () => {
   assert.equal(progressIndex(0), 0);
   assert.equal(progressIndex(1), 1);
-  assert.equal(progressIndex(2), 1);
-  assert.equal(progressIndex(3), 2);
-  assert.equal(progressIndex(5), 4);
+  assert.equal(progressIndex(2), 2);
+  assert.equal(progressIndex(3), 3);
+  assert.equal(progressIndex(4), 4);
+  assert.equal(progressIndex(5), 5);
 });
 
 test("filtra 1 persona, paquetes de 2, selección por persona y HOME por reglas canónicas", () => {

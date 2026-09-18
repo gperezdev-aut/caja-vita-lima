@@ -68,13 +68,21 @@ test("ofrece representaciones móviles para las tablas operativas", async () => 
     assert.match(content, /desktopData/, `${path} conserva tabla desktop`);
     assert.match(content, /mobileRecordList/, `${path} ofrece resumen móvil`);
   }
+
+  const citas = await source("app/citas-hoy/page.tsx");
+  assert.match(citas, /citasHoyDesktopTable/);
+  assert.match(citas, /citasHoyMobileList/);
 });
 
-test("las citas priorizan acciones y relegan IDs técnicos", async () => {
+test("las citas priorizan acciones, contexto operativo y relegan IDs técnicos", async () => {
   const citas = await source("app/citas-hoy/page.tsx");
 
   assert.match(citas, />WhatsApp</);
-  assert.match(citas, />\s*Ver cliente\s*</);
-  assert.match(citas, /Continuar atención/);
+  assert.match(citas, /included_es/);
+  assert.match(citas, /citasHoyTableAction/);
+  assert.match(citas, /Iniciar atención/);
+  assert.match(citas, /Completar/);
+  assert.match(citas, /showTechnical/);
   assert.match(citas, /<details className="technicalDetails">/);
+  assert.doesNotMatch(citas, />\s*Ver cliente\s*</);
 });

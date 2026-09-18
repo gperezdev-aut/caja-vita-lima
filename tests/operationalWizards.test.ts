@@ -81,7 +81,8 @@ test("Cierre conserva No calculable y no reintroduce fórmulas físicas", async 
   assert.match(wizard, /Caja física esperada/);
   assert.match(wizard, /Diferencia física/);
   assert.match(action, /cajaFisicaNoCalculable\(\)/);
-  assert.match(action, /resumirPagosCierre\(pagos\.data\)\.total/);
+  assert.match(action, /resumirDineroProcesadoCierre\(pagos\.data, propinas\.data\)/);
+  assert.match(action, /const totalIngresos = dineroProcesado\.ingresos\.total/);
   assert.match(action, /sumarSalidas\(salidas\.data\)/);
   assert.doesNotMatch(action, /efectivoContado\s*-\s*cajaEsperada/);
 });
@@ -104,4 +105,69 @@ test("los wizards operativos mantienen una sola columna, targets táctiles y saf
   assert.match(css, /@media\(max-width:760px\)[\s\S]*\.operationalWizardGrid,[\s\S]*grid-template-columns:\s*1fr/);
   assert.match(css, /bottom:\s*max\(8px, env\(safe-area-inset-bottom\)\)/);
   assert.match(css, /\.operationalReview strong \{ display: block; overflow-wrap: anywhere; \}/);
+});
+
+
+test("Nueva atención busca clientes existentes y solo guarda con acción explícita", async () => {
+  const [wizard, action, page] = await Promise.all([
+    readFile(new URL("../app/nueva-atencion/NuevaAtencionWizard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/nueva-atencion/actions.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/nueva-atencion/page.tsx", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(wizard, /buscarClientesAction/);
+  assert.match(wizard, /Buscar cliente/);
+  assert.match(wizard, /\+ Nuevo cliente/);
+  assert.match(wizard, /Confirmar guardado/);
+  assert.match(wizard, /Confirmo que revisé los datos y quiero guardar esta atención ahora/);
+  assert.match(wizard, /disabled=\{pending \|\| !confirmSave\}/);
+  assert.match(wizard, /event\.key === "Enter"[\s\S]*preventDefault\(\)/);
+  assert.match(action, /export async function buscarClientesAction/);
+  assert.match(action, /confirmar_guardado/);
+  assert.match(page, /Todo quedó guardado correctamente/);
+  assert.match(page, /Ir a Citas de hoy/);
+  assert.doesNotMatch(page, /Registro guardado correctamente\. Movimiento:/);
+});
+
+test("Preparar cita expone seis pasos coherentes", async () => {
+  const [wizardDomain, stepper, form] = await Promise.all([
+    readFile(new URL("../app/preparar-cita/prepararCitaWizard.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/preparar-cita/components/WizardStepper.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/preparar-cita/PrepararCitaForm.tsx", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(wizardDomain, /\["Cliente", "Tipo", "Servicio", "Horario", "Pago", "Confirmar"\]/);
+  assert.match(stepper, /\[0, 1, 2, 3, 4, 5\]/);
+  assert.match(form, /Paso 5 de 6/);
+  assert.match(form, /Paso 6 de 6/);
+});
+
+
+test("Nueva atención usa el catálogo canónico y no el staging legado", async () => {
+  const page = await readFile(new URL("../app/nueva-atencion/page.tsx", import.meta.url), "utf8");
+  assert.match(page, /leerCatalogoPrepararCita/);
+  assert.match(page, /servicios canónicos/);
+  assert.doesNotMatch(page, /supabaseSelect<Row>\("stg_services_catalog_v5"\)/);
+});
+
+
+test("Conciliar atención exige saldo cero y confirmación final explícita", async () => {
+  const [wizard, action, page] = await Promise.all([
+    readFile(new URL("../app/citas-hoy/[movimiento_id]/atencion/AtencionReservadaForm.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/citas-hoy/atencion-actions.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/citas-hoy/[movimiento_id]/atencion/page.tsx", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(wizard, /Para conciliar y cerrar la atención debes cobrar o cubrir todo el saldo/);
+  assert.match(wizard, /Confirmo que revisé el resumen y quiero finalizar esta atención ahora/);
+  assert.match(wizard, /disabled=\{pending \|\| saldoEstimado > 0\.009 \|\| !confirmFinal\}/);
+  assert.match(wizard, /No se puede finalizar mientras quede saldo pendiente/);
+  assert.match(action, /pendienteEstimado > 0\.009/);
+  assert.match(action, /cancelar todo el saldo/);
+  assert.match(page, /displayText\(servicioCatalogo\?\.included_es/);
+});
+
+test("Nueva atención repara nombres canónicos solo para presentación", async () => {
+  const page = await readFile(new URL("../app/nueva-atencion/page.tsx", import.meta.url), "utf8");
+  assert.match(page, /displayText\(service\.nameEs\)/);
 });

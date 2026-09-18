@@ -4,8 +4,8 @@ import { supabaseSelect, supabaseSelectAllWhere, supabaseSelectWhere } from "@/l
 import {
   METODOS_CIERRE,
   cajaFisicaNoCalculable,
+  resumirDineroProcesadoCierre,
   resumirMovimientosOperativos,
-  resumirPagosCierre,
   sumarSalidas,
 } from "@/lib/cierreCaja";
 import { FormField } from "@/components/FormField";
@@ -144,12 +144,20 @@ export default async function CierreCajaPage({
   const selectedFecha = safeDate(params?.fecha, today);
   const selectedSede = safeCierreSede(params?.sede);
 
-  const [config, pagos, movimientos, salidas, cierres] = await Promise.all([
+  const [config, pagos, propinas, movimientos, salidas, cierres] = await Promise.all([
     supabaseSelect<Row>("config_listas"),
     supabaseSelectAllWhere<Row>(
       "caja_pagos",
       [
         "select=pago_id,fecha,hora,sede,metodo,monto",
+        `fecha=eq.${selectedFecha}`,
+        `sede=eq.${encodeURIComponent(selectedSede)}`,
+      ].join("&")
+    ),
+    supabaseSelectAllWhere<Row>(
+      "caja_propinas",
+      [
+        "select=propina_id,fecha,hora,sede,metodo,monto,estado",
         `fecha=eq.${selectedFecha}`,
         `sede=eq.${encodeURIComponent(selectedSede)}`,
       ].join("&")
@@ -173,7 +181,7 @@ export default async function CierreCajaPage({
     supabaseSelectWhere<Row>(
       "caja_cierres",
       [
-        "select=cierre_id,fecha,sede,total_ingresos,total_salidas,caja_esperada,diferencia,responsable,estado,observacion,created_at",
+        "select=cierre_id,fecha,sede,total_ingresos,total_propinas,total_procesado,total_salidas,caja_esperada,diferencia,responsable,estado,observacion,created_at",
         `fecha=eq.${selectedFecha}`,
         `sede=eq.${encodeURIComponent(selectedSede)}`,
         "order=created_at.desc",
@@ -185,8 +193,11 @@ export default async function CierreCajaPage({
   const responsables = list(config.data, "RESPONSABLES");
   const responsableValues = values(responsables, ["Gerald", "Luis", "Naty", "Otro"]);
 
-  const errors = [config.error, pagos.error, movimientos.error, salidas.error, cierres.error].filter(Boolean);
-  const resumenPagos = resumirPagosCierre(pagos.data);
+  const errors = [config.error, pagos.error, propinas.error, movimientos.error, salidas.error, cierres.error].filter(Boolean);
+  const dineroProcesado = resumirDineroProcesadoCierre(pagos.data, propinas.data);
+  const metodosConMovimiento = METODOS_CIERRE.filter((metodo) => Number(dineroProcesado.porMetodo[metodo] ?? 0) > 0.009);
+  const resumenPagos = dineroProcesado.ingresos;
+  const resumenPropinas = dineroProcesado.propinas;
   const totalIngresos = resumenPagos.total;
   const totalSalidas = sumarSalidas(salidas.data);
   const { paxTotal, boletasPendientes } = resumirMovimientosOperativos(movimientos.data);
@@ -202,8 +213,7 @@ export default async function CierreCajaPage({
             <p className="eyebrow">Control diario</p>
             <h1>Cierre de caja</h1>
             <p className="subtitle">
-              Registra el cierre diario por sede. Los ingresos se calculan desde
-              pagos realmente recibidos y las salidas desde su ledger de {dateLabel(selectedFecha)} en {selectedSede}.
+              Registra el cierre diario por sede. Ingresos de Vita Lima y propinas de terapistas se concilian por separado para {dateLabel(selectedFecha)} en {selectedSede}.
             </p>
           </div>
 
@@ -321,29 +331,41 @@ export default async function CierreCajaPage({
         />
 
         <section className="grid secondary">
-          <Card label="Ingresos" value={money(totalIngresos)} tone="good" />
-          <Card label="Efectivo recibido" value={money(resumenPagos.efectivo)} tone="good" />
-          <Card label="Pagos digitales" value={money(resumenPagos.digital)} />
-          <Card label="Salidas" value={money(totalSalidas)} />
+          <Card label="Ingresos Vita Lima" value={money(totalIngresos)} tone="good" />
+          <Card label="Propinas terapistas" value={money(resumenPropinas.total)} />
+          <Card label="Dinero procesado" value={money(dineroProcesado.totalProcesado)} tone="good" />
+          <Card label="Efectivo procesado" value={money(dineroProcesado.efectivoProcesado)} />
+          <Card label="Digital procesado" value={money(dineroProcesado.digitalProcesado)} />
+          <Card label="Salidas Vita Lima" value={money(totalSalidas)} />
           <Card label="Pax" value={numberFmt(paxTotal)} />
           <Card label="Boletas pendientes" value={numberFmt(boletasPendientes)} tone="warn" />
         </section>
 
-        <section className="panel" style={{ marginBottom: "24px" }}>
+        <section className="panel cierreMethodsPanel" style={{ marginBottom: "24px" }}>
           <div className="panelTitle">
             <div>
-              <h2>Ingresos por método</h2>
-              <p>Desglose del ledger de pagos por fecha real de cobro.</p>
+              <h2>Resumen por método de pago</h2>
+              <p>Solo se muestran métodos con movimiento. El detalle separa ingresos de Vita Lima y propinas.</p>
             </div>
           </div>
-          <div className="miniList">
-            {METODOS_CIERRE.map((metodo) => (
-              <div className="miniItem" key={metodo}>
-                <span>{metodo}</span>
-                <strong>{money(resumenPagos.porMetodo[metodo])}</strong>
-              </div>
-            ))}
-          </div>
+          {metodosConMovimiento.length === 0 ? (
+            <div className="cierreMethodsEmpty">Aún no hay movimientos registrados por método.</div>
+          ) : (
+            <div className="cierreMethodsList">
+              {metodosConMovimiento.map((metodo) => (
+                <div className="cierreMethodRow" key={metodo}>
+                  <div className="cierreMethodMain">
+                    <span>{metodo === "OTRO" ? "Otro" : metodo}</span>
+                    <strong>{money(dineroProcesado.porMetodo[metodo])}</strong>
+                  </div>
+                  <small>
+                    Vita Lima: {money(resumenPagos.porMetodo[metodo])}
+                    {Number(resumenPropinas.porMetodo[metodo] ?? 0) > 0.009 ? ` · Propina: ${money(resumenPropinas.porMetodo[metodo])}` : ""}
+                  </small>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
 
         <section className="panel">
@@ -366,7 +388,9 @@ export default async function CierreCajaPage({
                   <tr>
                     <th>Fecha</th>
                     <th>Sede</th>
-                    <th>Ingresos</th>
+                    <th>Ingresos Vita Lima</th>
+                    <th>Propinas</th>
+                    <th>Total procesado</th>
                     <th>Salidas</th>
                     <th>Caja física esperada</th>
                     <th>Diferencia física</th>
@@ -381,6 +405,8 @@ export default async function CierreCajaPage({
                       <td>{row.fecha}</td>
                       <td>{row.sede}</td>
                       <td>{money(row.total_ingresos)}</td>
+                      <td>{money(row.total_propinas)}</td>
+                      <td>{money(row.total_procesado)}</td>
                       <td>{money(row.total_salidas)}</td>
                       <td>{physicalMoney(row.caja_esperada)}</td>
                       <td className="strong">{physicalMoney(row.diferencia)}</td>
@@ -400,7 +426,9 @@ export default async function CierreCajaPage({
                     <Badge tone={String(row.estado).toUpperCase() === "CERRADO" ? "good" : "warn"}>{row.estado || "-"}</Badge>
                   </div>
                   <div className="mobileRecordMeta">
-                    <div className="mobileRecordHighlight"><span>Ingresos</span><strong>{money(row.total_ingresos)}</strong></div>
+                    <div className="mobileRecordHighlight"><span>Ingresos Vita Lima</span><strong>{money(row.total_ingresos)}</strong></div>
+                    <div><span>Propinas</span><strong>{money(row.total_propinas)}</strong></div>
+                    <div><span>Total procesado</span><strong>{money(row.total_procesado)}</strong></div>
                     <div><span>Salidas</span><strong>{money(row.total_salidas)}</strong></div>
                     <div><span>Caja física esperada</span><strong>{physicalMoney(row.caja_esperada)}</strong></div>
                     <div><span>Diferencia física</span><strong>{physicalMoney(row.diferencia)}</strong></div>

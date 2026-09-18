@@ -242,6 +242,8 @@ test("navegación comparte orden y limita permisos explícitamente", async () =>
     "Preparar cita",
     "Nueva atención",
     "Clientes",
+    "Terapistas",
+    "Horarios",
     "Registrar salida",
     "Gift Cards",
     "Comprobantes",
