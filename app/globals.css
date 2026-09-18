@@ -1317,6 +1317,47 @@ body {
   align-items: stretch;
 }
 
+
+/* Ancho operativo consistente: filtros, formularios, resúmenes e historial comparten eje. */
+.registrarSalidaPage,
+.cierreCajaPage,
+.giftCardsPage {
+  --operational-content-width: 980px;
+}
+
+.registrarSalidaPage > .panel,
+.registrarSalidaPage > .operationalWizard,
+.cierreCajaPage > .panel,
+.cierreCajaPage > .operationalWizard,
+.cierreCajaPage > .grid.secondary,
+.giftCardsPage > .giftCardWizard,
+.giftCardsPage > .giftCardHistory {
+  width: min(100%, var(--operational-content-width));
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.registrarSalidaPage > .operationalWizard,
+.cierreCajaPage > .operationalWizard,
+.giftCardsPage > .giftCardWizard {
+  max-width: none;
+}
+
+.registrarSalidaPage > .panel,
+.cierreCajaPage > .panel,
+.giftCardsPage > .giftCardHistory {
+  box-sizing: border-box;
+}
+
+.cierreCajaPage > .grid.secondary {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.giftCardsPage > .giftCardHistory {
+  margin-top: 0;
+}
+
+
 @media (max-width: 760px) {
   .nuevaAtencionPage .atencionGrid,
   .operationalWizardGrid,
