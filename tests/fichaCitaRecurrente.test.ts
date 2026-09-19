@@ -258,11 +258,17 @@ test("un fallo de identidad usa un error genérico y no devuelve datos", async (
   assert.doesNotMatch(route, /teléfono pertenece|cliente ajeno|otro cliente/i);
 });
 
-test("identificar una reserva no asociada no consulta ni expone historial", async () => {
-  const route = await readFile(new URL("../app/api/publico/ficha/[token]/identificar/route.ts", import.meta.url), "utf8");
-  const branch = route.match(/if \(!cita\.cliente_id\) \{[\s\S]*?return jsonNoStore\(construirFichaNuevaSinHistorial\(\)\);\n    \}/)?.[0] ?? "";
-  assert.match(branch, /telefonoIdentificacionValido\(telefono\)/);
-  assert.doesNotMatch(branch, /cargarCliente|cargarUltimaSalud|cargarUltimoComprobante|cargarTelefonoClienteAsociado/);
+test("una reserva sin cliente busca coincidencia E.164 exacta y conserva el flujo recurrente", async () => {
+  const [route, shared] = await Promise.all([
+    readFile(new URL("../app/api/publico/ficha/[token]/identificar/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/publico/ficha/_lib.ts", import.meta.url), "utf8"),
+  ]);
+  const branch = route.match(/if \(!cita\.cliente_id\) \{[\s\S]*?\n    \} else \{/m)?.[0] ?? "";
+  assert.match(branch, /normalizarTelefonoE164\(telefono\.crudo, telefono\.pais\)/);
+  assert.match(branch, /cargarClientePorWhatsappE164\(normalizado\.e164\)/);
+  assert.match(branch, /construirFichaNuevaSinHistorial\(\)/);
+  assert.match(shared, /whatsapp_e164=eq\.\$\{encodeURIComponent\(whatsappE164\)\}/);
+  assert.doesNotMatch(shared, /whatsapp_e164=like|whatsapp_e164=ilike/);
 });
 
 test("identificar solo lee datos de negocio y no modifica registros históricos", async () => {
