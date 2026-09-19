@@ -198,3 +198,41 @@
     flex-direction: column;
   }
 }
+
+
+.benefitField {
+  display: grid;
+  gap: 7px;
+  font-weight: 850;
+}
+
+.benefitField select {
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: white;
+  padding: 10px 12px;
+  color: var(--charcoal);
+  font: inherit;
+}
+
+.benefitPreview {
+  display: grid;
+  gap: 5px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface-soft, #faf8f5);
+  padding: 14px;
+}
+
+.benefitPreview > span,
+.benefitPreview > small {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.benefitPreview p {
+  margin: 2px 0 0;
+  line-height: 1.45;
+}
