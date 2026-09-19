@@ -11,6 +11,7 @@ import {
 import {
   mensajeWhatsappCita,
   normalizarTelefonoE164,
+  telefonoGuardadoDesdeE164,
   plataformaDesdeCanal,
   politicaCancelacionUrl,
   requiereConsentimientoSalud,
@@ -106,6 +107,7 @@ export async function GET(
     pago,
     requiere: {
       codigoCupon: esConvenio,
+      whatsappPreconfirmado: esConvenio && Boolean(cita.whatsapp),
       correoObligatorio: false,
       documentoParaBoleta: esConvenio ? "no" : "opcional",
       ...confirmacion,
@@ -226,17 +228,23 @@ export async function POST(
     return errorResponse("validacion", "El correo no tiene un formato válido.");
   }
 
-  const telefonoCrudo = (payload.telefono?.crudo ?? "").trim();
-  const telefonoPais = (payload.telefono?.pais ?? "").trim();
-  if (!telefonoCrudo || !telefonoPais) {
-    return errorResponse("validacion", "Falta teléfono o país.");
-  }
+  const canal = cita.canal ?? "directo";
+  const esConvenio = canal === "cuponidad" || canal === "bee";
+  const telefonoPreconfirmado = esConvenio && Boolean(cita.whatsapp);
 
-  const telefonoNormalizado = normalizarTelefonoE164(telefonoCrudo, telefonoPais);
+  const telefonoNormalizado = telefonoPreconfirmado
+    ? telefonoGuardadoDesdeE164(String(cita.whatsapp ?? ""))
+    : normalizarTelefonoE164(
+        (payload.telefono?.crudo ?? "").trim(),
+        (payload.telefono?.pais ?? "").trim()
+      );
+
   if (!telefonoNormalizado.ok) {
     return errorResponse(
       "validacion",
-      "No se pudo interpretar el teléfono para ese país."
+      telefonoPreconfirmado
+        ? "El WhatsApp guardado en la reserva no es válido."
+        : "No se pudo interpretar el teléfono para ese país."
     );
   }
 
@@ -272,7 +280,6 @@ export async function POST(
     }
   }
 
-  const canal = cita.canal ?? "directo";
   const codigoCupon = (payload.codigoCupon ?? "").trim();
 
   const errorCodigoCupon = validarCodigoCuponPorCanal(canal, codigoCupon);
