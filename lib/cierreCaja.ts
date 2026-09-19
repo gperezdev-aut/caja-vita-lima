@@ -1,5 +1,3 @@
-import { normalizarMetodoSalida } from "./salidasCaja";
-
 export const METODOS_CIERRE = [
   "EFECTIVO",
   "YAPE",
@@ -138,7 +136,7 @@ export function resumirSalidasCierre(
       continue;
     }
 
-    if (normalizarMetodoSalida(rawMetodo) === "EFECTIVO") {
+    if (normalizarMetodoCierre(rawMetodo) === "EFECTIVO") {
       totalGastosEfectivo += monto;
     }
   }
@@ -154,7 +152,7 @@ export function resumirSalidasCierre(
     }
 
     const tipo = String(row.tipo_movimiento ?? "").trim().toUpperCase();
-    const metodo = normalizarMetodoSalida(rawMetodo);
+    const metodo = normalizarMetodoCierre(rawMetodo);
 
     if (metodo === "EFECTIVO" && tipo !== "TRANSFERENCIA") {
       totalMovimientosFondosEfectivo += monto;

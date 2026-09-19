@@ -102,7 +102,7 @@ test("Registrar salida conserva estado, separa naturaleza/método y confirma al 
     "sourceMovimientoId",
     "observacion",
   ]) {
-    assert.match(wizard, new RegExp(`const \\\\[${field}, set`));
+    assert.equal(wizard.includes(`const [${field}, set`), true);
   }
 
   assert.match(wizard, /name="naturaleza_salida"/);
@@ -125,7 +125,7 @@ test("Cierre navega del paso 1 al 4 y valida fondo contra efectivo contado", asy
   }
 
   for (const field of ["responsable", "cajaInicial", "efectivoContado", "fondoSiguiente", "observacion"]) {
-    assert.match(wizard, new RegExp(`const \\\\[${field}, set`));
+    assert.equal(wizard.includes(`const [${field}, set`), true);
   }
 
   assert.equal(validateCierreStep(1, cierreCompleto), "");

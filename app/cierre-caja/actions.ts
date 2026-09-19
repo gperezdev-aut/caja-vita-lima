@@ -146,6 +146,7 @@ export async function createCierreCajaAction(formData: FormData) {
     pagos.data,
     propinas.data
   );
+  const totalIngresos = dineroProcesado.ingresos.total;
   const resumenSalidas = resumirSalidasCierre(
     salidas.data,
     movimientosFondos.data
@@ -182,7 +183,7 @@ export async function createCierreCajaAction(formData: FormData) {
     caja_inicial: cajaInicial,
     efectivo_contado: efectivoContado,
     pozo_fondo: fondoSiguiente,
-    total_ingresos: dineroProcesado.ingresos.total,
+    total_ingresos: totalIngresos,
     total_propinas: dineroProcesado.propinas.total,
     total_procesado: dineroProcesado.totalProcesado,
     propinas_por_metodo: dineroProcesado.propinas.porMetodo,
