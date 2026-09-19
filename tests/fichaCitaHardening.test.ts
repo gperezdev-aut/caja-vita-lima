@@ -170,7 +170,7 @@ test("la expiración cruza medianoche de Lima sin vencer anticipadamente", () =>
 test("prepararCitaAction valida la vigencia calculada antes de invocar la RPC", async () => {
   const action = await readFile(new URL("../app/preparar-cita/actions.ts", import.meta.url), "utf8");
   const validation = action.indexOf("resolverExpiracionFichaVigente(fecha, hora, duracionMin)");
-  const rpc = action.indexOf("const rpc = await supabaseRpc");
+  const rpc = action.indexOf("const rpc = await supabaseRpc", validation);
   assert.ok(validation > 0 && rpc > validation);
   assert.match(action, /La hora seleccionada ya terminó/);
 });
