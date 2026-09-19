@@ -113,14 +113,33 @@ async function runWithDocker() {
     ], true);
     created = true;
 
-    for (let i = 0; i < 30; i += 1) {
-      const ready = spawnSync("docker", [
-        "exec", name, "pg_isready", "-U", "contract", "-d", "contract",
-      ], { stdio: "ignore" });
+    let ready = false;
 
-      if (ready.status === 0) break;
-      if (i === 29) fail("PostgreSQL did not become ready");
+    for (let i = 0; i < 60; i += 1) {
+      const logResult = spawnSync("docker", ["logs", name], {
+        encoding: "utf8",
+      });
+      const logs = `${logResult.stdout ?? ""}\n${logResult.stderr ?? ""}`;
+      const initCompleted = logs.includes(
+        "PostgreSQL init process complete; ready for start up."
+      );
+
+      if (initCompleted) {
+        const probe = spawnSync("docker", [
+          "exec", name, "pg_isready", "-U", "contract", "-d", "contract",
+        ], { stdio: "ignore" });
+
+        if (probe.status === 0) {
+          ready = true;
+          break;
+        }
+      }
+
       await new Promise((resolveDelay) => setTimeout(resolveDelay, 1000));
+    }
+
+    if (!ready) {
+      fail("PostgreSQL did not reach its final ready state");
     }
 
     const prefix = [
