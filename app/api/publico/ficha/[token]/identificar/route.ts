@@ -90,7 +90,10 @@ export async function POST(
     // el token privado habilita una ficha nueva, pero NO se consulta el maestro
     // de clientes ni se expone historial por el teléfono que el usuario escriba.
     if (!cita.cliente_id) {
-      if (!telefonoIdentificacionValido(telefono)) {
+      const telefonoValido = cita.whatsapp
+        ? telefonoCoincideConClienteAsociado(telefono, { whatsapp_e164: cita.whatsapp })
+        : telefonoIdentificacionValido(telefono);
+      if (!telefonoValido) {
         await registrarIntentoFallido(ip, claveIntentos, intentosPrevios);
         return errorIdentificacion();
       }
