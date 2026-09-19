@@ -27,7 +27,19 @@ create table public.caja_salidas (
   responsable text,
   source_movimiento_id text,
   observacion text,
-  created_at timestamptz default now()
+  created_at timestamptz default now(),
+  categoria_financiera text,
+  constraint caja_salidas_categoria_financiera_check
+    check (
+      categoria_financiera is null
+      or categoria_financiera in (
+        'GASTO_OPERATIVO',
+        'ENTREGA_PROPINA',
+        'MOVIMIENTO_FONDOS',
+        'DEVOLUCION_PRESTAMO',
+        'SIN_CLASIFICAR'
+      )
+    )
 );
 
 create table public.caja_cierres (
@@ -97,7 +109,7 @@ async function runWithDocker() {
       "--env", "POSTGRES_DB=contract",
       "--env", "POSTGRES_USER=contract",
       "--env", "POSTGRES_PASSWORD=contract",
-      "postgres:16-alpine",
+      process.env.POSTGRES_IMAGE || "postgres:16-alpine",
     ], true);
     created = true;
 
