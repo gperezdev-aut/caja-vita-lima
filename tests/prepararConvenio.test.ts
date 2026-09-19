@@ -35,4 +35,5 @@ test("la migración no inserta pagos al preparar convenio", () => {
   const preparar = sql.split("create or replace function public.caja_sync_estado_convenio_cita_v1")[0];
   assert.doesNotMatch(preparar, /insert\s+into\s+public\.caja_pagos/i);
   assert.match(preparar, /'Esperando ficha'/);
+  assert.match(preparar, /true, null, 'es'/);
 });
