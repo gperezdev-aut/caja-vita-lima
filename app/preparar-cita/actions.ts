@@ -38,6 +38,7 @@ export type PrepararCitaState = {
   mensaje?: string;
   enlace?: string;
   reservaId?: string;
+  whatsappUrl?: string;
 };
 
 const INITIAL_STATE: PrepararCitaState = { ok: false };
@@ -99,10 +100,15 @@ export async function prepararConvenioAction(
   const fecha = text(formData, "fecha");
   const hora = text(formData, "hora");
   const sede = text(formData, "sede");
+  const pais = text(formData, "pais").toUpperCase();
+  const telefono = normalizarTelefonoE164(text(formData, "telefono"), pais);
   const requestId = text(formData, "request_id");
 
   if (canal !== "cuponidad" && canal !== "bee") {
     return { ok: false, error: "Selecciona Cuponidad o Bee Beneficios." };
+  }
+  if (!telefono.ok) {
+    return { ok: false, error: "Ingresa un WhatsApp válido para el país seleccionado." };
   }
   if (!fecha || fecha < fechaLima() || !hora || !sede) {
     return { ok: false, error: "Selecciona sede, fecha y una hora válida." };
@@ -142,6 +148,7 @@ export async function prepararConvenioAction(
         fecha,
         hora,
         sede,
+        whatsapp_e164: telefono.e164,
         responsable: session.nombre,
         movimiento_id: crearId("MOV"),
         reserva_id: crearId("RES"),
@@ -160,11 +167,13 @@ export async function prepararConvenioAction(
 
   const proveedor = canal === "cuponidad" ? "Cuponidad" : "Bee Beneficios";
   const enlace = `https://vitalimaspa.com/cita/${rpc.data.token}`;
+  const whatsappUrl = `https://wa.me/${telefono.e164.replace(/\D/g, "")}?text=${encodeURIComponent(`Hola, completa tu ficha de ${proveedor} aquí: ${enlace}`)}`;
   return {
     ok: true,
     enlace,
+    whatsappUrl,
     reservaId: rpc.data.reserva_id,
-    mensaje: `Reserva de ${proveedor} preparada para ${fecha} a las ${hora} en ${sede}. El cliente debe completar sus datos y escribir el código del cupón en esta ficha: ${enlace}`,
+    mensaje: `Reserva de ${proveedor} preparada para ${fecha} a las ${hora} en ${sede}. El WhatsApp ya quedó registrado; el cliente completa nombre, código y salud en esta ficha: ${enlace}`,
   };
 }
 
