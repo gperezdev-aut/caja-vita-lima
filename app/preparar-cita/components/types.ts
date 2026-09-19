@@ -11,4 +11,4 @@ export type Service = {
   reservationBehavior: string;
 };
 
-export type AppointmentType = "single" | "couple" | "home" | "custom";
+export type AppointmentType = "single" | "couple" | "home" | "custom" | "benefit";
