@@ -22,13 +22,23 @@ test("Cupones usa reservas de Cuponidad y Bee como bandeja completa", () => {
   assert.match(page, /Canjeado/);
 });
 
-test("validar cupón asigna servicio y monto reconocido sin crear un pago", () => {
-  const sql = read("sql/042_cupones_convenios_operacion.sql");
-  assert.match(sql, /caja_validar_cupon_convenio_v1/);
-  assert.match(sql, /caja_catalog_active_services_read_v1/);
-  assert.match(sql, /monto_reconocido = round\(p_monto_reconocido, 2\)/);
-  assert.match(sql, /estado = 'verificado'/);
+test("el catálogo de convenios separa servicio de cálculos económicos", () => {
+  const sql = read("sql/043_catalogo_convenios_servicios.sql");
+  const form = read("app/cupones/CuponValidationForm.tsx");
+  const actions = read("app/cupones/actions.ts");
+
+  assert.match(sql, /create table if not exists public\.caja_convenio_beneficios/);
+  assert.match(sql, /caja_asignar_beneficio_convenio_v1/);
+  assert.match(sql, /CUP-MASAJE-3S/);
+  assert.match(sql, /BEE-PACK-VITA/);
+  assert.match(sql, /BEE-PACK-RENOVA/);
+  assert.match(sql, /economia_pendiente/);
   assert.doesNotMatch(sql, /insert\s+into\s+public\.caja_pagos/i);
+
+  assert.match(actions, /caja_asignar_beneficio_convenio_v1/);
+  assert.doesNotMatch(actions, /p_monto_reconocido/);
+  assert.doesNotMatch(form, /monto_reconocido/);
+  assert.match(form, /No se calcula monto, comisión, fee ni cobertura/);
 });
 
 test("la atención recibe el convenio verificado automáticamente", () => {
@@ -61,4 +71,23 @@ test("el convenio mantiene WhatsApp del lado cliente y recupera recurrente por E
   assert.match(route, /cargarClientePorWhatsappE164\(normalizado\.e164\)/);
   assert.match(route, /construirFichaRecurrente/);
   assert.match(shared, /whatsapp_e164=eq\.\$\{encodeURIComponent\(whatsappE164\)\}/);
+});
+
+
+test("Cuponidad y Bee muestran solo beneficios propios del convenio", () => {
+  const page = read("app/cupones/page.tsx");
+  const form = read("app/cupones/CuponValidationForm.tsx");
+  assert.match(page, /caja_convenio_beneficios/);
+  assert.match(page, /provider=\{provider\}/);
+  assert.match(form, /benefits\.filter\(\(benefit\) => benefit\.provider === provider\)/);
+  assert.doesNotMatch(page, /leerCatalogoPrepararCita/);
+});
+
+test("la opción multisesión se guarda sin implementar todavía el consumo", () => {
+  const sql = read("sql/043_catalogo_convenios_servicios.sql");
+  assert.match(sql, /'CUP-MASAJE-3S'/);
+  assert.match(sql, /30, 3, 'San Borja'/);
+  assert.match(sql, /control de consumo pendiente de implementación/);
+  assert.match(sql, /sesiones_total = v_beneficio\.sesiones_total/);
+  assert.doesNotMatch(sql, /sesiones_usadas/);
 });
