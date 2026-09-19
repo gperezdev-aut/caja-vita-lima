@@ -1,0 +1,200 @@
+.page {
+  min-width: 0;
+}
+
+.filters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.filters label {
+  display: grid;
+  gap: 6px;
+  font-weight: 800;
+  font-size: 13px;
+}
+
+.filters select,
+.filters input,
+.amountField input {
+  width: 100%;
+  min-height: 46px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: white;
+  padding: 10px 12px;
+  color: var(--charcoal);
+  font: inherit;
+}
+
+.summaryGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.summaryCard {
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 16px;
+}
+
+.summaryCard span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.summaryCard strong {
+  display: block;
+  font-size: 26px;
+  margin-top: 4px;
+}
+
+.list {
+  display: grid;
+  gap: 14px;
+}
+
+.couponCard {
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: white;
+  padding: 18px;
+  display: grid;
+  gap: 14px;
+}
+
+.cardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cardHeader h3 {
+  margin: 2px 0 0;
+  font-size: 20px;
+}
+
+.provider {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.meta {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.meta div {
+  border-radius: 14px;
+  background: var(--surface-soft, #faf8f5);
+  padding: 11px 12px;
+  min-width: 0;
+}
+
+.meta span {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  margin-bottom: 3px;
+}
+
+.meta strong,
+.meta code {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.codeBox {
+  border: 1px dashed var(--line);
+  border-radius: 14px;
+  padding: 12px;
+  display: grid;
+  gap: 4px;
+}
+
+.codeBox span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.codeBox code {
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.validationDetails {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.validationDetails summary {
+  cursor: pointer;
+  font-weight: 900;
+  color: var(--green);
+}
+
+.validationForm {
+  display: grid;
+  gap: 16px;
+  margin-top: 14px;
+}
+
+.amountField {
+  display: grid;
+  gap: 6px;
+  font-weight: 850;
+}
+
+.amountField small {
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.empty {
+  padding: 26px;
+  text-align: center;
+}
+
+@media (max-width: 820px) {
+  .filters {
+    grid-template-columns: 1fr;
+  }
+
+  .summaryGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .meta {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .couponCard {
+    padding: 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  .summaryGrid,
+  .meta {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .cardHeader {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
