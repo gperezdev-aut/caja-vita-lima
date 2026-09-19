@@ -246,6 +246,7 @@ test("navegación comparte orden y limita permisos explícitamente", async () =>
     "Horarios",
     "Registrar salida",
     "Gift Cards",
+    "Cupones",
     "Comprobantes",
     "Cierre de caja",
     "Alertas",
@@ -254,6 +255,7 @@ test("navegación comparte orden y limita permisos explícitamente", async () =>
   const operation = auth.match(/VITA_OPERACION: \[([\s\S]*?)\n  \]/)?.[1] ?? "";
   assert.doesNotMatch(socio, /gift-cards/);
   assert.match(operation, /gift-cards/);
+  assert.match(operation, /cupones/);
 });
 
 test("harness SQL cubre contrato obligatorio y revierte", async () => {
