@@ -27,7 +27,7 @@ begin
       'request_id', '43000000-0000-4000-8000-000000000001',
       'canal', 'cuponidad',
       'fecha', ((now() at time zone 'America/Lima')::date + 1)::text,
-      'hora', '12:00',
+      'hora', '15:00',
       'sede', 'San Borja',
       'responsable', 'QA',
       'movimiento_id', 'MOV-QA-CATCONV-001',
