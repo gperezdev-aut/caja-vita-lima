@@ -1,13 +1,17 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { supabaseInsert, supabaseSelectAllWhere } from "@/lib/supabaseServer";
+import {
+  supabaseInsert,
+  supabaseSelectAllWhere,
+  supabaseSelectWhere,
+} from "@/lib/supabaseServer";
 import { requireModuleAccess } from "@/lib/auth";
 import {
-  cajaFisicaNoCalculable,
+  calcularCajaFisica,
   resumirDineroProcesadoCierre,
   resumirMovimientosOperativos,
-  sumarSalidas,
+  resumirSalidasCierre,
 } from "@/lib/cierreCaja";
 
 function clean(value: FormDataEntryValue | null) {
@@ -35,6 +39,11 @@ function moduleUrl(fecha: string, sede: string) {
   return query ? `/cierre-caja?${query}` : "/cierre-caja";
 }
 
+function withError(baseUrl: string, message: string) {
+  const separator = baseUrl.includes("?") ? "&" : "?";
+  return `${baseUrl}${separator}error=${encodeURIComponent(message)}`;
+}
+
 export async function createCierreCajaAction(formData: FormData) {
   await requireModuleAccess("cierre-caja");
 
@@ -42,26 +51,42 @@ export async function createCierreCajaAction(formData: FormData) {
   const sede = clean(formData.get("sede"));
   const cajaInicial = money(formData.get("caja_inicial"));
   const efectivoContado = money(formData.get("efectivo_contado"));
-  const pozoFondo = money(formData.get("pozo_fondo"));
+  const fondoSiguiente = money(formData.get("pozo_fondo"));
   const responsable = clean(formData.get("responsable")) || "Gerald";
   const observacion = clean(formData.get("observacion"));
 
   const baseUrl = moduleUrl(fecha, sede);
-  const separator = baseUrl.includes("?") ? "&" : "?";
 
   if (!fecha || !sede) {
-    redirect(`${baseUrl}${separator}error=${encodeURIComponent("Completa fecha y sede.")}`);
+    redirect(withError(baseUrl, "Completa fecha y sede."));
   }
 
-  if (cajaInicial < 0 || efectivoContado < 0 || pozoFondo < 0) {
-    redirect(`${baseUrl}${separator}error=${encodeURIComponent("Los montos no pueden ser negativos.")}`);
+  if (cajaInicial < 0 || efectivoContado < 0 || fondoSiguiente < 0) {
+    redirect(withError(baseUrl, "Los montos no pueden ser negativos."));
+  }
+
+  if (fondoSiguiente > efectivoContado) {
+    redirect(
+      withError(
+        baseUrl,
+        "El fondo para el siguiente día no puede ser mayor que el efectivo contado."
+      )
+    );
   }
 
   const filtroFechaSede = [
     `fecha=eq.${fecha}`,
     `sede=eq.${encodeURIComponent(sede)}`,
   ];
-  const [pagos, propinas, salidas, movimientos] = await Promise.all([
+
+  const [
+    pagos,
+    propinas,
+    salidas,
+    movimientosFondos,
+    movimientos,
+    cierreExistente,
+  ] = await Promise.all([
     supabaseSelectAllWhere<Record<string, unknown>>(
       "caja_pagos",
       ["select=metodo,monto", ...filtroFechaSede].join("&")
@@ -72,7 +97,11 @@ export async function createCierreCajaAction(formData: FormData) {
     ),
     supabaseSelectAllWhere<Record<string, unknown>>(
       "caja_salidas",
-      ["select=monto", ...filtroFechaSede].join("&")
+      ["select=monto,metodo_salida,categoria_financiera,tipo_gasto,concepto", ...filtroFechaSede].join("&")
+    ),
+    supabaseSelectAllWhere<Record<string, unknown>>(
+      "caja_movimientos_fondos",
+      ["select=tipo_movimiento,metodo,monto", ...filtroFechaSede].join("&")
     ),
     supabaseSelectAllWhere<Record<string, unknown>>(
       "caja_movimientos",
@@ -81,25 +110,70 @@ export async function createCierreCajaAction(formData: FormData) {
         ...filtroFechaSede,
       ].join("&")
     ),
+    supabaseSelectWhere<Record<string, unknown>>(
+      "caja_cierres",
+      [
+        "select=cierre_id",
+        ...filtroFechaSede,
+        "estado=eq.CERRADO",
+        "limit=1",
+      ].join("&")
+    ),
   ]);
 
-  const lecturaError = pagos.error || propinas.error || salidas.error || movimientos.error;
+  const lecturaError =
+    pagos.error ||
+    propinas.error ||
+    salidas.error ||
+    movimientosFondos.error ||
+    movimientos.error ||
+    cierreExistente.error;
+
   if (lecturaError) {
-    redirect(`${baseUrl}${separator}error=${encodeURIComponent(lecturaError)}`);
+    redirect(withError(baseUrl, lecturaError));
   }
 
-  // total_ingresos conserva únicamente dinero que pertenece a Vita Lima.
-  // Las propinas se guardan como snapshot separado y solo se suman en total_procesado
-  // para cuadrar medios físicos/digitales con lo realmente cobrado al cliente.
-  const dineroProcesado = resumirDineroProcesadoCierre(pagos.data, propinas.data);
-  const totalIngresos = dineroProcesado.ingresos.total;
-  const totalSalidas = sumarSalidas(salidas.data);
-  const { paxTotal, boletasPendientes } = resumirMovimientosOperativos(movimientos.data);
+  if (cierreExistente.data.length > 0) {
+    redirect(
+      withError(
+        baseUrl,
+        "Ya existe un cierre CERRADO para esta fecha y sede. No se creará un cierre duplicado."
+      )
+    );
+  }
 
-  // caja_salidas no registra método, por lo que no se puede determinar cuánto
-  // salió de la caja física. Se escriben NULL explícitos para conservar el
-  // esquema sin persistir una diferencia engañosa que incluya pagos digitales.
-  const { cajaEsperada, diferencia } = cajaFisicaNoCalculable();
+  const dineroProcesado = resumirDineroProcesadoCierre(
+    pagos.data,
+    propinas.data
+  );
+  const totalIngresos = dineroProcesado.ingresos.total;
+  const resumenSalidas = resumirSalidasCierre(
+    salidas.data,
+    movimientosFondos.data
+  );
+
+  if (!resumenSalidas.fisicoCalculable) {
+    redirect(
+      withError(
+        baseUrl,
+        `Hay ${resumenSalidas.salidasSinMetodo} salida(s) sin método. Clasifícalas antes de cerrar para no inventar la caja física.`
+      )
+    );
+  }
+
+  const { paxTotal, boletasPendientes } =
+    resumirMovimientosOperativos(movimientos.data);
+
+  const fisico = calcularCajaFisica({
+    cajaInicial,
+    efectivoVitaLima: dineroProcesado.ingresos.efectivo,
+    efectivoPropinas: dineroProcesado.propinas.efectivo,
+    totalSalidasEfectivo: resumenSalidas.totalSalidasEfectivo,
+    efectivoContado,
+    fondoSiguiente,
+    calculable: true,
+  });
+
   const cierreId = id("CIE");
 
   const cierre = await supabaseInsert("caja_cierres", {
@@ -108,15 +182,21 @@ export async function createCierreCajaAction(formData: FormData) {
     sede,
     caja_inicial: cajaInicial,
     efectivo_contado: efectivoContado,
-    pozo_fondo: pozoFondo,
+    pozo_fondo: fondoSiguiente,
     total_ingresos: totalIngresos,
     total_propinas: dineroProcesado.propinas.total,
     total_procesado: dineroProcesado.totalProcesado,
     propinas_por_metodo: dineroProcesado.propinas.porMetodo,
     dinero_procesado_por_metodo: dineroProcesado.porMetodo,
-    total_salidas: totalSalidas,
-    caja_esperada: cajaEsperada,
-    diferencia,
+    total_salidas: resumenSalidas.totalGastos,
+    efectivo_vita_lima: dineroProcesado.ingresos.efectivo,
+    efectivo_propinas: dineroProcesado.propinas.efectivo,
+    total_salidas_efectivo: resumenSalidas.totalSalidasEfectivo,
+    caja_esperada: fisico.cajaEsperada,
+    diferencia: fisico.diferencia,
+    efectivo_a_retirar: fisico.efectivoARetirar ?? 0,
+    salidas_sin_metodo: resumenSalidas.salidasSinMetodo,
+    cierre_fisico_calculable: true,
     pax_total: paxTotal,
     boletas_pendientes: boletasPendientes,
     responsable,
@@ -125,8 +205,11 @@ export async function createCierreCajaAction(formData: FormData) {
   });
 
   if (cierre.error) {
-    redirect(`${baseUrl}${separator}error=${encodeURIComponent(cierre.error)}`);
+    redirect(withError(baseUrl, cierre.error));
   }
 
-  redirect(`${baseUrl}${separator}ok=1&id=${encodeURIComponent(cierreId)}`);
+  const separator = baseUrl.includes("?") ? "&" : "?";
+  redirect(
+    `${baseUrl}${separator}ok=1&id=${encodeURIComponent(cierreId)}`
+  );
 }
