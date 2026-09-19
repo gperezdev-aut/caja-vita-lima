@@ -65,6 +65,8 @@ begin
     where reserva_id = 'RES-QA-CUPON-001'
       and canal = 'cuponidad'
       and estado_ficha = 'pendiente'
+      and requiere_confirmacion is true
+      and confirmado_en is null
       and monto_total = 0
       and adelanto = 0
   ) then
@@ -135,6 +137,7 @@ begin
       and monto_total = 70.00
       and adelanto = 0
       and saldo_pendiente = 70.00
+      and confirmado_en is not null
   ) then
     raise exception 'QA_CONVENIO_RESERVA_NO_RECIBE_SERVICIO';
   end if;
