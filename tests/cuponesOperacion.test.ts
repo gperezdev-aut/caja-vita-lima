@@ -53,3 +53,11 @@ test("un convenio pendiente no genera ICS con duración inventada", () => {
   assert.match(route, /esConvenio && \(!cita\.duracion_min \|\| cita\.duracion_min <= 0\)/);
   assert.match(route, /pendiente de validar antes de agregarlo al calendario/);
 });
+
+
+test("la ficha de convenio marca el WhatsApp como preconfirmado sin exponerlo", () => {
+  const route = read("app/api/publico/ficha/[token]/route.ts");
+  assert.match(route, /whatsappPreconfirmado: esConvenio && Boolean\(cita\.whatsapp\)/);
+  assert.match(route, /telefonoGuardadoDesdeE164/);
+  assert.doesNotMatch(route, /body\.whatsapp\s*=/);
+});
