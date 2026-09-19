@@ -1483,3 +1483,37 @@ body {
 }
 
 /* Vercel preview rebuild marker — no functional styles. */
+
+
+/* Cupón / Beneficio — confirmación compacta y legible en móvil */
+.convenioConfirmationGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.convenioConfirmationGrid > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-soft, #faf8f5);
+}
+
+.convenioConfirmationGrid span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.convenioConfirmationGrid strong {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 560px) {
+  .convenioConfirmationGrid {
+    grid-template-columns: 1fr;
+  }
+}
