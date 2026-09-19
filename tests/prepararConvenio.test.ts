@@ -37,3 +37,14 @@ test("la migración no inserta pagos al preparar convenio", () => {
   assert.match(preparar, /'Esperando ficha'/);
   assert.match(preparar, /true, null, 'es'/);
 });
+
+
+test("el paso Confirmar no genera el enlace hasta un clic explícito", () => {
+  const form = read("app/preparar-cita/PrepararConvenioForm.tsx");
+  assert.match(form, /submitArmedRef/);
+  assert.match(form, /requestSubmit\(\)/);
+  assert.match(form, /if \(!submitArmedRef\.current\)/);
+  assert.match(form, /event\.preventDefault\(\)/);
+  assert.match(form, /type="button"[\s\S]*Confirmar y generar enlace/);
+  assert.doesNotMatch(form, /type="submit" className="primaryButton"[\s\S]*Generar enlace de ficha/);
+});
