@@ -14,7 +14,7 @@ import { secretoCajaValido } from "@/lib/fichaCitaSeguridad";
 
 export { CANALES_FICHA as FICHA_CANALES } from "@/lib/fichaCitaDominio";
 export type { CanalFicha as FichaCanal } from "@/lib/fichaCitaDominio";
-export { normalizarTelefonoE164 } from "@/lib/fichaCitaDominio";
+export { normalizarTelefonoE164, telefonoGuardadoDesdeE164 } from "@/lib/fichaCitaDominio";
 export type { NormalizarTelefonoResultado } from "@/lib/fichaCitaDominio";
 
 export type FichaErrorCode =
