@@ -387,6 +387,7 @@ export async function POST(
     whatsappUrl,
     resumen: {
       ...construirCitaResumen(cita, sedeInfo),
+      canal,
       moneda: "PEN",
       adelantoRecibido: pagoResumen.adelantoRecibido,
       saldo: pagoResumen.saldo,
