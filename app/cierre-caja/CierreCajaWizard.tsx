@@ -7,7 +7,12 @@ import { OperationalWizardStepper } from "@/components/OperationalWizardStepper"
 import { Select } from "@/components/Select";
 import { SubmitButton } from "@/components/SubmitButton";
 import { Textarea } from "@/components/Textarea";
-import { physicalValue, validateCierreStep, type CierreDraft } from "./cierreCajaDomain";
+import { calcularCajaFisica } from "@/lib/cierreCaja";
+import {
+  physicalValue,
+  validateCierreStep,
+  type CierreDraft,
+} from "./cierreCajaDomain";
 
 type Props = {
   action: (formData: FormData) => void | Promise<void>;
@@ -17,12 +22,14 @@ type Props = {
   totalIngresos: number;
   totalSalidas: number;
   efectivoRecibido: number;
+  efectivoPropinas: number;
   pagosDigitales: number;
   pagosPorMetodo: Record<string, number>;
   paxTotal: number;
   boletasPendientes: number;
-  cajaEsperada: number | null;
-  diferencia: number | null;
+  totalSalidasEfectivo: number;
+  salidasSinMetodo: number;
+  cajaInicialSugerida: number;
   cierresExistentes: number;
   serverError?: string;
   errorStep?: number;
@@ -33,12 +40,20 @@ const steps = ["Datos", "Conteo", "Revisión", "Confirmar"];
 function money(value: number | string) {
   const parsed = Number(String(value).replace(",", "."));
   const safe = Number.isFinite(parsed) ? parsed : 0;
-  return `S/ ${safe.toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `S/ ${safe.toLocaleString("es-PE", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 function physicalMoney(value: number | null) {
   const physical = physicalValue(value);
   return typeof physical === "number" ? money(physical) : physical;
+}
+
+function numeric(value: string) {
+  const parsed = Number(value.replace(",", "."));
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 export function CierreCajaWizard({
@@ -49,12 +64,14 @@ export function CierreCajaWizard({
   totalIngresos,
   totalSalidas,
   efectivoRecibido,
+  efectivoPropinas,
   pagosDigitales,
   pagosPorMetodo,
   paxTotal,
   boletasPendientes,
-  cajaEsperada,
-  diferencia,
+  totalSalidasEfectivo,
+  salidasSinMetodo,
+  cajaInicialSugerida,
   cierresExistentes,
   serverError = "",
   errorStep = 1,
@@ -66,10 +83,15 @@ export function CierreCajaWizard({
   const [responsable, setResponsable] = useState(
     responsables.includes("Gerald") ? "Gerald" : responsables[0] ?? "Gerald"
   );
-  const [cajaInicial, setCajaInicial] = useState("0.00");
+  const [cajaInicial, setCajaInicial] = useState(cajaInicialSugerida.toFixed(2));
   const [efectivoContado, setEfectivoContado] = useState("0.00");
-  const [pozoFondo, setPozoFondo] = useState("0.00");
+  const [fondoSiguiente, setFondoSiguiente] = useState(
+    cajaInicialSugerida.toFixed(2)
+  );
   const [observacion, setObservacion] = useState("");
+
+  const fisicoCalculable = salidasSinMetodo === 0;
+  const cierreBloqueado = cierresExistentes > 0;
 
   const draft: CierreDraft = {
     fecha,
@@ -77,8 +99,18 @@ export function CierreCajaWizard({
     responsable,
     cajaInicial,
     efectivoContado,
-    pozoFondo,
+    fondoSiguiente,
   };
+
+  const fisico = calcularCajaFisica({
+    cajaInicial: numeric(cajaInicial),
+    efectivoVitaLima: efectivoRecibido,
+    efectivoPropinas,
+    totalSalidasEfectivo,
+    efectivoContado: numeric(efectivoContado),
+    fondoSiguiente: numeric(fondoSiguiente),
+    calculable: fisicoCalculable,
+  });
 
   function goTo(target: number) {
     if (target > maxStep) return;
@@ -120,6 +152,16 @@ export function CierreCajaWizard({
       return;
     }
 
+    if (cierreBloqueado || !fisicoCalculable) {
+      event.preventDefault();
+      setError(
+        cierreBloqueado
+          ? "Ya existe un cierre CERRADO para esta fecha y sede."
+          : "Clasifica las salidas sin método antes de cerrar la caja."
+      );
+      return;
+    }
+
     for (const currentStep of [1, 2]) {
       const message = validateCierreStep(currentStep, draft);
       if (message) {
@@ -133,17 +175,21 @@ export function CierreCajaWizard({
 
   const financialSummary = (
     <div className="operationalReview operationalFinancialReview">
-      <div className="reviewImportant"><span>Ingresos</span><strong>{money(totalIngresos)}</strong></div>
-      <div><span>Salidas</span><strong>{money(totalSalidas)}</strong></div>
-      <div><span>Efectivo recibido</span><strong>{money(efectivoRecibido)}</strong></div>
-      <div><span>Pagos digitales</span><strong>{money(pagosDigitales)}</strong></div>
+      <div className="reviewImportant"><span>Ingresos Vita Lima</span><strong>{money(totalIngresos)}</strong></div>
+      <div><span>Gastos Vita Lima</span><strong>{money(totalSalidas)}</strong></div>
+      <div><span>Efectivo Vita Lima</span><strong>{money(efectivoRecibido)}</strong></div>
+      <div><span>Propinas en efectivo</span><strong>{money(efectivoPropinas)}</strong></div>
+      <div><span>Salidas que reducen efectivo</span><strong>{money(totalSalidasEfectivo)}</strong></div>
+      <div><span>Pagos digitales Vita Lima</span><strong>{money(pagosDigitales)}</strong></div>
       {Object.entries(pagosPorMetodo).map(([metodo, monto]) => (
         <div key={metodo}><span>{metodo}</span><strong>{money(monto)}</strong></div>
       ))}
       <div><span>Pax</span><strong>{paxTotal}</strong></div>
       <div className={boletasPendientes > 0 ? "reviewPending" : ""}><span>Boletas pendientes</span><strong>{boletasPendientes}</strong></div>
-      <div><span>Caja física esperada</span><strong>{physicalMoney(cajaEsperada)}</strong></div>
-      <div><span>Diferencia física</span><strong>{physicalMoney(diferencia)}</strong></div>
+      <div className={salidasSinMetodo > 0 ? "reviewPending" : ""}><span>Salidas sin método</span><strong>{salidasSinMetodo}</strong></div>
+      <div><span>Caja física esperada</span><strong>{physicalMoney(fisico.cajaEsperada)}</strong></div>
+      <div><span>Diferencia física</span><strong>{physicalMoney(fisico.diferencia)}</strong></div>
+      <div><span>Efectivo a retirar/depositar</span><strong>{physicalMoney(fisico.efectivoARetirar)}</strong></div>
     </div>
   );
 
@@ -157,9 +203,9 @@ export function CierreCajaWizard({
         <p className="wizardIntro">Confirma la fecha, sede y persona responsable.</p>
         {step === 1 && error && <div className="wizardError" role="alert">{error}</div>}
 
-        {cierresExistentes > 0 && (
-          <div className="operationalExistingNotice" role="status">
-            Ya existen {cierresExistentes} cierre{cierresExistentes === 1 ? "" : "s"} registrado{cierresExistentes === 1 ? "" : "s"} para esta fecha y sede.
+        {cierreBloqueado && (
+          <div className="operationalWarning" role="status">
+            Ya existe {cierresExistentes} cierre CERRADO para esta fecha y sede. No se permitirá crear otro cierre duplicado.
           </div>
         )}
 
@@ -187,8 +233,10 @@ export function CierreCajaWizard({
 
       <section className={`wizardPanel ${step === 2 ? "visible" : ""}`} aria-labelledby="cierre-step-2">
         <p className="stepKicker">Paso 2 de 4</p>
-        <h2 id="cierre-step-2">Conteo</h2>
-        <p className="wizardIntro">Registra únicamente los montos manuales existentes.</p>
+        <h2 id="cierre-step-2">Conteo físico</h2>
+        <p className="wizardIntro">
+          Cuenta el efectivo real de la sede. El fondo sugerido viene del último cierre de esta sede.
+        </p>
         {step === 2 && error && <div className="wizardError" role="alert">{error}</div>}
 
         <div className="formGrid operationalWizardGrid">
@@ -198,18 +246,28 @@ export function CierreCajaWizard({
           <FormField label="Efectivo contado">
             <Input name="efectivo_contado" type="number" inputMode="decimal" step="0.01" min="0" value={efectivoContado} onChange={(event) => setEfectivoContado(event.target.value)} required />
           </FormField>
-          <FormField label="Pozo / fondo">
-            <Input name="pozo_fondo" type="number" inputMode="decimal" step="0.01" min="0" value={pozoFondo} onChange={(event) => setPozoFondo(event.target.value)} required />
+          <FormField label="Fondo para el siguiente día">
+            <Input name="pozo_fondo" type="number" inputMode="decimal" step="0.01" min="0" value={fondoSiguiente} onChange={(event) => setFondoSiguiente(event.target.value)} required />
           </FormField>
         </div>
+
+        <p className="operationalHint">
+          Si dejas S/ 100 como fondo, el sistema calculará cuánto efectivo queda disponible para retirar o depositar.
+        </p>
       </section>
 
       <section className={`wizardPanel ${step === 3 ? "visible" : ""}`} aria-labelledby="cierre-step-3">
         <p className="stepKicker">Paso 3 de 4</p>
         <h2 id="cierre-step-3">Revisión financiera</h2>
-        <p className="wizardIntro">Resumen de solo lectura calculado desde los registros existentes.</p>
+        <p className="wizardIntro">Resumen calculado desde los registros existentes.</p>
+
+        {salidasSinMetodo > 0 && (
+          <div className="operationalWarning" role="alert">
+            Hay {salidasSinMetodo} salida{salidasSinMetodo === 1 ? "" : "s"} sin método. La caja física queda como “No calculable” hasta clasificarlas.
+          </div>
+        )}
+
         {financialSummary}
-        <p className="operationalHint">Caja física esperada y diferencia permanecen sin calcular porque las salidas no identifican su método.</p>
       </section>
 
       <section className={`wizardPanel ${step === 4 ? "visible" : ""}`} aria-labelledby="cierre-step-4">
@@ -224,13 +282,14 @@ export function CierreCajaWizard({
           <div><span>Responsable</span><strong>{responsable}</strong></div>
           <div><span>Caja inicial</span><strong>{money(cajaInicial)}</strong></div>
           <div><span>Efectivo contado</span><strong>{money(efectivoContado)}</strong></div>
-          <div><span>Pozo / fondo</span><strong>{money(pozoFondo)}</strong></div>
+          <div><span>Fondo siguiente día</span><strong>{money(fondoSiguiente)}</strong></div>
         </div>
+
         {financialSummary}
 
         <div className="operationalObservation">
           <FormField label="Observación opcional">
-            <Textarea name="observacion" value={observacion} onChange={(event) => setObservacion(event.target.value)} rows={3} placeholder="Ej. Cierre de prueba, faltó efectivo, boleta pendiente, diferencia explicada, etc." />
+            <Textarea name="observacion" value={observacion} onChange={(event) => setObservacion(event.target.value)} rows={3} placeholder="Ej. Faltante explicado, sobrante, efectivo entregado a Naty, etc." />
           </FormField>
         </div>
       </section>
@@ -239,7 +298,15 @@ export function CierreCajaWizard({
         {step > 1 ? <button type="button" className="ghostButton" onClick={previous}>Atrás</button> : <span />}
         {step < 3 && <button type="button" className="primaryButton" onClick={next}>Continuar</button>}
         {step === 3 && <button type="button" className="primaryButton" onClick={next}>Revisar cierre</button>}
-        {step === 4 && <SubmitButton className="primaryButton" pendingLabel="Cerrando caja…">Cerrar caja</SubmitButton>}
+        {step === 4 && (
+          <SubmitButton
+            className="primaryButton"
+            pendingLabel="Cerrando caja…"
+            disabled={cierreBloqueado || !fisicoCalculable}
+          >
+            Cerrar caja
+          </SubmitButton>
+        )}
       </div>
     </form>
   );
