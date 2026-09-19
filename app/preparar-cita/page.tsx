@@ -4,7 +4,8 @@ import { CajaSidebar } from "@/components/CajaSidebar";
 import { requireModuleAccess } from "@/lib/auth";
 import { leerCatalogoPrepararCita } from "@/lib/catalogoPrepararCita";
 import { supabaseRpc, supabaseSelect, supabaseSelectWhere } from "@/lib/supabaseServer";
-import { PrepararCitaForm, type GiftCardAppointmentContext } from "./PrepararCitaForm";
+import { type GiftCardAppointmentContext } from "./PrepararCitaForm";
+import { PrepararCitaEntry } from "./PrepararCitaEntry";
 import { serviceDisplayName } from "./prepararCitaWizard";
 
 type Row = Record<string, unknown>;
@@ -98,7 +99,7 @@ export default async function PrepararCitaPage({ searchParams }: { searchParams:
             <p className="eyebrow">Ficha de cita</p>
             <h1>Preparar cita</h1>
             <p className="subtitle">
-              Guarda la reserva y el pago juntos; el enlace aparece únicamente al confirmar la operación.
+              Agenda citas directas, Gift Cards o beneficios; cada flujo muestra solo lo necesario.
             </p>
           </div>
           <div className="badge">
@@ -112,7 +113,7 @@ export default async function PrepararCitaPage({ searchParams }: { searchParams:
             No se puede preparar una cita: {error}
           </div>
         ) : (
-          <PrepararCitaForm
+          <PrepararCitaEntry
             services={services}
             homePolicies={homePolicies}
             sedes={sedes}

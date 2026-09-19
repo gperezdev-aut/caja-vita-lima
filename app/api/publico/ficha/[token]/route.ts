@@ -122,7 +122,7 @@ export async function GET(
   // armar la cita, no de la fila de cupones_convenios, que en este
   // punto todavía no existe (el cliente aún no escribió el código).
   if (esConvenio) {
-    body.cupon = { vigenteHasta: cita.cupon_vigente_hasta ?? null };
+    body.cupon = { proveedor: esCuponidad ? "Cuponidad" : "Bee Beneficios", vigenteHasta: cita.cupon_vigente_hasta ?? null };
   }
 
   return jsonNoStore(body);
@@ -387,6 +387,7 @@ export async function POST(
     whatsappUrl,
     resumen: {
       ...construirCitaResumen(cita, sedeInfo),
+      canal,
       moneda: "PEN",
       adelantoRecibido: pagoResumen.adelantoRecibido,
       saldo: pagoResumen.saldo,

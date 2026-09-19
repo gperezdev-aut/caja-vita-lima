@@ -69,6 +69,14 @@ export async function GET(
     return errorResponse("validacion", "La cita todavía no tiene fecha u hora.");
   }
 
+  const esConvenio = cita.canal === "cuponidad" || cita.canal === "bee";
+  if (esConvenio && (!cita.duracion_min || cita.duracion_min <= 0)) {
+    return errorResponse(
+      "validacion",
+      "El servicio del beneficio todavía está pendiente de validar antes de agregarlo al calendario."
+    );
+  }
+
   const [cliente, sedeInfo] = await Promise.all([
     cargarCliente(cita.cliente_id),
     cargarSede(cita.sede),

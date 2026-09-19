@@ -26,6 +26,12 @@ type Props = {
   estadoActual: EstadoActualAtencion;
   coberturaGiftCard: number;
   giftCardId: string | null;
+  convenioInicial?: {
+    tipo: "CONVENIO_BEE" | "CONVENIO_CUPONIDAD";
+    referenciaId: string;
+    monto: number;
+    proveedor: string;
+  } | null;
 };
 
 type PaymentRow = { metodo: string; monto: string; numeroOperacion: string };
@@ -67,10 +73,11 @@ export function AtencionReservadaForm(props: Props) {
   const [pagos, setPagos] = useState<PaymentRow[]>([{ metodo: "", monto: "", numeroOperacion: "" }]);
   const [extras, setExtras] = useState<ExtraRow[]>([]);
   const [ajustes, setAjustes] = useState<AdjustmentRow[]>([]);
-  const [convenioActivo, setConvenioActivo] = useState(false);
-  const [convenioTipo, setConvenioTipo] = useState<"CONVENIO_BEE" | "CONVENIO_CUPONIDAD">("CONVENIO_BEE");
-  const [convenioReferencia, setConvenioReferencia] = useState("");
-  const [convenioMonto, setConvenioMonto] = useState("");
+  const convenioBloqueado = Boolean(props.convenioInicial);
+  const [convenioActivo, setConvenioActivo] = useState(Boolean(props.convenioInicial));
+  const [convenioTipo, setConvenioTipo] = useState<"CONVENIO_BEE" | "CONVENIO_CUPONIDAD">(props.convenioInicial?.tipo ?? "CONVENIO_BEE");
+  const [convenioReferencia, setConvenioReferencia] = useState(props.convenioInicial?.referenciaId ?? "");
+  const [convenioMonto, setConvenioMonto] = useState(props.convenioInicial ? String(props.convenioInicial.monto) : "");
   const [propinaActiva, setPropinaActiva] = useState(false);
   const [propinaMonto, setPropinaMonto] = useState("");
   const [propinaMetodo, setPropinaMetodo] = useState("");
@@ -279,10 +286,11 @@ export function AtencionReservadaForm(props: Props) {
         <section className={`panel ${styles.section}`}>
           <p className="eyebrow">Paso 2 de 5</p><h2>¿Hubo algo adicional?</h2><p className={styles.help}>Solo registra lo que realmente ocurrió.</p>
           {props.coberturaGiftCard > 0 && <div className={styles.coverage}><strong>Gift Card aplicada</strong><span>{money(props.coberturaGiftCard)} de cobertura · no genera ingreso nuevo</span></div>}
+          {props.convenioInicial && <div className={styles.coverage}><strong>{props.convenioInicial.proveedor} verificado</strong><span>{money(props.convenioInicial.monto)} de cobertura · no genera ingreso nuevo</span></div>}
           <div className={styles.actionRow}>
             <button type="button" className="ghostButton" onClick={() => setExtras((items) => [...items, { tipo: "MINUTOS_EXTRA", concepto: "", cantidad: "1", montoUnitario: "", duracion: "10" }])}>+ Extra</button>
             <button type="button" className="ghostButton" onClick={() => setAjustes((items) => [...items, { tipo: "DESCUENTO", monto: "", motivo: "" }])}>+ Descuento / cortesía</button>
-            <button type="button" className="ghostButton" onClick={() => setConvenioActivo((value) => !value)}>{convenioActivo ? "Quitar convenio" : "+ Bee / Cuponidad"}</button>
+            {!convenioBloqueado && <button type="button" className="ghostButton" onClick={() => setConvenioActivo((value) => !value)}>{convenioActivo ? "Quitar convenio" : "+ Bee / Cuponidad"}</button>}
           </div>
           {extras.map((row, index) => (
             <div className={styles.lineItem} key={`extra-${index}`}>
@@ -302,7 +310,7 @@ export function AtencionReservadaForm(props: Props) {
               <button type="button" className="ghostButton" onClick={() => setAjustes((items) => items.filter((_, i) => i !== index))}>Quitar</button>
             </div>
           ))}
-          {convenioActivo && <div className={styles.lineItem}><label>Convenio<select value={convenioTipo} onChange={(e) => setConvenioTipo(e.target.value as typeof convenioTipo)}><option value="CONVENIO_BEE">Bee Beneficios</option><option value="CONVENIO_CUPONIDAD">Cuponidad</option></select></label><label className={styles.grow}>ID / registro<input value={convenioReferencia} onChange={(e) => setConvenioReferencia(e.target.value)} /></label><label>Monto reconocido<input type="number" min="0.01" step="0.01" value={convenioMonto} onChange={(e) => setConvenioMonto(e.target.value)} /></label></div>}
+          {convenioActivo && !convenioBloqueado && <div className={styles.lineItem}><label>Convenio<select value={convenioTipo} onChange={(e) => setConvenioTipo(e.target.value as typeof convenioTipo)}><option value="CONVENIO_BEE">Bee Beneficios</option><option value="CONVENIO_CUPONIDAD">Cuponidad</option></select></label><label className={styles.grow}>ID / registro<input value={convenioReferencia} onChange={(e) => setConvenioReferencia(e.target.value)} /></label><label>Monto reconocido<input type="number" min="0.01" step="0.01" value={convenioMonto} onChange={(e) => setConvenioMonto(e.target.value)} /></label></div>}
           {!extras.length && !ajustes.length && !convenioActivo && props.coberturaGiftCard <= 0 && <div className={styles.emptyState}>Sin extras, descuentos ni convenios. Puedes continuar.</div>}
         </section>
       )}

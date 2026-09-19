@@ -88,6 +88,86 @@ export async function buscarClienteFichaAction(crudo: string, pais: string) {
   };
 }
 
+export async function prepararConvenioAction(
+  _previousState: PrepararCitaState = INITIAL_STATE,
+  formData: FormData
+): Promise<PrepararCitaState> {
+  void _previousState;
+  const session = await requireModuleAccess("preparar-cita");
+
+  const canal = text(formData, "canal") as CanalFicha;
+  const fecha = text(formData, "fecha");
+  const hora = text(formData, "hora");
+  const sede = text(formData, "sede");
+  const requestId = text(formData, "request_id");
+
+  if (canal !== "cuponidad" && canal !== "bee") {
+    return { ok: false, error: "Selecciona Cuponidad o Bee Beneficios." };
+  }
+  if (!fecha || fecha < fechaLima() || !hora || !sede) {
+    return { ok: false, error: "Selecciona sede, fecha y una hora válida." };
+  }
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) {
+    return { ok: false, error: "El identificador del intento no es válido. Recarga el formulario." };
+  }
+
+  const sedeResult = await supabaseSelectWhere<{
+    nombre: string | null;
+    hora_apertura: string | null;
+    hora_cierre: string | null;
+  }>(
+    "sedes",
+    `select=nombre,hora_apertura,hora_cierre&nombre=eq.${encodeURIComponent(sede)}&activo=is.true&limit=1`
+  );
+  const sedeHorario = sedeResult.data[0];
+  if (sedeResult.error || !sedeHorario?.hora_apertura || !sedeHorario?.hora_cierre) {
+    return { ok: false, error: "La sede seleccionada no está disponible." };
+  }
+  if (!horarioDentroDeSede(hora, 30, sedeHorario.hora_apertura, sedeHorario.hora_cierre)) {
+    return { ok: false, error: "La hora seleccionada está fuera del horario de la sede." };
+  }
+
+  const expiracionFicha = resolverExpiracionFichaVigente(fecha, hora, 30);
+  if (!expiracionFicha.ok) {
+    return { ok: false, error: "La hora seleccionada ya terminó. Elige una hora vigente." };
+  }
+
+  const token = generarTokenFicha();
+  const rpc = await supabaseRpc<{ ok: boolean; reserva_id: string; token: string }>(
+    "preparar_ficha_convenio_v1",
+    {
+      p_payload: {
+        request_id: requestId,
+        canal,
+        fecha,
+        hora,
+        sede,
+        responsable: session.nombre,
+        movimiento_id: crearId("MOV"),
+        reserva_id: crearId("RES"),
+        token,
+        token_expira: expiracionFicha.tokenExpira,
+      },
+    }
+  );
+
+  if (rpc.error || !rpc.data?.ok) {
+    if (rpc.error?.includes("REQUEST_ID_PAYLOAD_CONFLICTO")) {
+      return { ok: false, error: "Este intento ya fue usado con datos diferentes. Recarga el formulario." };
+    }
+    return { ok: false, error: "No se pudo generar la reserva de convenio. No se registró ningún pago." };
+  }
+
+  const proveedor = canal === "cuponidad" ? "Cuponidad" : "Bee Beneficios";
+  const enlace = `https://vitalimaspa.com/cita/${rpc.data.token}`;
+  return {
+    ok: true,
+    enlace,
+    reservaId: rpc.data.reserva_id,
+    mensaje: `Reserva de ${proveedor} preparada para ${fecha} a las ${hora} en ${sede}. El cliente debe completar sus datos y escribir el código del cupón en esta ficha: ${enlace}`,
+  };
+}
+
 export async function prepararCitaAction(
   _previousState: PrepararCitaState = INITIAL_STATE,
   formData: FormData

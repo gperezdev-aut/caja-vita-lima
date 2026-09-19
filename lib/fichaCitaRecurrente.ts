@@ -68,6 +68,12 @@ export type FichaRecurrenteResponse = {
   } | null;
 };
 
+export function telefonoIdentificacionValido(
+  telefono: { crudo: string; pais: string }
+) {
+  return normalizarTelefonoE164(telefono.crudo, telefono.pais).ok;
+}
+
 export function telefonoCoincideConClienteAsociado(
   telefono: { crudo: string; pais: string },
   cliente: Pick<ClienteIdentificacionRow, "whatsapp_e164"> | null
@@ -149,6 +155,24 @@ export function construirFichaRecurrente(input: {
           solicitarEnNuevaCita: false,
         }
       : null,
+  };
+}
+
+export function construirFichaNuevaSinHistorial(): FichaRecurrenteResponse {
+  return {
+    contratoVersion: FICHA_RECURRENTE_CONTRATO_VERSION,
+    clienteRecurrente: false,
+    cliente: {
+      nombre: null,
+      correo: null,
+      cumple: null,
+      promociones: {
+        autorizoAnteriormente: false,
+        requiereNuevaAceptacion: true,
+      },
+    },
+    saludAnterior: null,
+    comprobanteAnterior: null,
   };
 }
 

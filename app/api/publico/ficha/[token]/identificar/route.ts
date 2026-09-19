@@ -1,8 +1,10 @@
 import { NextRequest } from "next/server";
 import {
   claveIntentosIdentificacion,
+  construirFichaNuevaSinHistorial,
   construirFichaRecurrente,
   telefonoCoincideConClienteAsociado,
+  telefonoIdentificacionValido,
 } from "@/lib/fichaCitaRecurrente";
 import {
   autenticarApiPublica,
@@ -84,8 +86,20 @@ export async function POST(
   };
 
   try {
-    // Antes de coincidir solo se lee el identificador y el E.164 asociado a
-    // esta cita. Correo, cumpleaños, salud y documentos se consultan después.
+    // Las reservas de convenio pueden nacer sin cliente asociado. En ese caso
+    // el token privado habilita una ficha nueva, pero NO se consulta el maestro
+    // de clientes ni se expone historial por el teléfono que el usuario escriba.
+    if (!cita.cliente_id) {
+      if (!telefonoIdentificacionValido(telefono)) {
+        await registrarIntentoFallido(ip, claveIntentos, intentosPrevios);
+        return errorIdentificacion();
+      }
+      await limpiarIntentos(ip, claveIntentos);
+      return jsonNoStore(construirFichaNuevaSinHistorial());
+    }
+
+    // Para citas ya asociadas se conserva el hardening existente: antes de
+    // coincidir solo se lee el identificador y E.164 ligado a esta cita.
     const identidadAsociada = await cargarTelefonoClienteAsociado(cita.cliente_id);
     if (!identidadAsociada || !telefonoCoincideConClienteAsociado(telefono, identidadAsociada)) {
       await registrarIntentoFallido(ip, claveIntentos, intentosPrevios);
