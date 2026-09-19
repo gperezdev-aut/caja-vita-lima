@@ -44,7 +44,7 @@ export default async function AtencionReservadaPage({ params }: { params: Promis
   if (!movimiento) notFound();
 
   const sourceId = String(movimiento.source_id ?? "");
-  const [reservaResult, detallesResult, configResult, holdResult, terapistasMaestroResult, aliasesResult, releaseResult, propinaResult] = await Promise.all([
+  const [reservaResult, detallesResult, configResult, holdResult, convenioResult, terapistasMaestroResult, aliasesResult, releaseResult, propinaResult] = await Promise.all([
     sourceId
       ? supabaseSelectWhere<Row>("citas_reservadas", `select=reserva_id,source_id,cliente_id,estado,estado_ficha,requiere_confirmacion,confirmado_en,atencion_personalizada,tipo_atencion,canal&reserva_id=eq.${encodeURIComponent(sourceId)}&limit=1`)
       : Promise.resolve({ data: [] as Row[], error: null }),
@@ -53,6 +53,9 @@ export default async function AtencionReservadaPage({ params }: { params: Promis
     sourceId
       ? supabaseSelectWhere<Row>("gift_card_reservas", `select=monto_reservado,estado,giftcard_id&reserva_id=eq.${encodeURIComponent(sourceId)}&estado=in.(ACTIVA,CANJEADA)&limit=1`)
       : Promise.resolve({ data: [] as Row[], error: null }),
+    sourceId
+      ? supabaseSelectWhere<Row>("cupones_convenios", `select=registro_id,plataforma,monto_reconocido,estado&reserva_id=eq.${encodeURIComponent(sourceId)}&limit=1`)
+      : Promise.resolve({ data: [] as Row[], error: null }),
     supabaseSelectWhere<Row>("terapistas", "select=terapista_id,nombre,estado&estado=eq.ACTIVA&order=nombre.asc"),
     supabaseSelectWhere<Row>("terapista_aliases", "select=alias,terapista_id"),
     supabaseSelectWhere<Row>("caja_catalog_releases", "select=release_id&active=eq.true&limit=1"),
@@ -60,6 +63,13 @@ export default async function AtencionReservadaPage({ params }: { params: Promis
   ]);
 
   const reserva = reservaResult.data[0];
+  const convenio = convenioResult.data[0];
+  const esConvenio = Boolean(reserva && ["cuponidad", "bee"].includes(String(reserva.canal ?? "")));
+  const convenioListo = !esConvenio || Boolean(
+    reserva?.estado_ficha === "completa" &&
+    convenio?.estado === "verificado" &&
+    Number(convenio?.monto_reconocido ?? 0) > 0
+  );
   const esDirecta = !reserva && movimiento.tipo_movimiento === "ATENCION_APP";
   const reservaId = reserva ? String(reserva.reserva_id ?? "") : "";
   const relacionValida = esDirecta || Boolean(
@@ -70,6 +80,7 @@ export default async function AtencionReservadaPage({ params }: { params: Promis
     ? (movimiento.estado === "Registrado" || movimiento.estado === "En atención")
     : (
         (movimiento.tipo_movimiento === "RESERVA_APP" && movimiento.estado === "Reservado" && reserva?.estado === "PENDIENTE") ||
+        (movimiento.tipo_movimiento === "RESERVA_APP" && movimiento.estado === "Cupón verificado" && reserva?.estado === "PENDIENTE" && convenioListo) ||
         (movimiento.tipo_movimiento === "ATENCION_APP" && movimiento.estado === "En atención" && reserva?.estado === "EN_ATENCION")
       );
   const confirmacionValida = esDirecta || reserva?.requiere_confirmacion !== true || Boolean(reserva?.confirmado_en);
@@ -135,6 +146,7 @@ export default async function AtencionReservadaPage({ params }: { params: Promis
     detallesResult.error,
     configResult.error,
     holdResult.error,
+    convenioResult.error,
     terapistasMaestroResult.error,
     aliasesResult.error,
     releaseResult.error,
@@ -202,7 +214,7 @@ export default async function AtencionReservadaPage({ params }: { params: Promis
             </div>
             <a className="ghostButton" href="/citas-hoy">Volver a Citas de hoy</a>
           </section>
-        ) : !relacionValida || !transicionable || !confirmacionValida ? (
+        ) : !relacionValida || !transicionable || !confirmacionValida || !convenioListo ? (
           <section className="panel">
             <div className="alert">Esta atención no es válida para la transición segura. Verifica relación, confirmación y estado antes de continuar.</div>
             <a href="/citas-hoy">Volver a Citas de hoy</a>
@@ -224,6 +236,12 @@ export default async function AtencionReservadaPage({ params }: { params: Promis
             estadoActual={movimiento.estado === "En atención" ? "En atención" : "Reservado"}
             coberturaGiftCard={Number(hold?.monto_reservado ?? 0)}
             giftCardId={String(hold?.estado ?? "") === "ACTIVA" ? String(hold?.giftcard_id ?? "") || null : null}
+            convenioInicial={convenio && convenio.estado === "verificado" ? {
+              tipo: String(convenio.plataforma ?? "").toUpperCase().includes("CUPONIDAD") ? "CONVENIO_CUPONIDAD" : "CONVENIO_BEE",
+              referenciaId: String(convenio.registro_id ?? ""),
+              monto: Number(convenio.monto_reconocido ?? 0),
+              proveedor: String(convenio.plataforma ?? ""),
+            } : null}
           />
         )}
       </section>
