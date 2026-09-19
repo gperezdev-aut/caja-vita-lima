@@ -9,6 +9,12 @@ import styles from "./CuponesPage.module.css";
 
 type Row = Record<string, unknown>;
 type SearchParams = Promise<{ proveedor?: string; estado?: string; q?: string }>;
+type CouponStateCounts = {
+  esperando: number;
+  declarado: number;
+  verificado: number;
+  canjeado: number;
+};
 
 function providerLabel(canal: string) {
   return canal === "cuponidad" ? "Cuponidad" : "Bee Beneficios";
@@ -122,20 +128,24 @@ export default async function CuponesPage({ searchParams }: { searchParams: Sear
     .filter((item) => estadoFiltro === "todos" || item.estado === estadoFiltro)
     .filter((item) => !query || item.searchable.includes(query));
 
-  const totals = reservasResult.data.reduce(
+  const totals = reservasResult.data.reduce<CouponStateCounts>(
     (acc, reserva) => {
       const coupon = couponByReserva.get(String(reserva.reserva_id ?? ""));
       const estado = coupon ? String(coupon.estado ?? "declarado") : "esperando";
-      if (estado in acc) acc[estado as keyof typeof acc] += 1;
+      if (estado === "esperando") acc.esperando += 1;
+      else if (estado === "declarado") acc.declarado += 1;
+      else if (estado === "verificado") acc.verificado += 1;
+      else if (estado === "canjeado") acc.canjeado += 1;
       return acc;
     },
     { esperando: 0, declarado: 0, verificado: 0, canjeado: 0 }
   );
 
+  const catalogError = "error" in catalogResult ? catalogResult.error : null;
   const errors = [
     reservasResult.error,
     cuponesResult.error,
-    catalogResult.ok ? null : catalogResult.error,
+    catalogError,
   ].filter(Boolean);
 
   return (
