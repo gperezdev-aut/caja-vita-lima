@@ -9,8 +9,10 @@ import {
 import {
   FICHA_RECURRENTE_CONTRATO_VERSION,
   claveIntentosIdentificacion,
+  construirFichaNuevaSinHistorial,
   construirFichaRecurrente,
   telefonoCoincideConClienteAsociado,
+  telefonoIdentificacionValido,
   type ClienteIdentificacionRow,
   type ComprobanteAnteriorRow,
   type FichaSaludAnteriorRow,
@@ -48,6 +50,23 @@ test("token vigente y WhatsApp asociado permiten identificar al cliente", () => 
     "vigente"
   );
   assert.equal(telefonoCoincideConClienteAsociado({ crudo: "987654321", pais: "PE" }, cliente), true);
+});
+
+test("una reserva sin cliente puede iniciar ficha nueva sin exponer historial", () => {
+  assert.equal(telefonoIdentificacionValido({ crudo: "987654321", pais: "PE" }), true);
+  assert.equal(telefonoIdentificacionValido({ crudo: "12", pais: "PE" }), false);
+  assert.deepEqual(construirFichaNuevaSinHistorial(), {
+    contratoVersion: "ficha-recurrente-v1",
+    clienteRecurrente: false,
+    cliente: {
+      nombre: null,
+      correo: null,
+      cumple: null,
+      promociones: { autorizoAnteriormente: false, requiereNuevaAceptacion: true },
+    },
+    saludAnterior: null,
+    comprobanteAnterior: null,
+  });
 });
 
 test("normaliza un teléfono peruano antes de compararlo", () => {
@@ -237,6 +256,13 @@ test("un fallo de identidad usa un error genérico y no devuelve datos", async (
   assert.match(route, /identificacion_no_valida/);
   assert.match(route, /No se pudo verificar la identidad con los datos proporcionados/);
   assert.doesNotMatch(route, /teléfono pertenece|cliente ajeno|otro cliente/i);
+});
+
+test("identificar una reserva no asociada no consulta ni expone historial", async () => {
+  const route = await readFile(new URL("../app/api/publico/ficha/[token]/identificar/route.ts", import.meta.url), "utf8");
+  const branch = route.match(/if \(!cita\.cliente_id\) \{[\s\S]*?return jsonNoStore\(construirFichaNuevaSinHistorial\(\)\);\n    \}/)?.[0] ?? "";
+  assert.match(branch, /telefonoIdentificacionValido\(telefono\)/);
+  assert.doesNotMatch(branch, /cargarCliente|cargarUltimaSalud|cargarUltimoComprobante|cargarTelefonoClienteAsociado/);
 });
 
 test("identificar solo lee datos de negocio y no modifica registros históricos", async () => {
