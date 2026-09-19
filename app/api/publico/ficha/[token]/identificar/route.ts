@@ -4,12 +4,13 @@ import {
   construirFichaNuevaSinHistorial,
   construirFichaRecurrente,
   telefonoCoincideConClienteAsociado,
-  telefonoIdentificacionValido,
 } from "@/lib/fichaCitaRecurrente";
+import { normalizarTelefonoE164 } from "@/lib/fichaCitaPublica";
 import {
   autenticarApiPublica,
   cargarCitaPorToken,
   cargarClienteParaIdentificar,
+  cargarClientePorWhatsappE164,
   cargarTelefonoClienteAsociado,
   cargarUltimaSaludCliente,
   cargarUltimaCitaCompletada,
@@ -86,32 +87,39 @@ export async function POST(
   };
 
   try {
-    // Las reservas de convenio pueden nacer sin cliente asociado. En ese caso
-    // el token privado habilita una ficha nueva, pero NO se consulta el maestro
-    // de clientes ni se expone historial por el teléfono que el usuario escriba.
+    let cliente;
+
     if (!cita.cliente_id) {
-      if (!telefonoIdentificacionValido(telefono)) {
+      // En reservas de convenio el operador no conoce necesariamente el número.
+      // El propio cliente lo escribe en la ficha. Se normaliza y se consulta
+      // únicamente por coincidencia E.164 exacta; si no existe, inicia como nuevo.
+      const normalizado = normalizarTelefonoE164(telefono.crudo, telefono.pais);
+      if (!normalizado.ok) {
         await registrarIntentoFallido(ip, claveIntentos, intentosPrevios);
         return errorIdentificacion();
       }
-      await limpiarIntentos(ip, claveIntentos);
-      return jsonNoStore(construirFichaNuevaSinHistorial());
-    }
 
-    // Para citas ya asociadas se conserva el hardening existente: antes de
-    // coincidir solo se lee el identificador y E.164 ligado a esta cita.
-    const identidadAsociada = await cargarTelefonoClienteAsociado(cita.cliente_id);
-    if (!identidadAsociada || !telefonoCoincideConClienteAsociado(telefono, identidadAsociada)) {
-      await registrarIntentoFallido(ip, claveIntentos, intentosPrevios);
-      return errorIdentificacion();
-    }
+      cliente = await cargarClientePorWhatsappE164(normalizado.e164);
+      if (!cliente) {
+        await limpiarIntentos(ip, claveIntentos);
+        return jsonNoStore(construirFichaNuevaSinHistorial());
+      }
+    } else {
+      // Para citas ya asociadas se conserva la verificación estricta contra
+      // el cliente ligado previamente a la reserva.
+      const identidadAsociada = await cargarTelefonoClienteAsociado(cita.cliente_id);
+      if (!identidadAsociada || !telefonoCoincideConClienteAsociado(telefono, identidadAsociada)) {
+        await registrarIntentoFallido(ip, claveIntentos, intentosPrevios);
+        return errorIdentificacion();
+      }
 
-    const cliente = await cargarClienteParaIdentificar(identidadAsociada.cliente_id);
-    if (!cliente) {
-      return errorResponse(
-        "error_interno",
-        "No se pudo recuperar la ficha anterior en este momento."
-      );
+      cliente = await cargarClienteParaIdentificar(identidadAsociada.cliente_id);
+      if (!cliente) {
+        return errorResponse(
+          "error_interno",
+          "No se pudo recuperar la ficha anterior en este momento."
+        );
+      }
     }
 
     const ultimaCitaCompletada = await cargarUltimaCitaCompletada(

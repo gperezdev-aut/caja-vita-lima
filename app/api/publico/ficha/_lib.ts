@@ -303,6 +303,19 @@ export async function cargarClienteParaIdentificar(clienteId: string | null) {
   return result.data?.[0] ?? null;
 }
 
+export async function cargarClientePorWhatsappE164(whatsappE164: string) {
+  const result = await supabaseSelectWhere<ClienteIdentificacionRow>(
+    "clientes",
+    [
+      "select=cliente_id,cliente,email,whatsapp_e164,cumple_dia,cumple_mes,consent_promos_en",
+      `whatsapp_e164=eq.${encodeURIComponent(whatsappE164)}`,
+      "limit=1",
+    ].join("&")
+  );
+  if (result.error) throw new Error("No se pudo buscar el cliente por WhatsApp.");
+  return result.data?.[0] ?? null;
+}
+
 export async function cargarTelefonoClienteAsociado(clienteId: string | null) {
   if (!clienteId) return null;
 

@@ -53,3 +53,12 @@ test("un convenio pendiente no genera ICS con duración inventada", () => {
   assert.match(route, /esConvenio && \(!cita\.duracion_min \|\| cita\.duracion_min <= 0\)/);
   assert.match(route, /pendiente de validar antes de agregarlo al calendario/);
 });
+
+
+test("el convenio mantiene WhatsApp del lado cliente y recupera recurrente por E164", () => {
+  const route = read("app/api/publico/ficha/[token]/identificar/route.ts");
+  const shared = read("app/api/publico/ficha/_lib.ts");
+  assert.match(route, /cargarClientePorWhatsappE164\(normalizado\.e164\)/);
+  assert.match(route, /construirFichaRecurrente/);
+  assert.match(shared, /whatsapp_e164=eq\.\$\{encodeURIComponent\(whatsappE164\)\}/);
+});
