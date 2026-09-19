@@ -19,6 +19,7 @@ export type CajaModule =
   | "nueva-atencion"
   | "registrar-salida"
   | "gift-cards"
+  | "cupones"
   | "comprobantes"
   | "cierre-caja"
   | "alertas";
@@ -46,6 +47,7 @@ const NAV_ITEMS: CajaNavItem[] = [
   { key: "horarios", label: "Horarios", href: "/horarios" },
   { key: "registrar-salida", label: "Registrar salida", href: "/registrar-salida" },
   { key: "gift-cards", label: "Gift Cards", href: "/gift-cards" },
+  { key: "cupones", label: "Cupones", href: "/cupones" },
   { key: "comprobantes", label: "Comprobantes", href: "/comprobantes" },
   { key: "cierre-caja", label: "Cierre de caja", href: "/cierre-caja" },
   { key: "alertas", label: "Alertas", href: "/#alertas" },
@@ -62,6 +64,7 @@ const PERMISSIONS: Record<CajaRole, CajaModule[]> = {
     "nueva-atencion",
     "registrar-salida",
     "gift-cards",
+    "cupones",
     "comprobantes",
     "cierre-caja",
     "alertas",
@@ -75,6 +78,7 @@ const PERMISSIONS: Record<CajaRole, CajaModule[]> = {
     "preparar-cita",
     "nueva-atencion",
     "registrar-salida",
+    "cupones",
     "comprobantes",
     "cierre-caja",
     "alertas",
@@ -86,6 +90,7 @@ const PERMISSIONS: Record<CajaRole, CajaModule[]> = {
     "nueva-atencion",
     "registrar-salida",
     "gift-cards",
+    "cupones",
     "cierre-caja",
   ],
 };
