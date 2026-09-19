@@ -46,6 +46,7 @@ export function PrepararCitaEntry(props: Props) {
     return (
       <PrepararConvenioForm
         sedes={props.sedes}
+        countries={props.countries}
         requestId={props.requestId}
         minDate={props.minDate}
         onBack={() => setSelectedType("")}
