@@ -62,6 +62,8 @@ const migration039 = resolve(root, "sql/039_vista_financiera_propinas_v2.sql");
 const contract039 = resolve(root, "sql/tests/039_vista_financiera_propinas_v2_rollback.sql");
 const migration042 = resolve(root, "sql/042_cupones_convenios_operacion.sql");
 const contract042 = resolve(root, "sql/tests/042_cupones_convenios_operacion_rollback.sql");
+const migration043 = resolve(root, "sql/043_catalogo_convenios_servicios.sql");
+const contract043 = resolve(root, "sql/tests/043_catalogo_convenios_servicios_rollback.sql");
 
 const files = [
   ...baseMigrations,
@@ -82,6 +84,8 @@ const files = [
   contract039,
   migration042,
   contract042,
+  migration043,
+  contract043,
 ];
 
 const rolesSql = `
