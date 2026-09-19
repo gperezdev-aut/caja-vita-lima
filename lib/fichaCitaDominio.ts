@@ -301,6 +301,13 @@ export type NormalizarTelefonoResultado =
 
 export const PAISES_TELEFONO = getCountries();
 
+export function telefonoGuardadoDesdeE164(e164: string): NormalizarTelefonoResultado {
+  const telefono = parsePhoneNumberFromString(e164.trim());
+  if (!telefono?.isValid() || !telefono.country) return { ok: false };
+  if (!PAISES_TELEFONO.includes(telefono.country)) return { ok: false };
+  return { ok: true, e164: telefono.number, pais: telefono.country };
+}
+
 export function normalizarTelefonoE164(
   crudo: string,
   pais: string
