@@ -1,3 +1,5 @@
+import { normalizarMetodoSalida } from "./salidasCaja";
+
 export const METODOS_CIERRE = [
   "EFECTIVO",
   "YAPE",
@@ -25,11 +27,24 @@ export type MovimientoCierre = {
   estado_boleta?: unknown;
 };
 
-export function cajaFisicaNoCalculable() {
-  return {
-    cajaEsperada: null,
-    diferencia: null,
-  } as const;
+export type SalidaGastoCierre = {
+  monto?: unknown;
+  metodo_salida?: unknown;
+};
+
+export type MovimientoFondoCierre = {
+  monto?: unknown;
+  metodo?: unknown;
+  tipo_movimiento?: unknown;
+};
+
+function roundMoney(value: number) {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+function safeMoney(value: unknown) {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 export function normalizarMetodoCierre(value: unknown): MetodoCierre {
@@ -53,8 +68,7 @@ export function resumirPagosCierre(rows: PagoCierre[]) {
   ) as Record<MetodoCierre, number>;
 
   for (const row of rows) {
-    const monto = Number(row.monto ?? 0);
-    if (!Number.isFinite(monto)) continue;
+    const monto = safeMoney(row.monto);
     porMetodo[normalizarMetodoCierre(row.metodo)] += monto;
   }
 
@@ -71,7 +85,10 @@ export function resumirPagosCierre(rows: PagoCierre[]) {
 
 export function resumirPropinasCierre(rows: PropinaCierre[]) {
   return resumirPagosCierre(
-    rows.filter((row) => String(row.estado ?? "PENDIENTE").trim().toUpperCase() !== "ANULADA")
+    rows.filter(
+      (row) =>
+        String(row.estado ?? "PENDIENTE").trim().toUpperCase() !== "ANULADA"
+    )
   );
 }
 
@@ -101,11 +118,107 @@ export function resumirDineroProcesadoCierre(
   };
 }
 
+export function resumirSalidasCierre(
+  gastos: SalidaGastoCierre[],
+  movimientosFondos: MovimientoFondoCierre[]
+) {
+  let totalGastos = 0;
+  let totalGastosEfectivo = 0;
+  let totalMovimientosFondos = 0;
+  let totalMovimientosFondosEfectivo = 0;
+  let salidasSinMetodo = 0;
+
+  for (const row of gastos) {
+    const monto = safeMoney(row.monto);
+    totalGastos += monto;
+
+    const rawMetodo = String(row.metodo_salida ?? "").trim();
+    if (!rawMetodo) {
+      salidasSinMetodo += 1;
+      continue;
+    }
+
+    if (normalizarMetodoSalida(rawMetodo) === "EFECTIVO") {
+      totalGastosEfectivo += monto;
+    }
+  }
+
+  for (const row of movimientosFondos) {
+    const monto = safeMoney(row.monto);
+    totalMovimientosFondos += monto;
+
+    const rawMetodo = String(row.metodo ?? "").trim();
+    if (!rawMetodo) {
+      salidasSinMetodo += 1;
+      continue;
+    }
+
+    const tipo = String(row.tipo_movimiento ?? "").trim().toUpperCase();
+    const metodo = normalizarMetodoSalida(rawMetodo);
+
+    if (metodo === "EFECTIVO" && tipo !== "TRANSFERENCIA") {
+      totalMovimientosFondosEfectivo += monto;
+    }
+  }
+
+  const totalSalidasEfectivo =
+    totalGastosEfectivo + totalMovimientosFondosEfectivo;
+
+  return {
+    totalGastos: roundMoney(totalGastos),
+    totalGastosEfectivo: roundMoney(totalGastosEfectivo),
+    totalMovimientosFondos: roundMoney(totalMovimientosFondos),
+    totalMovimientosFondosEfectivo: roundMoney(totalMovimientosFondosEfectivo),
+    totalSalidasEfectivo: roundMoney(totalSalidasEfectivo),
+    salidasSinMetodo,
+    fisicoCalculable: salidasSinMetodo === 0,
+  };
+}
+
+export function calcularCajaFisica({
+  cajaInicial,
+  efectivoVitaLima,
+  efectivoPropinas,
+  totalSalidasEfectivo,
+  efectivoContado,
+  fondoSiguiente,
+  calculable,
+}: {
+  cajaInicial: number;
+  efectivoVitaLima: number;
+  efectivoPropinas: number;
+  totalSalidasEfectivo: number;
+  efectivoContado: number;
+  fondoSiguiente: number;
+  calculable: boolean;
+}) {
+  if (!calculable) {
+    return {
+      cajaEsperada: null,
+      diferencia: null,
+      efectivoARetirar: null,
+    } as const;
+  }
+
+  const cajaEsperada = roundMoney(
+    cajaInicial + efectivoVitaLima + efectivoPropinas - totalSalidasEfectivo
+  );
+  const diferencia = roundMoney(efectivoContado - cajaEsperada);
+  const efectivoARetirar = roundMoney(
+    Math.max(efectivoContado - fondoSiguiente, 0)
+  );
+
+  return {
+    cajaEsperada,
+    diferencia,
+    efectivoARetirar,
+  } as const;
+}
+
 export function sumarSalidas(rows: { monto?: unknown }[]) {
-  return rows.reduce((sum, row) => {
-    const monto = Number(row.monto ?? 0);
-    return sum + (Number.isFinite(monto) ? monto : 0);
-  }, 0);
+  return roundMoney(
+    rows.reduce((sum, row) => sum + safeMoney(row.monto), 0)
+  );
 }
 
 export function esBoletaPendiente(row: MovimientoCierre) {

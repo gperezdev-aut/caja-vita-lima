@@ -4,7 +4,7 @@ export type CierreDraft = {
   responsable: string;
   cajaInicial: string;
   efectivoContado: string;
-  pozoFondo: string;
+  fondoSiguiente: string;
 };
 
 function validNonNegativeMoney(value: string) {
@@ -14,8 +14,27 @@ function validNonNegativeMoney(value: string) {
 }
 
 export function validateCierreStep(step: number, draft: CierreDraft) {
-  if (step === 1 && (!draft.fecha || !draft.sede || !draft.responsable)) return "Completa fecha, sede y responsable.";
-  if (step === 2 && (!validNonNegativeMoney(draft.cajaInicial) || !validNonNegativeMoney(draft.efectivoContado) || !validNonNegativeMoney(draft.pozoFondo))) return "Ingresa montos válidos que no sean negativos.";
+  if (step === 1 && (!draft.fecha || !draft.sede || !draft.responsable)) {
+    return "Completa fecha, sede y responsable.";
+  }
+
+  if (step === 2) {
+    if (
+      !validNonNegativeMoney(draft.cajaInicial) ||
+      !validNonNegativeMoney(draft.efectivoContado) ||
+      !validNonNegativeMoney(draft.fondoSiguiente)
+    ) {
+      return "Ingresa montos válidos que no sean negativos.";
+    }
+
+    const contado = Number(draft.efectivoContado.replace(",", "."));
+    const fondo = Number(draft.fondoSiguiente.replace(",", "."));
+
+    if (fondo > contado) {
+      return "El fondo para el siguiente día no puede ser mayor que el efectivo contado.";
+    }
+  }
+
   return "";
 }
 
