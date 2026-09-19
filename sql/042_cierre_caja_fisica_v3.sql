@@ -16,7 +16,7 @@ alter table public.caja_salidas
   add column if not exists metodo_salida text,
   add column if not exists categoria_financiera text;
 
-do $ begin
+do $$ begin
   if not exists (
     select 1
     from pg_constraint
