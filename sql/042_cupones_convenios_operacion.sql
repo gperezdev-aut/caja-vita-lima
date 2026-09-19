@@ -134,7 +134,7 @@ begin
     v_proveedor || ' · beneficio por validar', 'Por definir', null,
     0, 0, null, 0,
     'PENDIENTE', 'APP_CAJA_CONVENIO', v_movimiento_id, 'pendiente', v_canal,
-    false, null, 'es',
+    true, null, 'es',
     v_token, v_token_expira, false, null,
     '[]'::jsonb, 'Reserva preliminar de convenio; servicio pendiente de validar.',
     'sede', v_sede, 0, v_request_id, v_fingerprint
@@ -353,6 +353,7 @@ begin
     adelanto = 0,
     metodo_adelanto = null,
     saldo_pendiente = round(p_monto_reconocido, 2),
+    confirmado_en = now(),
     servicios_json = jsonb_build_array(jsonb_build_object(
       'codigo', v_service.service_code,
       'nombre', v_service.name_es,
