@@ -84,3 +84,8 @@ jobs:
         env:
           DATABASE_URL: postgresql://caja_ci:caja_ci_only_password@localhost:5432/caja_ficha_google_contacts_contract
         run: node tests/run-ficha-google-contacts-postgres-validation.mjs
+
+      - name: Validate physical cash close contract
+        env:
+          DATABASE_URL: postgresql://caja_ci:caja_ci_only_password@localhost:5432/caja_contract_test
+        run: node tests/run-cierre-caja-fisica-postgres-validation.mjs
