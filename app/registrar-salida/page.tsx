@@ -4,6 +4,10 @@ import { supabaseSelect, supabaseSelectWhere } from "@/lib/supabaseServer";
 import { FormField } from "@/components/FormField";
 import { Input } from "@/components/Input";
 import { Select } from "@/components/Select";
+import {
+  NATURALEZA_SALIDA_LABELS,
+  type NaturalezaSalida,
+} from "@/lib/salidasCaja";
 import { createSalidaAction } from "./actions";
 import { RegistrarSalidaWizard } from "./RegistrarSalidaWizard.tsx";
 
@@ -110,6 +114,13 @@ function safeSede(value: string | undefined) {
   return value;
 }
 
+function naturalezaLabel(value: string) {
+  return (
+    NATURALEZA_SALIDA_LABELS[value as NaturalezaSalida] ??
+    value.replaceAll("_", " ")
+  );
+}
+
 export default async function RegistrarSalidaPage({
   searchParams,
 }: {
@@ -122,22 +133,29 @@ export default async function RegistrarSalidaPage({
   const selectedFecha = safeDate(params?.fecha, today);
   const selectedSede = safeSede(params?.sede);
 
-  const config = await supabaseSelect<Row>("config_listas");
+  const salidaQuery = [
+    "select=salida_id,fecha,hora,sede,tipo_gasto,concepto,monto,metodo_salida,responsable,observacion,created_at",
+    `fecha=eq.${selectedFecha}`,
+    "order=created_at.desc",
+  ];
 
-  const queryParts = [
-    "select=salida_id,fecha,hora,sede,tipo_gasto,concepto,monto,responsable,observacion,created_at",
+  const fondosQuery = [
+    "select=movimiento_fondo_id,fecha,hora,sede,tipo_movimiento,metodo,concepto,monto,responsable,observacion,created_at",
     `fecha=eq.${selectedFecha}`,
     "order=created_at.desc",
   ];
 
   if (selectedSede !== "TODAS") {
-    queryParts.splice(2, 0, `sede=eq.${encodeURIComponent(selectedSede)}`);
+    const filtroSede = `sede=eq.${encodeURIComponent(selectedSede)}`;
+    salidaQuery.splice(2, 0, filtroSede);
+    fondosQuery.splice(2, 0, filtroSede);
   }
 
-  const salidas = await supabaseSelectWhere<Row>(
-    "caja_salidas",
-    queryParts.join("&")
-  );
+  const [config, salidas, movimientosFondos] = await Promise.all([
+    supabaseSelect<Row>("config_listas"),
+    supabaseSelectWhere<Row>("caja_salidas", salidaQuery.join("&")),
+    supabaseSelectWhere<Row>("caja_movimientos_fondos", fondosQuery.join("&")),
+  ]);
 
   const sedes = list(config.data, "SEDES");
   const responsables = list(config.data, "RESPONSABLES");
@@ -154,12 +172,50 @@ export default async function RegistrarSalidaPage({
     "Otro",
   ]);
 
-  const totalSalidas = salidas.data.reduce(
+  const totalGastos = salidas.data.reduce(
     (sum, row) => sum + Number(row.monto ?? 0),
     0
   );
 
-  const errors = [config.error, salidas.error].filter(Boolean);
+  const totalMovimientosFondos = movimientosFondos.data.reduce(
+    (sum, row) => sum + Number(row.monto ?? 0),
+    0
+  );
+
+  const registros = [
+    ...salidas.data.map((row) => ({
+      id: row.salida_id,
+      fecha: row.fecha,
+      hora: row.hora,
+      sede: row.sede,
+      naturaleza: "GASTO",
+      categoria: row.tipo_gasto,
+      metodo: row.metodo_salida,
+      concepto: row.concepto,
+      monto: row.monto,
+      responsable: row.responsable,
+      observacion: row.observacion,
+      created_at: row.created_at,
+    })),
+    ...movimientosFondos.data.map((row) => ({
+      id: row.movimiento_fondo_id,
+      fecha: row.fecha,
+      hora: row.hora,
+      sede: row.sede,
+      naturaleza: row.tipo_movimiento,
+      categoria: null,
+      metodo: row.metodo,
+      concepto: row.concepto,
+      monto: row.monto,
+      responsable: row.responsable,
+      observacion: row.observacion,
+      created_at: row.created_at,
+    })),
+  ].sort((a, b) =>
+    String(b.created_at ?? "").localeCompare(String(a.created_at ?? ""))
+  );
+
+  const errors = [config.error, salidas.error, movimientosFondos.error].filter(Boolean);
   const sedeLabel = selectedSede === "TODAS" ? "todas las sedes" : selectedSede;
 
   return (
@@ -172,14 +228,14 @@ export default async function RegistrarSalidaPage({
             <p className="eyebrow">Operación</p>
             <h1>Registrar salida</h1>
             <p className="subtitle">
-              Registra gastos, compras, pagos operativos o salidas de caja.
-              La lista inferior muestra salidas de {dateLabel(selectedFecha)} en {sedeLabel}.
+              Registra gastos reales y movimientos de fondos sin mezclarlos.
+              La lista inferior muestra movimientos de {dateLabel(selectedFecha)} en {sedeLabel}.
             </p>
           </div>
 
           <div className="badge">
-            <span>Salidas</span>
-            <strong>{money(totalSalidas)}</strong>
+            <span>Gastos Vita Lima</span>
+            <strong>{money(totalGastos)}</strong>
           </div>
         </section>
 
@@ -196,13 +252,13 @@ export default async function RegistrarSalidaPage({
               fontWeight: 800,
             }}
           >
-            Salida guardada correctamente. ID: <strong>{params.id}</strong>
+            Movimiento guardado correctamente. ID: <strong>{params.id}</strong>
           </div>
         )}
 
         {errors.length > 0 && (
           <div className="alert">
-            <strong>Revisar conexión:</strong>
+            <strong>Revisar conexión o migración 042:</strong>
             <ul>
               {errors.map((error, index) => (
                 <li key={index}>{error}</li>
@@ -215,7 +271,7 @@ export default async function RegistrarSalidaPage({
           <div className="panelTitle">
             <div>
               <h2>Filtros</h2>
-              <p>Consulta salidas por fecha y sede sin salir del módulo.</p>
+              <p>Consulta gastos y movimientos de fondos por fecha y sede.</p>
             </div>
           </div>
 
@@ -262,70 +318,88 @@ export default async function RegistrarSalidaPage({
           errorStep={params?.error?.includes("monto") ? 2 : params?.error?.startsWith("Completa") ? 1 : 3}
         />
 
+        <section className="grid secondary">
+          <div className="card good">
+            <span>Gastos del negocio</span>
+            <strong>{money(totalGastos)}</strong>
+          </div>
+          <div className="card">
+            <span>Movimientos de fondos</span>
+            <strong>{money(totalMovimientosFondos)}</strong>
+          </div>
+        </section>
+
         <section className="panel">
           <div className="panelTitle">
             <div>
-              <h2>Salidas registradas</h2>
+              <h2>Movimientos registrados</h2>
               <p>
-                Vista rápida para validar lo ingresado en {dateLabel(selectedFecha)} en {sedeLabel}.
+                Gastos afectan resultados; movimientos de fondos solo cambian custodia o caja física.
               </p>
             </div>
           </div>
 
-          {salidas.data.length === 0 ? (
+          {registros.length === 0 ? (
             <div className="alert" style={{ marginBottom: 0 }}>
-              No hay salidas registradas para la fecha y sede seleccionadas.
+              No hay movimientos registrados para la fecha y sede seleccionadas.
             </div>
           ) : (
             <>
-            <div className="tableWrap desktopData">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Hora</th>
-                    <th>Sede</th>
-                    <th>Tipo</th>
-                    <th>Concepto</th>
-                    <th>Monto</th>
-                    <th>Responsable</th>
-                    <th>Observación</th>
-                    <th>ID</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {salidas.data.map((row) => (
-                    <tr key={row.salida_id}>
-                      <td>{String(row.hora ?? "-").slice(0, 5)}</td>
-                      <td>{row.sede}</td>
-                      <td>{row.tipo_gasto}</td>
-                      <td className="strong">{row.concepto}</td>
-                      <td>{money(row.monto)}</td>
-                      <td>{row.responsable || "-"}</td>
-                      <td>{row.observacion || "-"}</td>
-                      <td><details className="technicalDetails"><summary>Ver ID</summary><code>{row.salida_id}</code></details></td>
+              <div className="tableWrap desktopData">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Hora</th>
+                      <th>Sede</th>
+                      <th>Naturaleza</th>
+                      <th>Categoría</th>
+                      <th>Método</th>
+                      <th>Concepto</th>
+                      <th>Monto</th>
+                      <th>Responsable</th>
+                      <th>Observación</th>
+                      <th>ID</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="mobileRecordList">
-              {salidas.data.map((row) => (
-                <article className="mobileRecordCard" key={`mobile-${row.salida_id}`}>
-                  <div className="mobileRecordHeader">
-                    <h3>{row.concepto}</h3>
-                    <strong>{money(row.monto)}</strong>
-                  </div>
-                  <div className="mobileRecordMeta">
-                    <div><span>Hora</span><strong>{String(row.hora ?? "-").slice(0, 5)}</strong></div>
-                    <div><span>Sede</span><strong>{row.sede}</strong></div>
-                    <div><span>Tipo</span><strong>{row.tipo_gasto}</strong></div>
-                    <div><span>Responsable</span><strong>{row.responsable || "-"}</strong></div>
-                    {row.observacion && <div><span>Observación</span><strong>{row.observacion}</strong></div>}
-                  </div>
-                  <details className="technicalDetails"><summary>Referencia interna</summary><code>{row.salida_id}</code></details>
-                </article>
-              ))}
-            </div>
+                  </thead>
+                  <tbody>
+                    {registros.map((row) => (
+                      <tr key={row.id}>
+                        <td>{String(row.hora ?? "-").slice(0, 5)}</td>
+                        <td>{row.sede}</td>
+                        <td>{naturalezaLabel(String(row.naturaleza))}</td>
+                        <td>{row.categoria || "—"}</td>
+                        <td>{row.metodo || "Sin clasificar"}</td>
+                        <td className="strong">{row.concepto}</td>
+                        <td>{money(row.monto)}</td>
+                        <td>{row.responsable || "-"}</td>
+                        <td>{row.observacion || "-"}</td>
+                        <td><details className="technicalDetails"><summary>Ver ID</summary><code>{row.id}</code></details></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="mobileRecordList">
+                {registros.map((row) => (
+                  <article className="mobileRecordCard" key={`mobile-${row.id}`}>
+                    <div className="mobileRecordHeader">
+                      <h3>{row.concepto}</h3>
+                      <strong>{money(row.monto)}</strong>
+                    </div>
+                    <div className="mobileRecordMeta">
+                      <div><span>Hora</span><strong>{String(row.hora ?? "-").slice(0, 5)}</strong></div>
+                      <div><span>Sede</span><strong>{row.sede}</strong></div>
+                      <div><span>Naturaleza</span><strong>{naturalezaLabel(String(row.naturaleza))}</strong></div>
+                      {row.categoria && <div><span>Categoría</span><strong>{row.categoria}</strong></div>}
+                      <div><span>Método</span><strong>{row.metodo || "Sin clasificar"}</strong></div>
+                      <div><span>Responsable</span><strong>{row.responsable || "-"}</strong></div>
+                      {row.observacion && <div><span>Observación</span><strong>{row.observacion}</strong></div>}
+                    </div>
+                    <details className="technicalDetails"><summary>Referencia interna</summary><code>{row.id}</code></details>
+                  </article>
+                ))}
+              </div>
             </>
           )}
         </section>
