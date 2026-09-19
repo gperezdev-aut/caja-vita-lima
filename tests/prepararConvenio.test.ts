@@ -13,8 +13,11 @@ test("Preparar cita ofrece Cupón / Beneficio antes de pedir cliente", () => {
   assert.match(entry, /PrepararConvenioForm/);
 });
 
-test("el operador no escribe código ni pago en el flujo de convenio", () => {
+test("el operador registra WhatsApp pero no código ni pago en el flujo de convenio", () => {
   const form = read("app/preparar-cita/PrepararConvenioForm.tsx");
+  assert.match(form, /name="telefono"/);
+  assert.match(form, /name="pais"/);
+  assert.match(form, /El cliente no tendrá que volver a escribirlo/);
   assert.doesNotMatch(form, /name="codigo/i);
   assert.doesNotMatch(form, /monto_pagado|metodo_pago|numero_operacion/);
   assert.match(form, /El código lo completa el cliente en la página web/);
@@ -25,7 +28,9 @@ test("el operador no escribe código ni pago en el flujo de convenio", () => {
 test("la reserva de convenio genera ficha web y usa RPC dedicada", () => {
   const actions = read("app/preparar-cita/actions.ts");
   assert.match(actions, /preparar_ficha_convenio_v1/);
+  assert.match(actions, /whatsapp_e164: telefono\.e164/);
   assert.match(actions, /https:\/\/vitalimaspa\.com\/cita\//);
+  assert.match(actions, /https:\/\/wa\.me\//);
   assert.match(actions, /No se registró ningún pago/);
 });
 
