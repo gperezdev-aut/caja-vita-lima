@@ -1,10 +1,8 @@
 import { CajaSidebar } from "@/components/CajaSidebar";
 import { Badge } from "@/components/Badge";
 import { requireModuleAccess } from "@/lib/auth";
-import { leerCatalogoPrepararCita } from "@/lib/catalogoPrepararCita";
 import { supabaseSelectWhere } from "@/lib/supabaseServer";
-import { serviceDisplayName } from "@/app/preparar-cita/prepararCitaWizard";
-import { CuponValidationForm } from "./CuponValidationForm";
+import { CuponValidationForm, type ConvenioBenefit } from "./CuponValidationForm";
 import styles from "./CuponesPage.module.css";
 
 type Row = Record<string, unknown>;
@@ -18,6 +16,11 @@ type CouponStateCounts = {
 
 function providerLabel(canal: string) {
   return canal === "cuponidad" ? "Cuponidad" : "Bee Beneficios";
+}
+
+function providerCode(canal: string): "cuponidad" | "bee" | null {
+  if (canal === "cuponidad" || canal === "bee") return canal;
+  return null;
 }
 
 function statusLabel(estado: string) {
@@ -49,10 +52,6 @@ function hourLabel(value: unknown) {
   return value ? String(value).slice(0, 5) : "-";
 }
 
-function money(value: unknown) {
-  return `S/ ${Number(value ?? 0).toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
 function waHref(value: unknown) {
   const digits = String(value ?? "").replace(/\D/g, "");
   return digits ? `https://wa.me/${digits.length === 9 ? `51${digits}` : digits}` : "";
@@ -69,16 +68,19 @@ export default async function CuponesPage({ searchParams }: { searchParams: Sear
     : "todos";
   const query = String(params.q ?? "").trim().toLocaleLowerCase("es-PE");
 
-  const [reservasResult, cuponesResult, catalogResult] = await Promise.all([
+  const [reservasResult, cuponesResult, benefitsResult] = await Promise.all([
     supabaseSelectWhere<Row>(
       "citas_reservadas",
       "select=reserva_id,fecha_cita,hora_cita,sede,cliente_id,cliente,whatsapp,n_pax,personas,servicio,duracion_min,monto_total,saldo_pendiente,canal,estado_ficha,source_id,service_code,created_at&canal=in.(cuponidad,bee)&order=fecha_cita.desc,hora_cita.desc&limit=300"
     ),
     supabaseSelectWhere<Row>(
       "cupones_convenios",
-      "select=registro_id,reserva_id,fecha,sede,plataforma,codigo_cupon,cliente,whatsapp,n_pax,servicio,monto_reconocido,monto_cobrado_tienda,estado,responsable,observacion,created_at&order=created_at.desc&limit=500"
+      "select=registro_id,reserva_id,fecha,sede,plataforma,codigo_cupon,cliente,whatsapp,n_pax,servicio,beneficio_code,sesiones_total,estado,responsable,observacion,created_at&order=created_at.desc&limit=500"
     ),
-    leerCatalogoPrepararCita(),
+    supabaseSelectWhere<Row>(
+      "caja_convenio_beneficios",
+      "select=beneficio_code,proveedor,nombre,incluido,duracion_min,sesiones_total,sede_restringida,activo,orden&activo=eq.true&order=proveedor.asc,orden.asc"
+    ),
   ]);
 
   const couponByReserva = new Map(
@@ -87,27 +89,23 @@ export default async function CuponesPage({ searchParams }: { searchParams: Sear
       .map((row) => [String(row.reserva_id), row])
   );
 
-  const services = catalogResult.ok
-    ? catalogResult.services
-        .filter((service) =>
-          service.reservationBehavior === "APPOINTMENT" &&
-          service.category !== "HOME" &&
-          service.modality !== "HOME"
-        )
-        .map((service) => ({
-          code: service.serviceCode,
-          name: serviceDisplayName(service.nameEs),
-          duration: service.durationMin,
-          price: service.pricePen,
-          category: service.category,
-          modality: service.modality,
-          peopleMin: service.peopleMin,
-          peopleMax: service.peopleMax,
-          selectionRule: service.selectionRule,
-          reservationBehavior: service.reservationBehavior,
-        }))
-        .sort((a, b) => a.name.localeCompare(b.name, "es"))
-    : [];
+  const benefits: ConvenioBenefit[] = benefitsResult.data
+    .map((row) => ({
+      code: String(row.beneficio_code ?? ""),
+      provider: String(row.proveedor ?? "") as ConvenioBenefit["provider"],
+      name: String(row.nombre ?? ""),
+      included: String(row.incluido ?? ""),
+      duration: Number(row.duracion_min ?? 0),
+      sessions: Number(row.sesiones_total ?? 1),
+      restrictedBranch: String(row.sede_restringida ?? ""),
+    }))
+    .filter((benefit) =>
+      Boolean(benefit.code) &&
+      Boolean(benefit.name) &&
+      ["cuponidad", "bee"].includes(benefit.provider) &&
+      benefit.duration > 0 &&
+      benefit.sessions > 0
+    );
 
   const rows = reservasResult.data
     .map((reserva) => {
@@ -141,11 +139,10 @@ export default async function CuponesPage({ searchParams }: { searchParams: Sear
     { esperando: 0, declarado: 0, verificado: 0, canjeado: 0 }
   );
 
-  const catalogError = "error" in catalogResult ? catalogResult.error : null;
   const errors = [
     reservasResult.error,
     cuponesResult.error,
-    catalogError,
+    benefitsResult.error,
   ].filter(Boolean);
 
   return (
@@ -157,7 +154,7 @@ export default async function CuponesPage({ searchParams }: { searchParams: Sear
             <p className="eyebrow">Convenios</p>
             <h1>Cupones</h1>
             <p className="subtitle">
-              Seguimiento operativo de Cuponidad y Bee Beneficios desde la reserva hasta el canje.
+              Seguimiento operativo de Cuponidad y Bee Beneficios. Primero identifica el servicio; la parte económica se definirá después.
             </p>
           </div>
           <div className="badge">
@@ -216,8 +213,11 @@ export default async function CuponesPage({ searchParams }: { searchParams: Sear
             const cliente = String(reserva.cliente ?? coupon?.cliente ?? "").trim() || "Cliente pendiente";
             const whatsapp = String(reserva.whatsapp ?? coupon?.whatsapp ?? "").trim();
             const service = estado === "esperando"
-              ? "Beneficio pendiente de validar"
+              ? "Beneficio pendiente de identificar"
               : String(coupon?.servicio ?? reserva.servicio ?? "").trim() || "Servicio pendiente";
+            const provider = providerCode(canal);
+            const currentBenefitCode = String(coupon?.beneficio_code ?? "");
+            const sessionsTotal = Number(coupon?.sesiones_total ?? 0);
             return (
               <article key={String(reserva.reserva_id)} className={styles.couponCard}>
                 <div className={styles.cardHeader}>
@@ -257,16 +257,20 @@ export default async function CuponesPage({ searchParams }: { searchParams: Sear
 
                 <div className={styles.meta}>
                   <div><span>Servicio</span><strong>{service}</strong></div>
-                  <div>
-                    <span>Monto reconocido</span>
-                    <strong>{Number(coupon?.monto_reconocido ?? 0) > 0 ? money(coupon?.monto_reconocido) : "Pendiente"}</strong>
-                  </div>
+                  {sessionsTotal > 1 && (
+                    <div><span>Sesiones incluidas</span><strong>{sessionsTotal} sesiones · duración por sesión</strong></div>
+                  )}
                 </div>
 
-                {estado === "declarado" && registroId && (
-                  <details className={styles.validationDetails}>
-                    <summary>Validar cupón y asignar servicio</summary>
-                    <CuponValidationForm registroId={registroId} services={services} />
+                {estado === "declarado" && registroId && provider && (
+                  <details className={styles.validationDetails} open={!currentBenefitCode}>
+                    <summary>{currentBenefitCode ? "Cambiar servicio del convenio" : "Seleccionar servicio del convenio"}</summary>
+                    <CuponValidationForm
+                      registroId={registroId}
+                      provider={provider}
+                      benefits={benefits}
+                      currentBenefitCode={currentBenefitCode}
+                    />
                   </details>
                 )}
 
