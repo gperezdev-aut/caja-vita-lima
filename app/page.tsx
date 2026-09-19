@@ -1,10 +1,11 @@
-import { requireModuleAccess } from "@/lib/auth";
+import { requireModuleAccess, getVisibleNavItems } from "@/lib/auth";
 import { CajaSidebar } from "@/components/CajaSidebar";
 import { supabaseSelect } from "@/lib/supabaseServer";
 import Link from "next/link";
 import { FormField } from "@/components/FormField";
 import { Input } from "@/components/Input";
 import { Select } from "@/components/Select";
+import styles from "./dashboard-mobile.module.css";
 import {
   TODAS_LAS_SEDES,
   getCuponidadFromMonthlyRow,
@@ -34,17 +35,86 @@ function numberFmt(value: any) {
   return Number(value ?? 0).toLocaleString("es-PE");
 }
 
-function Card({
+function comprobanteLabel(row: Row) {
+  const estado = String(row.estado_comprobante_final_calculado ?? "").toUpperCase();
+  const tipo = String(row.tipo_comprobante ?? "").toUpperCase();
+
+  if (estado === "OK_COMPLETO") return tipo === "FACTURA" ? "Facturas completas" : "Boletas completas";
+  if (estado === "PENDIENTE") return "Comprobantes pendientes";
+  if (estado === "OBSERVAR") return "Requieren revisión";
+  if (estado === "SIN_NUMERO") return "Sin número";
+  if (tipo === "POR_DEFINIR") return "Comprobantes por definir";
+  if (tipo === "NO_APLICA") return "No aplica";
+
+  return [estado, tipo].filter(Boolean).join(" · ") || "Comprobantes";
+}
+
+function navIcon(key: string) {
+  const icons: Record<string, string> = {
+    dashboard: "⌂",
+    "citas-hoy": "▣",
+    "preparar-cita": "✚",
+    "nueva-atencion": "+",
+    clientes: "◎",
+    terapistas: "✿",
+    "registrar-salida": "↪",
+    "gift-cards": "◇",
+    comprobantes: "▤",
+    alertas: "♢",
+    "cierre-caja": "▭",
+    horarios: "◷",
+  };
+  return icons[key] ?? "•";
+}
+
+function KpiCard({
   label,
   value,
   tone = "default",
+  icon,
 }: {
   label: string;
   value: string;
-  tone?: "default" | "good" | "warn";
+  tone?: "default" | "good" | "blue" | "warn" | "exit";
+  icon: string;
 }) {
+  const toneClass =
+    tone === "good"
+      ? styles.kpiGood
+      : tone === "blue"
+        ? styles.kpiBlue
+        : tone === "warn"
+          ? styles.kpiWarn
+          : tone === "exit"
+            ? styles.kpiExit
+            : "";
+
   return (
-    <div className={`card ${tone}`}>
+    <div className={`${styles.kpiCard} ${toneClass}`}>
+      <span className={styles.kpiIcon} aria-hidden="true">{icon}</span>
+      <div>
+        <span>{label}</span>
+        <strong>{value}</strong>
+      </div>
+    </div>
+  );
+}
+
+function SmallCard({ label, value, icon }: { label: string; value: string; icon: string }) {
+  return (
+    <div className={styles.smallCard}>
+      <span className={styles.smallIcon} aria-hidden="true">{icon}</span>
+      <div>
+        <span>{label}</span>
+        <strong>{value}</strong>
+      </div>
+    </div>
+  );
+}
+
+function StatRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className={styles.statRow}>
       <span>{label}</span>
       <strong>{value}</strong>
     </div>
@@ -117,29 +187,56 @@ export default async function HomePage({
   const rangeLabel = filterActive
     ? `${monthLabel(desde)} a ${monthLabel(hasta)}`
     : "Todo lo cargado";
-
   const sedeLabel = selectedSede === TODAS_LAS_SEDES ? "Todas las sedes" : selectedSede;
+
+  const visibleItems = getVisibleNavItems(session.rol);
+  const preferredOrder = [
+    "dashboard",
+    "citas-hoy",
+    "preparar-cita",
+    "nueva-atencion",
+    "clientes",
+    "terapistas",
+    "registrar-salida",
+    "gift-cards",
+    "comprobantes",
+    "alertas",
+    "cierre-caja",
+    "horarios",
+  ];
+  const quickItems = [...visibleItems].sort(
+    (a, b) => preferredOrder.indexOf(a.key) - preferredOrder.indexOf(b.key)
+  );
 
   return (
     <main className="appShell">
       <CajaSidebar session={session} />
 
-      <section className="page dashboardPage">
-        <section className="hero dashboardHero" id="dashboard">
-          <div>
-            <p className="eyebrow">Vita Lima Spa</p>
-            <h1>Caja Vita Lima</h1>
-            <p className="subtitle">
-              Dashboard interno conectado a Supabase. Reporte de ingresos,
-              salidas, comprobantes y alertas de migración.
-            </p>
+      <section className={`page dashboardPage ${styles.dashboardPage}`}>
+        <section className={`hero dashboardHero ${styles.heroCompact}`} id="dashboard">
+          <div className={styles.heroCopy}>
+            <div className={styles.heroTitleRow}>
+              <h1>Caja Vita Lima</h1>
+              <span className={styles.protectedBadge}>Protegido</span>
+            </div>
+            <p className={styles.heroSubtitle}>Dashboard interno de caja y operaciones.</p>
           </div>
 
-          <div className="badge">
+          <div className={styles.periodBadge}>
             <span>Periodo</span>
             <strong>{filterActive ? "Filtrado" : "General"}</strong>
           </div>
         </section>
+
+        <nav className={styles.quickGrid} aria-label="Accesos rápidos de Caja">
+          {quickItems.map((item) => (
+            <Link className={styles.quickItem} href={item.href} key={item.key}>
+              <span className={styles.quickIcon} aria-hidden="true">{navIcon(item.key)}</span>
+              <strong>{item.label}</strong>
+              <span className={styles.quickArrow} aria-hidden="true">›</span>
+            </Link>
+          ))}
+        </nav>
 
         {errors.length > 0 && (
           <AlertBox>
@@ -152,21 +249,23 @@ export default async function HomePage({
           </AlertBox>
         )}
 
-        <section className="panel dashboardFilters">
-          <div className="panelTitle">
+        <section className={styles.kpiGrid} aria-label="Resumen financiero principal">
+          <KpiCard label="Ingresos confirmados" value={money(dashboardTotals.ingresos)} tone="good" icon="▥" />
+          <KpiCard label="Total salidas" value={money(dashboardTotals.salidas)} tone="exit" icon="↓" />
+          <KpiCard label="Resultado neto" value={money(dashboardTotals.neto)} tone="blue" icon="↗" />
+          <KpiCard label="Pendientes migración" value={numberFmt(dashboardTotals.pendientes)} tone="warn" icon="▤" />
+        </section>
+
+        <section className={styles.filterPanel}>
+          <div className={styles.filterHeading}>
             <div>
               <h2>Filtros del dashboard</h2>
-              <p>
-                Consulta por mes, rango de meses y sede sin cambiar las vistas
-                de Supabase.
-              </p>
+              <p>Consulta por mes, rango de meses y sede.</p>
             </div>
+            <span className={styles.filterHint}>Consulta y analiza tu información.</span>
           </div>
 
-          <form
-            action="/"
-            className="filterForm"
-          >
+          <form action="/" className={styles.filterForm}>
             <FormField label="Desde">
               <Input name="desde" type="month" defaultValue={desde} />
             </FormField>
@@ -186,33 +285,16 @@ export default async function HomePage({
               </Select>
             </FormField>
 
-            <div className="filterActions">
-              <button
-                type="submit"
-                className="primaryButton actionButton"
-                style={{
-                  border: 0,
-                }}
-              >
+            <div className={styles.filterActions}>
+              <button type="submit" className={styles.primaryAction}>
                 Aplicar filtros
               </button>
-
-              <Link
-                href="/"
-                className="ghostButton actionButton"
-                style={{
-                  display: "inline-flex",
-                }}
-              >
+              <Link href="/" className={styles.secondaryAction}>
                 Ver todo
               </Link>
-
               <a
                 href={`/api/dashboard/export?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}&sede=${encodeURIComponent(selectedSede)}`}
-                className="ghostButton actionButton"
-                style={{
-                  display: "inline-flex",
-                }}
+                className={styles.secondaryAction}
               >
                 Descargar Excel
               </a>
@@ -220,103 +302,107 @@ export default async function HomePage({
           </form>
         </section>
 
-        <section className="grid dashboardPrimaryKpis">
-          <Card
-            label="Ingresos confirmados"
-            value={money(dashboardTotals.ingresos)}
-            tone="good"
-          />
-          <Card label="Total salidas" value={money(dashboardTotals.salidas)} />
-          <Card
-            label="Resultado neto"
-            value={money(dashboardTotals.neto)}
-          />
-          <Card
-            label="Pendientes migración"
-            value={numberFmt(dashboardTotals.pendientes)}
-            tone="warn"
-          />
+        <section className={styles.smallGrid} aria-label="Desglose de ingresos">
+          <SmallCard label="Servicios" value={money(dashboardTotals.servicios)} icon="✿" />
+          <SmallCard label="Gift Cards" value={money(dashboardTotals.giftCards)} icon="◇" />
+          <SmallCard label="Préstamos de caja" value={money(dashboardTotals.prestamos)} icon="▭" />
+          <SmallCard label="Cuponidad en caja" value={money(dashboardTotals.cuponidad)} icon="⌑" />
         </section>
 
-        <section className="grid secondary">
-          <Card label="Servicios" value={money(dashboardTotals.servicios)} />
-          <Card label="Gift Cards" value={money(dashboardTotals.giftCards)} />
-          <Card
-            label="Préstamos de caja"
-            value={money(dashboardTotals.prestamos)}
-          />
-          <Card
-            label="Cuponidad en caja"
-            value={money(dashboardTotals.cuponidad)}
-          />
-        </section>
-
-        <section className="panel">
-          <div className="panelTitle">
-            <div>
+        <section className={styles.infoGrid}>
+          <div className={styles.compactPanel}>
+            <div className={styles.compactPanelTitle}>
               <h2>{filterActive ? "Periodo seleccionado" : "Resumen general"}</h2>
-              <p>
-                {filterActive
-                  ? "Los importes se calculan desde la vista mensual para el rango elegido."
-                  : "Vista acumulada general. El último mes mostrado ignora meses sin movimiento."}
-              </p>
+            </div>
+            <div className={styles.statRows}>
+              {filterActive ? (
+                <>
+                  <StatRow label="Desde" value={monthLabel(desde)} />
+                  <StatRow label="Hasta" value={monthLabel(hasta)} />
+                  <StatRow label="Sede" value={sedeLabel} />
+                  <StatRow label="Filas mensuales" value={numberFmt(filteredMonthlyRows.length)} />
+                </>
+              ) : (
+                <>
+                  <StatRow label="Vista" value={rangeLabel} />
+                  <StatRow label="Último mes con movimiento" value={monthLabel(latestMonth.mes)} />
+                  <StatRow label="Ingresos del último mes" value={money(latestMonth["Total ingresos confirmados"])} />
+                  <StatRow label="Neto del último mes" value={money(latestMonth["Resultado neto confirmado"])} />
+                </>
+              )}
             </div>
           </div>
 
-          {filterActive ? (
-            <div className="currentMonth">
-              <div>
-                <span>Desde</span>
-                <strong>{monthLabel(desde)}</strong>
-              </div>
-              <div>
-                <span>Hasta</span>
-                <strong>{monthLabel(hasta)}</strong>
-              </div>
-              <div>
-                <span>Sede</span>
-                <strong>{sedeLabel}</strong>
-              </div>
-              <div>
-                <span>Filas mensuales</span>
-                <strong>{numberFmt(filteredMonthlyRows.length)}</strong>
-              </div>
+          <div className={styles.compactPanel} id="comprobantes">
+            <div className={styles.compactPanelTitle}>
+              <h2>Comprobantes</h2>
             </div>
-          ) : (
-            <div className="currentMonth">
-              <div>
-                <span>Vista</span>
-                <strong>{rangeLabel}</strong>
-              </div>
-              <div>
-                <span>Último mes con movimiento</span>
-                <strong>{monthLabel(latestMonth.mes)}</strong>
-              </div>
-              <div>
-                <span>Ingresos del último mes</span>
-                <strong>{money(latestMonth["Total ingresos confirmados"])}</strong>
-              </div>
-              <div>
-                <span>Neto del último mes</span>
-                <strong>{money(latestMonth["Resultado neto confirmado"])}</strong>
-              </div>
+            <div className={styles.statRows}>
+              {comprobantes.data.map((row, index) => (
+                <StatRow
+                  key={index}
+                  label={comprobanteLabel(row)}
+                  value={`${numberFmt(row.cantidad)} / ${money(row.total_importe)}`}
+                />
+              ))}
             </div>
-          )}
+          </div>
+
+          <div className={styles.compactPanel} id="alertas">
+            <div className={styles.compactPanelTitle}>
+              <h2>Alertas</h2>
+            </div>
+            <div className={styles.statRows}>
+              <StatRow
+                label="Salidas sin fecha"
+                value={`${numberFmt(sinFecha.total_salidas_sin_fecha)} / ${money(sinFecha.total_monto_sin_fecha)}`}
+              />
+              <StatRow
+                label="Comprobantes por revisar"
+                value={`${numberFmt(r["Comprobantes para revisar"])} / ${money(r["Monto comprobantes para revisar"])}`}
+              />
+              <StatRow label="Comprobantes OK" value={numberFmt(r["Comprobantes OK completos"])} />
+            </div>
+          </div>
+
+          <div className={`${styles.compactPanel} ${styles.monthlyPanel}`} id="mensual">
+            <div className={styles.compactPanelTitle}>
+              <h2>Reporte mensual</h2>
+              <p>{filterActive ? `${rangeLabel} · ${sedeLabel}` : "Vista ejecutiva por mes y sede."}</p>
+            </div>
+
+            <div className={styles.monthList}>
+              {rowsForTable.length === 0 ? (
+                <div className={styles.monthItem}>
+                  <div style={{ padding: "12px" }}>No hay información para el filtro seleccionado.</div>
+                </div>
+              ) : (
+                rowsForTable.map((row) => (
+                  <details className={styles.monthItem} key={`${row.mes}-${row.sede}`}>
+                    <summary>
+                      <span className={styles.monthSummaryMain}>
+                        <span>{monthLabel(row.mes)} · {row.sede}</span>
+                        <small>Ingresos {money(row["Total ingresos confirmados"])}</small>
+                      </span>
+                      <strong className={styles.monthNet}>{money(row["Resultado neto confirmado"])}</strong>
+                    </summary>
+                    <div className={styles.monthDetail}>
+                      <div><span>Servicios</span><strong>{money(row["Ingresos por servicios"])}</strong></div>
+                      <div><span>Gift Cards</span><strong>{money(row["Ingresos por Gift Cards"])}</strong></div>
+                      <div><span>Préstamos</span><strong>{money(row["Préstamos de caja"])}</strong></div>
+                      <div><span>Cuponidad</span><strong>{money(getCuponidadFromMonthlyRow(row))}</strong></div>
+                      <div><span>Salidas</span><strong>{money(row["Total salidas"])}</strong></div>
+                      <div><span>Pendientes</span><strong>{numberFmt(row["Filas pendientes de revisión"])}</strong></div>
+                    </div>
+                  </details>
+                ))
+              )}
+            </div>
+          </div>
         </section>
 
-        <section className="panel" id="mensual">
-          <div className="panelTitle">
-            <div>
-              <h2>Reporte mensual</h2>
-              <p>
-                {filterActive
-                  ? `Vista filtrada: ${rangeLabel} · ${sedeLabel}.`
-                  : "Vista ejecutiva por mes y sede."}
-              </p>
-            </div>
-          </div>
-
-          <div className="tableWrap desktopData">
+        <section className={`${styles.compactPanel} ${styles.desktopTable}`} aria-label="Reporte mensual en tabla">
+          <div className="tableWrap">
             <table>
               <thead>
                 <tr>
@@ -339,7 +425,7 @@ export default async function HomePage({
                   </tr>
                 ) : (
                   rowsForTable.map((row) => (
-                    <tr key={`${row.mes}-${row.sede}`}>
+                    <tr key={`desktop-${row.mes}-${row.sede}`}>
                       <td>{monthLabel(row.mes)}</td>
                       <td>{row.sede}</td>
                       <td>{money(row["Ingresos por servicios"])}</td>
@@ -348,94 +434,13 @@ export default async function HomePage({
                       <td>{money(getCuponidadFromMonthlyRow(row))}</td>
                       <td>{money(row["Total ingresos confirmados"])}</td>
                       <td>{money(row["Total salidas"])}</td>
-                      <td className="strong">
-                        {money(row["Resultado neto confirmado"])}
-                      </td>
+                      <td className="strong">{money(row["Resultado neto confirmado"])}</td>
                       <td>{numberFmt(row["Filas pendientes de revisión"])}</td>
                     </tr>
                   ))
                 )}
               </tbody>
             </table>
-          </div>
-
-          <div className="mobileRecordList">
-            {rowsForTable.length === 0 ? (
-              <div className="mobileRecordCard">No hay información para el filtro seleccionado.</div>
-            ) : (
-              rowsForTable.map((row) => (
-                <article className="mobileRecordCard" key={`mobile-${row.mes}-${row.sede}`}>
-                  <div className="mobileRecordHeader">
-                    <h3>{monthLabel(row.mes)} · {row.sede}</h3>
-                    <strong>{money(row["Resultado neto confirmado"])}</strong>
-                  </div>
-                  <div className="mobileRecordMeta">
-                    <div className="mobileRecordHighlight"><span>Ingresos</span><strong>{money(row["Total ingresos confirmados"])}</strong></div>
-                    <div><span>Salidas</span><strong>{money(row["Total salidas"])}</strong></div>
-                    <div><span>Servicios</span><strong>{money(row["Ingresos por servicios"])}</strong></div>
-                    <div><span>Gift Cards</span><strong>{money(row["Ingresos por Gift Cards"])}</strong></div>
-                    <div><span>Préstamos</span><strong>{money(row["Préstamos de caja"])}</strong></div>
-                    <div><span>Cuponidad</span><strong>{money(getCuponidadFromMonthlyRow(row))}</strong></div>
-                    <div><span>Pendientes</span><strong>{numberFmt(row["Filas pendientes de revisión"])}</strong></div>
-                  </div>
-                </article>
-              ))
-            )}
-          </div>
-        </section>
-
-        <section className="twoCols">
-          <div className="panel" id="comprobantes">
-            <div className="panelTitle">
-              <div>
-                <h2>Comprobantes</h2>
-                <p>Resumen general para revisión de boletas/facturas.</p>
-              </div>
-            </div>
-
-            <div className="miniList">
-              {comprobantes.data.map((row, index) => (
-                <div className="miniItem" key={index}>
-                  <span>
-                    {row.estado_comprobante_final_calculado} ·{" "}
-                    {row.tipo_comprobante}
-                  </span>
-                  <strong>
-                    {numberFmt(row.cantidad)} / {money(row.total_importe)}
-                  </strong>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="panel" id="alertas">
-            <div className="panelTitle">
-              <div>
-                <h2>Alertas</h2>
-                <p>Puntos visibles para no perder control.</p>
-              </div>
-            </div>
-
-            <div className="miniList">
-              <div className="miniItem">
-                <span>Salidas sin fecha</span>
-                <strong>
-                  {numberFmt(sinFecha.total_salidas_sin_fecha)} /{" "}
-                  {money(sinFecha.total_monto_sin_fecha)}
-                </strong>
-              </div>
-              <div className="miniItem">
-                <span>Comprobantes para revisar</span>
-                <strong>
-                  {numberFmt(r["Comprobantes para revisar"])} /{" "}
-                  {money(r["Monto comprobantes para revisar"])}
-                </strong>
-              </div>
-              <div className="miniItem">
-                <span>Comprobantes OK</span>
-                <strong>{numberFmt(r["Comprobantes OK completos"])}</strong>
-              </div>
-            </div>
           </div>
         </section>
       </section>

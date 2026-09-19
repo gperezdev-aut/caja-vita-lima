@@ -3,6 +3,7 @@ import Image from "next/image";
 import { logoutAction } from "@/app/actions";
 import type { CajaSession } from "@/lib/auth";
 import { getVisibleNavItems } from "@/lib/auth";
+import styles from "./CajaSidebar.module.css";
 
 function roleLabel(role: CajaSession["rol"]) {
   if (role === "ADMIN_GERALD" || role === "SOCIO") return "Administración";
@@ -23,7 +24,7 @@ export function CajaSidebar({ session }: { session: CajaSession }) {
 
   return (
     <>
-      <aside className="sidebar sidebarDesktop">
+      <aside className={`sidebar sidebarDesktop ${styles.desktopShell}`}>
         <div className="sidebarBrand">
           <Image
             className="sidebarLogo"
@@ -83,31 +84,30 @@ export function CajaSidebar({ session }: { session: CajaSession }) {
         </form>
       </aside>
 
-      <aside className="sidebarMobile">
-        <details className="mobileMenuDetails">
-          <summary className="mobileMenuSummary">
-            <span className="mobileMenuBrand">
+      <aside className={`sidebarMobile ${styles.mobileShell}`}>
+        <details className={`${styles.mobileDetails} mobileMenuDetails`}>
+          <summary className={styles.mobileSummary}>
+            <span className={styles.brandBlock}>
               <Image
-                className="mobileMenuLogo"
                 src="/brand/logo-vita-lima-orange.png"
                 alt="Vita Lima Spa"
-                width={82}
-                height={37}
+                width={104}
+                height={47}
                 priority
               />
               <small>Caja</small>
             </span>
 
-            <span className="mobileMenuIdentity">
+            <span className={styles.menuButton}>Menú</span>
+          </summary>
+
+          <div className={styles.mobileContent}>
+            <span className={styles.identity}>
               <strong>{session.nombre}</strong>
               <small>{roleLabel(session.rol)}</small>
             </span>
 
-            <span className="mobileMenuLabel">Menú</span>
-          </summary>
-
-          <div className="mobileMenuContent">
-            <nav className="mobileMenuNav" aria-label="Navegación principal">
+            <nav className={styles.mobileNav} aria-label="Navegación principal">
               {navItems.map((item) => (
                 <Link key={item.key} href={item.href}>
                   {item.label}
@@ -116,10 +116,7 @@ export function CajaSidebar({ session }: { session: CajaSession }) {
             </nav>
 
             <form action={logoutAction}>
-              <button
-                className="logoutButton mobileMenuLogout"
-                type="submit"
-              >
+              <button className={styles.mobileLogout} type="submit">
                 Cerrar sesión
               </button>
             </form>
