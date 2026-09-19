@@ -45,6 +45,6 @@ test("el paso Confirmar no genera el enlace hasta un clic explícito", () => {
   assert.match(form, /requestSubmit\(\)/);
   assert.match(form, /if \(!submitArmedRef\.current\)/);
   assert.match(form, /event\.preventDefault\(\)/);
-  assert.match(form, /type="button".*Confirmar y generar enlace/s);
-  assert.doesNotMatch(form, /type="submit" className="primaryButton".*Generar enlace de ficha/s);
+  assert.match(form, /type="button"[\s\S]*Confirmar y generar enlace/);
+  assert.doesNotMatch(form, /type="submit" className="primaryButton"[\s\S]*Generar enlace de ficha/);
 });
