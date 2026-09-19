@@ -83,6 +83,9 @@ type CitaPresentation = {
   puedeAtender: boolean;
   esDirecta: boolean;
   coberturaGiftCard: number;
+  coberturaConvenio: number;
+  convenioProveedor: string;
+  convenioEstado: string;
   serviceInfo?: ServiceInfo;
 };
 
@@ -93,7 +96,7 @@ function ActionLabel({ cita }: { cita: CitaPresentation }) {
 }
 
 function CitaMobileCard({ cita, showTechnical }: { cita: CitaPresentation; showTechnical: boolean }) {
-  const { row, movimientoId, terapistas, pendiente, comprobante, alerta, puedeAtender, coberturaGiftCard, serviceInfo } = cita;
+  const { row, movimientoId, terapistas, pendiente, comprobante, alerta, puedeAtender, coberturaGiftCard, coberturaConvenio, convenioProveedor, convenioEstado, serviceInfo } = cita;
   const comprobanteOk = comprobante.toUpperCase().includes("OK");
   const pagadoCompleto = pendiente <= 0.009;
   return (
@@ -110,6 +113,7 @@ function CitaMobileCard({ cita, showTechnical }: { cita: CitaPresentation; showT
         <p className="citasHoyCardService"><strong>{displayText(row.servicio)}</strong></p>
         {serviceInfo && <small>{serviceInfo.duration ? `${serviceInfo.duration} min` : ""}{serviceInfo.duration && serviceInfo.included ? " · " : ""}{shortText(serviceInfo.included, 92)}</small>}
         <p className="citasHoyCardOperationalMeta">{terapistas} · {row.sede}</p>
+        {convenioProveedor && <div style={{ marginTop: 7 }}><Badge tone={convenioEstado === "verificado" || convenioEstado === "canjeado" ? "good" : "warn"}>{convenioProveedor} · {convenioEstado === "verificado" ? "Verificado" : convenioEstado === "canjeado" ? "Canjeado" : "Cupón registrado"}</Badge></div>}
         {alerta && <div style={{ marginTop: 7 }}><AlertaBadge alerta={alerta} /></div>}
       </div>
 
@@ -122,6 +126,7 @@ function CitaMobileCard({ cita, showTechnical }: { cita: CitaPresentation; showT
           <span>Total {money(row.total_cobrar)}</span>
           <span>Pagado {money(row.total_pagado)}</span>
           {coberturaGiftCard > 0 && <span>Gift Card {money(coberturaGiftCard)}</span>}
+          {coberturaConvenio > 0 && <span>Convenio {money(coberturaConvenio)}</span>}
         </div>
       </div>
 
@@ -157,7 +162,7 @@ export default async function CitasHoyPage({ searchParams }: { searchParams: Sea
     `fecha=eq.${selectedFecha}`,
   ];
   const detallesQuery = ["select=movimiento_id,fecha,sede,persona_n,terapista,servicio,duracion,monto_asignado", `fecha=eq.${selectedFecha}`];
-  const reservasQuery = ["select=reserva_id,source_id,cliente_id,estado,requiere_confirmacion,confirmado_en", `fecha_cita=eq.${selectedFecha}`];
+  const reservasQuery = ["select=reserva_id,source_id,cliente_id,estado,estado_ficha,canal,requiere_confirmacion,confirmado_en", `fecha_cita=eq.${selectedFecha}`];
   if (selectedSede !== "TODAS") {
     const encodedSede = encodeURIComponent(selectedSede);
     movimientosQuery.push(`sede=eq.${encodedSede}`);
@@ -168,11 +173,12 @@ export default async function CitasHoyPage({ searchParams }: { searchParams: Sea
   detallesQuery.push("order=persona_n.asc");
   reservasQuery.push("order=hora_cita.asc");
 
-  const [movimientos, detalles, reservas, holds, releaseResult] = await Promise.all([
+  const [movimientos, detalles, reservas, holds, cupones, releaseResult] = await Promise.all([
     supabaseSelectWhere<Row>("caja_movimientos", movimientosQuery.join("&")),
     supabaseSelectWhere<Row>("caja_atencion_detalle", detallesQuery.join("&")),
     supabaseSelectWhere<Row>("citas_reservadas", reservasQuery.join("&")),
     supabaseSelectWhere<Row>("gift_card_reservas", "select=movimiento_id,monto_reservado,estado&estado=in.(ACTIVA,CANJEADA)"),
+    supabaseSelectWhere<Row>("cupones_convenios", "select=reserva_id,plataforma,estado,monto_reconocido&reserva_id=not.is.null&limit=500"),
     supabaseSelectWhere<Row>("caja_catalog_releases", "select=release_id&active=eq.true&limit=1"),
   ]);
 
@@ -198,10 +204,11 @@ export default async function CitasHoyPage({ searchParams }: { searchParams: Sea
     if (whatsapp && alerta) alertaPorWhatsapp.set(whatsapp, alerta);
   }
 
-  const errors = [config.error, movimientos.error, detalles.error, reservas.error, holds.error, releaseResult.error, catalogError, alertasResult.error].filter(Boolean);
+  const errors = [config.error, movimientos.error, detalles.error, reservas.error, holds.error, cupones.error, releaseResult.error, catalogError, alertasResult.error].filter(Boolean);
   const detallePorMovimiento = new Map<string, Row[]>();
   const reservaPorId = new Map(reservas.data.map((row) => [String(row.reserva_id ?? ""), row]));
   const holdPorMovimiento = new Map(holds.data.map((row) => [String(row.movimiento_id ?? ""), row]));
+  const cuponPorReserva = new Map(cupones.data.map((row) => [String(row.reserva_id ?? ""), row]));
   for (const detalle of detalles.data) {
     const id = String(detalle.movimiento_id ?? "");
     detallePorMovimiento.set(id, [...(detallePorMovimiento.get(id) ?? []), detalle]);
@@ -219,8 +226,19 @@ export default async function CitasHoyPage({ searchParams }: { searchParams: Sea
     const comprobante = String(row.estado_comprobante_manual || row.estado_boleta || row.tipo_comprobante || "-");
     const alerta = alertaPorWhatsapp.get(String(row.whatsapp ?? "").trim()) ?? "";
     const reserva = reservaPorId.get(String(row.source_id ?? ""));
+    const cupon = cuponPorReserva.get(String(reserva?.reserva_id ?? ""));
     const reservaRelacionada = Boolean(reserva && reserva.source_id === movimientoId && reserva.cliente_id === row.cliente_id && (reserva.requiere_confirmacion !== true || Boolean(reserva.confirmado_en)));
-    const puedeAtenderReserva = reservaRelacionada && ((row.tipo_movimiento === "RESERVA_APP" && row.estado === "Reservado" && reserva?.estado === "PENDIENTE") || (row.tipo_movimiento === "ATENCION_APP" && row.estado === "En atención" && reserva?.estado === "EN_ATENCION"));
+    const convenioListo = Boolean(
+      reservaRelacionada &&
+      ["cuponidad", "bee"].includes(String(reserva?.canal ?? "")) &&
+      reserva?.estado_ficha === "completa" &&
+      cupon?.estado === "verificado"
+    );
+    const puedeAtenderReserva = reservaRelacionada && (
+      (row.tipo_movimiento === "RESERVA_APP" && row.estado === "Reservado" && reserva?.estado === "PENDIENTE") ||
+      (row.tipo_movimiento === "RESERVA_APP" && row.estado === "Cupón verificado" && reserva?.estado === "PENDIENTE" && convenioListo) ||
+      (row.tipo_movimiento === "ATENCION_APP" && row.estado === "En atención" && reserva?.estado === "EN_ATENCION")
+    );
     const esDirecta = row.tipo_movimiento === "ATENCION_APP" && !reserva;
     const puedeAtenderDirecta = esDirecta && (row.estado === "Registrado" || row.estado === "En atención");
     return {
@@ -233,6 +251,9 @@ export default async function CitasHoyPage({ searchParams }: { searchParams: Sea
       puedeAtender: puedeAtenderReserva || puedeAtenderDirecta,
       esDirecta,
       coberturaGiftCard: Number(holdPorMovimiento.get(movimientoId)?.monto_reservado ?? 0),
+      coberturaConvenio: Number(cupon?.monto_reconocido ?? 0),
+      convenioProveedor: cupon ? String(cupon.plataforma ?? "") : "",
+      convenioEstado: cupon ? String(cupon.estado ?? "") : "",
       serviceInfo: serviceByName.get(normalizeService(row.servicio)),
     };
   });
@@ -285,7 +306,7 @@ export default async function CitasHoyPage({ searchParams }: { searchParams: Sea
                 <table>
                   <thead><tr><th>Hora</th><th>Cliente</th><th>Servicio</th><th>Terapista</th><th>Cobro</th><th>Estado</th>{showTechnical && <th>Ref.</th>}<th>Acción</th></tr></thead>
                   <tbody>{citas.map((cita) => {
-                    const { row, movimientoId, terapistas, pendiente, comprobante, alerta, puedeAtender, coberturaGiftCard, serviceInfo } = cita;
+                    const { row, movimientoId, terapistas, pendiente, comprobante, alerta, puedeAtender, coberturaGiftCard, coberturaConvenio, convenioProveedor, convenioEstado, serviceInfo } = cita;
                     return (
                       <tr key={movimientoId}>
                         <td><strong>{hourLabel(row.hora)}</strong></td>
@@ -297,6 +318,7 @@ export default async function CitasHoyPage({ searchParams }: { searchParams: Sea
                         <td style={{ minWidth: 220 }}>
                           <strong>{displayText(row.servicio)}</strong>
                           {serviceInfo && <small style={{ display: "block", marginTop: 4, color: "var(--muted)", maxWidth: 330 }}>{serviceInfo.duration ? `${serviceInfo.duration} min` : ""}{serviceInfo.duration && serviceInfo.included ? " · " : ""}{shortText(serviceInfo.included, 72)}</small>}
+                          {convenioProveedor && <div style={{ marginTop: 5 }}><Badge tone={convenioEstado === "verificado" || convenioEstado === "canjeado" ? "good" : "warn"}>{convenioProveedor} · {convenioEstado === "verificado" ? "Verificado" : convenioEstado === "canjeado" ? "Canjeado" : "Cupón registrado"}</Badge></div>}
                           {selectedSede === "TODAS" && <small style={{ display: "block", marginTop: 3 }}>{row.sede}</small>}
                         </td>
                         <td>{terapistas}</td>
@@ -304,6 +326,7 @@ export default async function CitasHoyPage({ searchParams }: { searchParams: Sea
                           <div><small>Total</small> <strong>{money(row.total_cobrar)}</strong></div>
                           <div><small>Pagado</small> {money(row.total_pagado)}</div>
                           {coberturaGiftCard > 0 && <div><small>Gift Card</small> {money(coberturaGiftCard)}</div>}
+                          {coberturaConvenio > 0 && <div><small>Convenio</small> {money(coberturaConvenio)}</div>}
                           <Badge tone={pendiente > 0 ? "warn" : "good"}>Pendiente {money(row.pendiente)}</Badge>
                         </td>
                         <td><Badge>{row.estado || "-"}</Badge><div style={{ marginTop: 6 }}><Badge tone={comprobante.toUpperCase().includes("OK") ? "good" : "warn"}>Comprobante: {comprobante}</Badge></div></td>
