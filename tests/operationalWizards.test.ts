@@ -15,7 +15,9 @@ const salidaCompleta: SalidaDraft = {
   fecha: "2026-09-13",
   hora: "15:30",
   sede: "Miraflores",
+  naturalezaSalida: "GASTO",
   tipoGasto: "Insumos",
+  metodoSalida: "EFECTIVO",
   concepto: "Aceite",
   monto: "25.50",
   responsable: "Gerald",
@@ -27,12 +29,51 @@ const cierreCompleto: CierreDraft = {
   responsable: "Gerald",
   cajaInicial: "50.00",
   efectivoContado: "125.50",
-  pozoFondo: "20.00",
+  fondoSiguiente: "20.00",
 };
 
-test("Registrar salida bloquea el paso 1 incompleto y permite el completo", () => {
-  assert.equal(validateSalidaStep(1, { ...salidaCompleta, sede: "" }), "Completa fecha, hora, sede y tipo de gasto.");
+test("Registrar salida exige naturaleza, método y categoría cuando es gasto", () => {
+  assert.equal(
+    validateSalidaStep(1, { ...salidaCompleta, sede: "" }),
+    "Completa fecha, hora, sede, naturaleza y método."
+  );
+  assert.equal(
+    validateSalidaStep(1, { ...salidaCompleta, tipoGasto: "" }),
+    "Selecciona la categoría del gasto."
+  );
   assert.equal(validateSalidaStep(1, salidaCompleta), "");
+});
+
+test("Registrar salida protege combinaciones que deformarían la caja física", () => {
+  assert.match(
+    validateSalidaStep(1, {
+      ...salidaCompleta,
+      naturalezaSalida: "RETIRO_CAJA",
+      tipoGasto: "",
+      metodoSalida: "YAPE",
+    }),
+    /deben registrarse como EFECTIVO/
+  );
+
+  assert.match(
+    validateSalidaStep(1, {
+      ...salidaCompleta,
+      naturalezaSalida: "TRANSFERENCIA",
+      tipoGasto: "",
+      metodoSalida: "EFECTIVO",
+    }),
+    /no puede usar EFECTIVO/
+  );
+
+  assert.equal(
+    validateSalidaStep(1, {
+      ...salidaCompleta,
+      naturalezaSalida: "TRANSFERENCIA",
+      tipoGasto: "",
+      metodoSalida: "BCP",
+    }),
+    ""
+  );
 });
 
 test("Registrar salida rechaza montos inválidos sin cambiar la regla de monto cero", () => {
@@ -41,60 +82,90 @@ test("Registrar salida rechaza montos inválidos sin cambiar la regla de monto c
   assert.equal(validateSalidaStep(2, { ...salidaCompleta, monto: "0" }), "");
 });
 
-test("Registrar salida conserva estado al volver, relega opciones avanzadas y confirma al final", async () => {
-  const [wizard, submitButton] = await Promise.all([
+test("Registrar salida conserva estado, separa naturaleza/método y confirma al final", async () => {
+  const [wizard, action, submitButton] = await Promise.all([
     readFile(new URL("../app/registrar-salida/RegistrarSalidaWizard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/registrar-salida/actions.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/SubmitButton.tsx", import.meta.url), "utf8"),
   ]);
 
-  for (const field of ["fecha", "hora", "sede", "tipoGasto", "concepto", "monto", "responsable", "sourceMovimientoId", "observacion"]) {
-    assert.match(wizard, new RegExp(`const \\[${field}, set`));
+  for (const field of [
+    "fecha",
+    "hora",
+    "sede",
+    "naturalezaSalida",
+    "tipoGasto",
+    "metodoSalida",
+    "concepto",
+    "monto",
+    "responsable",
+    "sourceMovimientoId",
+    "observacion",
+  ]) {
+    assert.match(wizard, new RegExp(`const \\\\[${field}, set`));
   }
-  assert.match(wizard, /function previous\(\)[\s\S]*setStep\(\(current\) => Math\.max\(current - 1, 1\)\)/);
-  assert.match(wizard, /<details className="operationalAdvanced">[\s\S]*<summary>Opciones avanzadas<\/summary>/);
-  assert.match(wizard, /name="source_movimiento_id"/);
-  assert.match(wizard, /step === 3[\s\S]*Guardar salida/);
+
+  assert.match(wizard, /name="naturaleza_salida"/);
+  assert.match(wizard, /name="metodo_salida"/);
+  assert.match(wizard, /Afecta resultado/);
+  assert.match(wizard, /Afecta caja física/);
+  assert.match(wizard, /Guardar movimiento/);
+  assert.match(action, /naturalezaRaw === "GASTO"/);
+  assert.match(action, /"caja_movimientos_fondos"/);
+  assert.match(action, /metodo_salida:\s*metodoSalida/);
   assert.equal((wizard.match(/<SubmitButton/g) ?? []).length, 1);
-  assert.match(wizard, /if \(step < 3\)[\s\S]*event\.preventDefault\(\)/);
-  assert.match(submitButton, /disabled=\{pending\}/);
+  assert.match(submitButton, /disabled=\{pending/);
 });
 
-test("Cierre navega del paso 1 al 4 y conserva los valores controlados al volver", async () => {
+test("Cierre navega del paso 1 al 4 y valida fondo contra efectivo contado", async () => {
   const wizard = await readFile(new URL("../app/cierre-caja/CierreCajaWizard.tsx", import.meta.url), "utf8");
 
-  for (const step of [1, 2, 3, 4]) assert.match(wizard, new RegExp(`step === ${step}`));
-  for (const field of ["responsable", "cajaInicial", "efectivoContado", "pozoFondo", "observacion"]) {
-    assert.match(wizard, new RegExp(`const \\[${field}, set`));
+  for (const step of [1, 2, 3, 4]) {
+    assert.match(wizard, new RegExp(`step === ${step}`));
   }
-  assert.match(wizard, /function previous\(\)[\s\S]*setStep\(\(current\) => Math\.max\(current - 1, 1\)\)/);
+
+  for (const field of ["responsable", "cajaInicial", "efectivoContado", "fondoSiguiente", "observacion"]) {
+    assert.match(wizard, new RegExp(`const \\\\[${field}, set`));
+  }
+
   assert.equal(validateCierreStep(1, cierreCompleto), "");
   assert.equal(validateCierreStep(2, cierreCompleto), "");
+  assert.match(
+    validateCierreStep(2, {
+      ...cierreCompleto,
+      efectivoContado: "50",
+      fondoSiguiente: "60",
+    }),
+    /no puede ser mayor/
+  );
 });
 
-test("Cierre conserva No calculable y no reintroduce fórmulas físicas", async () => {
+test("Cierre calcula caja física y bloquea cierres con salidas sin método", async () => {
   const [wizard, action] = await Promise.all([
     readFile(new URL("../app/cierre-caja/CierreCajaWizard.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/cierre-caja/actions.ts", import.meta.url), "utf8"),
   ]);
 
   assert.equal(physicalValue(null), "No calculable");
-  assert.match(wizard, /Caja física esperada/);
-  assert.match(wizard, /Diferencia física/);
-  assert.match(action, /cajaFisicaNoCalculable\(\)/);
-  assert.match(action, /resumirDineroProcesadoCierre\(pagos\.data, propinas\.data\)/);
-  assert.match(action, /const totalIngresos = dineroProcesado\.ingresos\.total/);
-  assert.match(action, /sumarSalidas\(salidas\.data\)/);
-  assert.doesNotMatch(action, /efectivoContado\s*-\s*cajaEsperada/);
+  assert.match(wizard, /calcularCajaFisica\(/);
+  assert.match(wizard, /Salidas que reducen efectivo/);
+  assert.match(wizard, /Efectivo a retirar\/depositar/);
+  assert.match(wizard, /salidasSinMetodo === 0/);
+  assert.match(wizard, /disabled=\{cierreBloqueado \|\| !fisicoCalculable\}/);
+  assert.match(action, /resumirSalidasCierre\(/);
+  assert.match(action, /calcularCajaFisica\(/);
+  assert.match(action, /Clasifícalas antes de cerrar/);
+  assert.match(action, /cierreExistente\.data\.length > 0/);
 });
 
 test("Cierre no guarda antes del paso final y exige confirmación explícita", async () => {
   const wizard = await readFile(new URL("../app/cierre-caja/CierreCajaWizard.tsx", import.meta.url), "utf8");
 
   assert.equal((wizard.match(/<SubmitButton/g) ?? []).length, 1);
-  assert.match(wizard, /step === 4 && <SubmitButton/);
+  assert.match(wizard, /step === 4 && \(/);
   assert.match(wizard, /if \(step < 4\)[\s\S]*event\.preventDefault\(\)/);
   assert.match(wizard, /Revisa los datos antes de cerrar la caja\./);
-  assert.match(wizard, />Cerrar caja<\/SubmitButton>/);
+  assert.match(wizard, />\s*Cerrar caja\s*<\/SubmitButton>/);
   assert.match(wizard, />Revisar cierre<\/button>/);
 });
 
@@ -106,7 +177,6 @@ test("los wizards operativos mantienen una sola columna, targets táctiles y saf
   assert.match(css, /bottom:\s*max\(8px, env\(safe-area-inset-bottom\)\)/);
   assert.match(css, /\.operationalReview strong \{ display: block; overflow-wrap: anywhere; \}/);
 });
-
 
 test("Nueva atención busca clientes existentes y solo guarda con acción explícita", async () => {
   const [wizard, action, page] = await Promise.all([
@@ -142,14 +212,12 @@ test("Preparar cita expone seis pasos coherentes", async () => {
   assert.match(form, /Paso 6 de 6/);
 });
 
-
 test("Nueva atención usa el catálogo canónico y no el staging legado", async () => {
   const page = await readFile(new URL("../app/nueva-atencion/page.tsx", import.meta.url), "utf8");
   assert.match(page, /leerCatalogoPrepararCita/);
   assert.match(page, /servicios canónicos/);
   assert.doesNotMatch(page, /supabaseSelect<Row>\("stg_services_catalog_v5"\)/);
 });
-
 
 test("Conciliar atención exige saldo cero y confirmación final explícita", async () => {
   const [wizard, action, page] = await Promise.all([

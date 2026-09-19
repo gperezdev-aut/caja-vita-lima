@@ -2,31 +2,85 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import {
-  cajaFisicaNoCalculable,
+  calcularCajaFisica,
   esBoletaPendiente,
   normalizarMetodoCierre,
   resumirDineroProcesadoCierre,
   resumirMovimientosOperativos,
   resumirPagosCierre,
   resumirPropinasCierre,
+  resumirSalidasCierre,
   sumarSalidas,
 } from "../lib/cierreCaja.ts";
 
-test("cierre no atribuye pagos digitales a una diferencia de caja física", () => {
-  const resumen = resumirPagosCierre([
-    { metodo: "EFECTIVO", monto: 100 },
-    { metodo: "YAPE", monto: 200 },
-  ]);
-  const resultadoFisico = cajaFisicaNoCalculable();
+test("cierre calcula caja física sin atribuir pagos digitales al efectivo", () => {
+  const procesado = resumirDineroProcesadoCierre(
+    [
+      { metodo: "EFECTIVO", monto: 100 },
+      { metodo: "YAPE", monto: 200 },
+    ],
+    [{ metodo: "EFECTIVO", monto: 10, estado: "PENDIENTE" }]
+  );
 
-  assert.equal(resumen.total, 300);
-  assert.equal(resumen.efectivo, 100);
-  assert.equal(resumen.digital, 200);
-  assert.deepEqual(resultadoFisico, {
+  const salidas = resumirSalidasCierre(
+    [
+      { metodo_salida: "EFECTIVO", monto: 30 },
+      { metodo_salida: "YAPE", monto: 40 },
+    ],
+    [
+      { tipo_movimiento: "RETIRO_CAJA", metodo: "EFECTIVO", monto: 20 },
+      { tipo_movimiento: "TRANSFERENCIA", metodo: "BCP", monto: 50 },
+    ]
+  );
+
+  const fisico = calcularCajaFisica({
+    cajaInicial: 50,
+    efectivoVitaLima: procesado.ingresos.efectivo,
+    efectivoPropinas: procesado.propinas.efectivo,
+    totalSalidasEfectivo: salidas.totalSalidasEfectivo,
+    efectivoContado: 108,
+    fondoSiguiente: 50,
+    calculable: salidas.fisicoCalculable,
+  });
+
+  assert.equal(procesado.ingresos.total, 300);
+  assert.equal(procesado.ingresos.efectivo, 100);
+  assert.equal(procesado.ingresos.digital, 200);
+  assert.equal(salidas.totalGastos, 70);
+  assert.equal(salidas.totalGastosEfectivo, 30);
+  assert.equal(salidas.totalMovimientosFondos, 70);
+  assert.equal(salidas.totalMovimientosFondosEfectivo, 20);
+  assert.equal(salidas.totalSalidasEfectivo, 50);
+  assert.deepEqual(fisico, {
+    cajaEsperada: 110,
+    diferencia: -2,
+    efectivoARetirar: 58,
+  });
+});
+
+test("cierre no inventa caja física si existe una salida histórica sin método", () => {
+  const salidas = resumirSalidasCierre(
+    [{ monto: 12.5, metodo_salida: null }],
+    []
+  );
+
+  const fisico = calcularCajaFisica({
+    cajaInicial: 100,
+    efectivoVitaLima: 20,
+    efectivoPropinas: 0,
+    totalSalidasEfectivo: salidas.totalSalidasEfectivo,
+    efectivoContado: 108,
+    fondoSiguiente: 100,
+    calculable: salidas.fisicoCalculable,
+  });
+
+  assert.equal(salidas.salidasSinMetodo, 1);
+  assert.equal(salidas.fisicoCalculable, false);
+  assert.deepEqual(fisico, {
     cajaEsperada: null,
     diferencia: null,
+    efectivoARetirar: null,
   });
-  assert.notEqual(resultadoFisico.diferencia, -200);
 });
 
 test("cierre agrupa los métodos del ledger sin confundir efectivo y digital", () => {
@@ -74,7 +128,7 @@ test("propinas se separan de ingresos pero sí forman parte del dinero procesado
   assert.equal(procesado.porMetodo["IZIPAY POS"], 90);
 });
 
-test("cierre mantiene salidas y métricas operativas separadas de pagos", () => {
+test("cierre mantiene gastos y métricas operativas separadas de pagos", () => {
   assert.equal(sumarSalidas([{ monto: 12.5 }, { monto: "7.50" }]), 20);
   assert.equal(esBoletaPendiente({ estado_boleta: "Pendiente" }), true);
   assert.deepEqual(
@@ -101,33 +155,44 @@ test("casos E/F: el adelanto entra solo en el cierre de su fecha real", () => {
   assert.equal(cierre20.total, 0);
 });
 
-test("la app recalcula el cierre server-side y separa propinas de ingresos", async () => {
-  const [action, page, exportRoute, migration036] = await Promise.all([
-    readFile(new URL("../app/cierre-caja/actions.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/cierre-caja/page.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/api/dashboard/export/route.ts", import.meta.url), "utf8"),
-    readFile(new URL("../sql/036_cierre_caja_propinas_v2.sql", import.meta.url), "utf8"),
-  ]);
+test("la app recalcula el cuadre server-side, separa fondos y bloquea cierres duplicados", async () => {
+  const [action, page, exportRoute, migration036, migration042] =
+    await Promise.all([
+      readFile(new URL("../app/cierre-caja/actions.ts", import.meta.url), "utf8"),
+      readFile(new URL("../app/cierre-caja/page.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../app/api/dashboard/export/route.ts", import.meta.url), "utf8"),
+      readFile(new URL("../sql/036_cierre_caja_propinas_v2.sql", import.meta.url), "utf8"),
+      readFile(new URL("../sql/042_cierre_caja_fisica_v3.sql", import.meta.url), "utf8"),
+    ]);
 
   assert.match(action, /supabaseSelectAllWhere[\s\S]*"caja_pagos"/);
   assert.match(action, /supabaseSelectAllWhere[\s\S]*"caja_propinas"/);
-  assert.match(action, /resumirDineroProcesadoCierre\(pagos\.data, propinas\.data\)/);
-  assert.match(action, /total_ingresos:\s*totalIngresos/);
-  assert.match(action, /total_propinas:\s*dineroProcesado\.propinas\.total/);
-  assert.match(action, /total_procesado:\s*dineroProcesado\.totalProcesado/);
+  assert.match(action, /supabaseSelectAllWhere[\s\S]*"caja_salidas"/);
+  assert.match(action, /supabaseSelectAllWhere[\s\S]*"caja_movimientos_fondos"/);
+  assert.match(action, /resumirSalidasCierre\(/);
+  assert.match(action, /calcularCajaFisica\(/);
+  assert.match(action, /cierreExistente\.data\.length > 0/);
+  assert.match(action, /total_salidas_efectivo:/);
+  assert.match(action, /efectivo_a_retirar:/);
+  assert.match(action, /cierre_fisico_calculable:\s*true/);
   assert.doesNotMatch(action, /money\(formData\.get\("total_ingresos"\)\)/);
-  assert.match(action, /cajaFisicaNoCalculable\(\)/);
-  assert.doesNotMatch(action, /efectivoContado\s*-\s*cajaEsperada/);
-  assert.match(page, /resumirDineroProcesadoCierre\(pagos\.data, propinas\.data\)/);
-  assert.match(page, /Ingresos Vita Lima/);
-  assert.match(page, /Propinas terapistas/);
-  assert.match(page, /Dinero procesado/);
-  assert.match(page, /value == null \? "No calculable"/);
+
+  assert.match(page, /cajaInicialSugerida/);
+  assert.match(page, /Salidas que reducen efectivo/);
+  assert.match(page, /Efectivo a retirar\/depositar|A retirar\/depositar/);
+
   assert.match(exportRoute, /supabaseSelectAllWhere<Row>\("caja_pagos", ingresosQuery\)/);
+
   assert.match(migration036, /total_propinas/);
   assert.match(migration036, /total_procesado/);
-  assert.match(migration036, /propinas_por_metodo/);
-  assert.match(migration036, /dinero_procesado_por_metodo/);
+
+  assert.match(migration042, /add column if not exists metodo_salida text/);
+  assert.match(migration042, /create table if not exists public\.caja_movimientos_fondos/);
+  assert.match(migration042, /efectivo_vita_lima/);
+  assert.match(migration042, /total_salidas_efectivo/);
+  assert.match(migration042, /efectivo_a_retirar/);
+  assert.match(migration042, /cierre_fisico_calculable/);
+  assert.doesNotMatch(migration042, /update\s+public\.caja_salidas/i);
 });
 
 test("021 fija hora de cobro en PostgreSQL y conserva contrato idempotente", async () => {
