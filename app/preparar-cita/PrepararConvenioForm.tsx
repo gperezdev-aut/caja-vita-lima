@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useMemo, useRef, useState } from "react";
 import { prepararConvenioAction, type PrepararCitaState } from "./actions";
 import { formatDate, formatTime } from "./prepararCitaWizard";
 
@@ -35,6 +35,8 @@ export function PrepararConvenioForm({ sedes, requestId, minDate, onBack }: Prop
   const [hora, setHora] = useState("");
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
+  const submitArmedRef = useRef(false);
 
   const selectedSede = sedes.find((item) => item.name === sede);
   const hours = useMemo(() => {
@@ -58,6 +60,12 @@ export function PrepararConvenioForm({ sedes, requestId, minDate, onBack }: Prop
     setError("");
     setStep((current) => Math.min(current + 1, 2));
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function confirmAndGenerate() {
+    if (pending) return;
+    submitArmedRef.current = true;
+    formRef.current?.requestSubmit();
   }
 
   async function copyLink() {
@@ -87,7 +95,19 @@ export function PrepararConvenioForm({ sedes, requestId, minDate, onBack }: Prop
   }
 
   return (
-    <form action={formAction} className="atencionForm fichaPrepararForm prepararWizard" noValidate>
+    <form
+      ref={formRef}
+      action={formAction}
+      className="atencionForm fichaPrepararForm prepararWizard"
+      noValidate
+      onSubmit={(event) => {
+        if (!submitArmedRef.current) {
+          event.preventDefault();
+          return;
+        }
+        submitArmedRef.current = false;
+      }}
+    >
       <input type="hidden" name="request_id" value={requestId} />
       <input type="hidden" name="canal" value={canal} />
       <input type="hidden" name="sede" value={sede} />
@@ -198,7 +218,7 @@ export function PrepararConvenioForm({ sedes, requestId, minDate, onBack }: Prop
           : <button type="button" className="ghostButton" onClick={() => { setError(""); setStep((current) => Math.max(current - 1, 0)); }}>Atrás</button>}
         {step < 2
           ? <button type="button" className="primaryButton" onClick={next}>Continuar</button>
-          : <button type="submit" className="primaryButton" disabled={pending}>{pending ? "Generando…" : "Generar enlace de ficha"}</button>}
+          : <button type="button" className="primaryButton" disabled={pending} onClick={confirmAndGenerate}>{pending ? "Generando…" : "Confirmar y generar enlace"}</button>}
       </div>
     </form>
   );
