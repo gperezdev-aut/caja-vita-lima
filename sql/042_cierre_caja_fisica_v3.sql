@@ -13,9 +13,29 @@
 begin;
 
 alter table public.caja_salidas
-  add column if not exists metodo_salida text;
+  add column if not exists metodo_salida text,
+  add column if not exists categoria_financiera text;
 
-do $$ begin
+do $ begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'caja_salidas_categoria_financiera_check'
+  ) then
+    alter table public.caja_salidas
+      add constraint caja_salidas_categoria_financiera_check
+      check (
+        categoria_financiera is null
+        or categoria_financiera in (
+          'GASTO_OPERATIVO',
+          'ENTREGA_PROPINA',
+          'MOVIMIENTO_FONDOS',
+          'DEVOLUCION_PRESTAMO',
+          'SIN_CLASIFICAR'
+        )
+      ) not valid;
+  end if;
+
   if not exists (
     select 1
     from pg_constraint
@@ -32,6 +52,9 @@ end $$;
 
 create index if not exists idx_salidas_fecha_sede_metodo
   on public.caja_salidas(fecha, sede, metodo_salida);
+
+create index if not exists idx_salidas_categoria_financiera
+  on public.caja_salidas(categoria_financiera);
 
 create table if not exists public.caja_movimientos_fondos (
   movimiento_fondo_id text primary key,
@@ -71,6 +94,10 @@ create index if not exists idx_mov_fondos_metodo
 alter table public.caja_movimientos_fondos enable row level security;
 revoke all on table public.caja_movimientos_fondos from anon, authenticated;
 grant select, insert, update, delete on table public.caja_movimientos_fondos to service_role;
+
+create unique index if not exists uq_caja_cierres_fecha_sede_cerrado
+  on public.caja_cierres(fecha, sede)
+  where upper(coalesce(estado, '')) = 'CERRADO';
 
 alter table public.caja_cierres
   add column if not exists efectivo_vita_lima numeric(12,2) not null default 0,
@@ -128,7 +155,10 @@ do $$ begin
 end $$;
 
 comment on column public.caja_salidas.metodo_salida is
-  'Método con el que se pagó el gasto. NULL significa histórico pendiente de clasificación; no debe asumirse efectivo.';
+  'Método con el que salió el dinero. NULL significa histórico pendiente de clasificación; no debe asumirse efectivo.';
+
+comment on column public.caja_salidas.categoria_financiera is
+  'Clasificación financiera compatible con la capa V2 existente. Los gastos nuevos de Caja se guardan como GASTO_OPERATIVO.';
 
 comment on table public.caja_movimientos_fondos is
   'Movimientos de custodia/fondos que no son gasto del negocio: retiro de efectivo, entrega de propina, transferencia interna o ajuste de caja.';

@@ -28,6 +28,9 @@ export type MovimientoCierre = {
 export type SalidaGastoCierre = {
   monto?: unknown;
   metodo_salida?: unknown;
+  categoria_financiera?: unknown;
+  tipo_gasto?: unknown;
+  concepto?: unknown;
 };
 
 export type MovimientoFondoCierre = {
@@ -35,6 +38,13 @@ export type MovimientoFondoCierre = {
   metodo?: unknown;
   tipo_movimiento?: unknown;
 };
+
+export type CategoriaFinancieraSalida =
+  | "GASTO_OPERATIVO"
+  | "ENTREGA_PROPINA"
+  | "MOVIMIENTO_FONDOS"
+  | "DEVOLUCION_PRESTAMO"
+  | "SIN_CLASIFICAR";
 
 function roundMoney(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
@@ -45,12 +55,17 @@ function safeMoney(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-export function normalizarMetodoCierre(value: unknown): MetodoCierre {
-  const metodo = String(value ?? "")
+function normalizarTexto(value: unknown) {
+  return String(value ?? "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
     .trim()
     .toUpperCase();
+}
+
+export function normalizarMetodoCierre(value: unknown): MetodoCierre {
+  const metodo = normalizarTexto(value);
 
   if (metodo === "EFECTIVO") return "EFECTIVO";
   if (metodo.includes("YAPE")) return "YAPE";
@@ -58,6 +73,60 @@ export function normalizarMetodoCierre(value: unknown): MetodoCierre {
   if (metodo.includes("IZIPAY") || metodo === "POS") return "IZIPAY POS";
   if (metodo.includes("BCP")) return "BCP";
   return "OTRO";
+}
+
+export function clasificarSalidaFinanciera(
+  row: SalidaGastoCierre
+): CategoriaFinancieraSalida {
+  const categoria = normalizarTexto(row.categoria_financiera);
+
+  if (
+    categoria === "GASTO_OPERATIVO" ||
+    categoria === "ENTREGA_PROPINA" ||
+    categoria === "MOVIMIENTO_FONDOS" ||
+    categoria === "DEVOLUCION_PRESTAMO" ||
+    categoria === "SIN_CLASIFICAR"
+  ) {
+    return categoria;
+  }
+
+  const tipo = normalizarTexto(row.tipo_gasto);
+  const concepto = normalizarTexto(row.concepto);
+
+  if (tipo === "PROPINA") return "ENTREGA_PROPINA";
+  if (tipo === "DEPOSITOS" || tipo === "DEPOSITO") return "MOVIMIENTO_FONDOS";
+  if (
+    tipo === "PAGO PERSONAL" ||
+    tipo === "OTROS" ||
+    tipo === "OTRO"
+  ) {
+    return "SIN_CLASIFICAR";
+  }
+
+  if (
+    tipo === "AGUA" ||
+    tipo === "INSUMOS" ||
+    tipo === "LAVANDERIA" ||
+    tipo === "PASAJE" ||
+    tipo === "MOVILIDAD" ||
+    tipo === "LIMPIEZA" ||
+    tipo === "ALQUILER" ||
+    tipo === "SERVICIOS" ||
+    tipo === "REPARACION" ||
+    tipo === "APOYO THERAPY"
+  ) {
+    return "GASTO_OPERATIVO";
+  }
+
+  if (
+    concepto.includes("DEVOLUCION DE PRESTAMO") ||
+    concepto.includes("PAGO DE PRESTAMO") ||
+    concepto.includes("REEMBOLSO DE PRESTAMO")
+  ) {
+    return "DEVOLUCION_PRESTAMO";
+  }
+
+  return "SIN_CLASIFICAR";
 }
 
 export function resumirPagosCierre(rows: PagoCierre[]) {
@@ -117,27 +186,38 @@ export function resumirDineroProcesadoCierre(
 }
 
 export function resumirSalidasCierre(
-  gastos: SalidaGastoCierre[],
+  salidasLegacyYGastos: SalidaGastoCierre[],
   movimientosFondos: MovimientoFondoCierre[]
 ) {
   let totalGastos = 0;
   let totalGastosEfectivo = 0;
+  let totalSalidasLegacyEfectivo = 0;
   let totalMovimientosFondos = 0;
   let totalMovimientosFondosEfectivo = 0;
   let salidasSinMetodo = 0;
+  let salidasSinClasificar = 0;
 
-  for (const row of gastos) {
+  for (const row of salidasLegacyYGastos) {
     const monto = safeMoney(row.monto);
-    totalGastos += monto;
+    const categoria = clasificarSalidaFinanciera(row);
+
+    if (categoria === "GASTO_OPERATIVO") {
+      totalGastos += monto;
+    } else if (categoria === "SIN_CLASIFICAR" && monto > 0.009) {
+      salidasSinClasificar += 1;
+    }
 
     const rawMetodo = String(row.metodo_salida ?? "").trim();
     if (!rawMetodo) {
-      salidasSinMetodo += 1;
+      if (monto > 0.009) salidasSinMetodo += 1;
       continue;
     }
 
     if (normalizarMetodoCierre(rawMetodo) === "EFECTIVO") {
-      totalGastosEfectivo += monto;
+      totalSalidasLegacyEfectivo += monto;
+      if (categoria === "GASTO_OPERATIVO") {
+        totalGastosEfectivo += monto;
+      }
     }
   }
 
@@ -147,11 +227,11 @@ export function resumirSalidasCierre(
 
     const rawMetodo = String(row.metodo ?? "").trim();
     if (!rawMetodo) {
-      salidasSinMetodo += 1;
+      if (monto > 0.009) salidasSinMetodo += 1;
       continue;
     }
 
-    const tipo = String(row.tipo_movimiento ?? "").trim().toUpperCase();
+    const tipo = normalizarTexto(row.tipo_movimiento);
     const metodo = normalizarMetodoCierre(rawMetodo);
 
     if (metodo === "EFECTIVO" && tipo !== "TRANSFERENCIA") {
@@ -160,7 +240,7 @@ export function resumirSalidasCierre(
   }
 
   const totalSalidasEfectivo =
-    totalGastosEfectivo + totalMovimientosFondosEfectivo;
+    totalSalidasLegacyEfectivo + totalMovimientosFondosEfectivo;
 
   return {
     totalGastos: roundMoney(totalGastos),
@@ -169,6 +249,7 @@ export function resumirSalidasCierre(
     totalMovimientosFondosEfectivo: roundMoney(totalMovimientosFondosEfectivo),
     totalSalidasEfectivo: roundMoney(totalSalidasEfectivo),
     salidasSinMetodo,
+    salidasSinClasificar,
     fisicoCalculable: salidasSinMetodo === 0,
   };
 }

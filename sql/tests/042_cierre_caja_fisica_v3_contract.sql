@@ -19,6 +19,16 @@ begin
     raise exception '042 no creó public.caja_movimientos_fondos';
   end if;
 
+  if not exists (
+    select 1
+    from information_schema.columns
+    where table_schema='public'
+      and table_name='caja_salidas'
+      and column_name='categoria_financiera'
+  ) then
+    raise exception '042 no aseguró categoria_financiera en caja_salidas';
+  end if;
+
   select count(*)
     into v_count
   from information_schema.columns
@@ -40,22 +50,22 @@ end $$;
 
 insert into public.caja_salidas (
   salida_id, fecha, hora, sede, tipo_gasto, concepto, monto,
-  metodo_salida, responsable
+  metodo_salida, categoria_financiera, responsable
 )
 values (
   'SAL-042-CASH', date '2026-09-18', time '18:00',
   'Miraflores', 'Insumos', 'QA efectivo', 20,
-  'EFECTIVO', 'QA'
+  'EFECTIVO', 'GASTO_OPERATIVO', 'QA'
 );
 
 insert into public.caja_salidas (
   salida_id, fecha, hora, sede, tipo_gasto, concepto, monto,
-  metodo_salida, responsable
+  metodo_salida, categoria_financiera, responsable
 )
 values (
   'SAL-042-YAPE', date '2026-09-18', time '18:05',
   'Miraflores', 'Servicios', 'QA digital', 30,
-  'YAPE', 'QA'
+  'YAPE', 'GASTO_OPERATIVO', 'QA'
 );
 
 insert into public.caja_movimientos_fondos (
@@ -145,4 +155,27 @@ begin
   if v_fondos <> 150 then
     raise exception 'movimientos de fondos QA esperados 150, recibido %', v_fondos;
   end if;
+end $$;
+
+
+insert into public.caja_cierres (
+  cierre_id, fecha, sede, estado
+)
+values (
+  'CIE-042-ONE', date '2026-09-18', 'Miraflores', 'CERRADO'
+);
+
+do $$
+begin
+  begin
+    insert into public.caja_cierres (
+      cierre_id, fecha, sede, estado
+    )
+    values (
+      'CIE-042-DUP', date '2026-09-18', 'Miraflores', 'CERRADO'
+    );
+    raise exception 'el índice único debió impedir un segundo cierre CERRADO';
+  exception
+    when unique_violation then null;
+  end;
 end $$;

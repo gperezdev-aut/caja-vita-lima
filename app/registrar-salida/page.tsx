@@ -8,6 +8,7 @@ import {
   NATURALEZA_SALIDA_LABELS,
   type NaturalezaSalida,
 } from "@/lib/salidasCaja";
+import { clasificarSalidaFinanciera } from "@/lib/cierreCaja";
 import { createSalidaAction } from "./actions";
 import { RegistrarSalidaWizard } from "./RegistrarSalidaWizard.tsx";
 
@@ -134,7 +135,7 @@ export default async function RegistrarSalidaPage({
   const selectedSede = safeSede(params?.sede);
 
   const salidaQuery = [
-    "select=salida_id,fecha,hora,sede,tipo_gasto,concepto,monto,metodo_salida,responsable,observacion,created_at",
+    "select=salida_id,fecha,hora,sede,tipo_gasto,concepto,monto,metodo_salida,categoria_financiera,responsable,observacion,created_at",
     `fecha=eq.${selectedFecha}`,
     "order=created_at.desc",
   ];
@@ -173,7 +174,11 @@ export default async function RegistrarSalidaPage({
   ]);
 
   const totalGastos = salidas.data.reduce(
-    (sum, row) => sum + Number(row.monto ?? 0),
+    (sum, row) =>
+      sum +
+      (clasificarSalidaFinanciera(row) === "GASTO_OPERATIVO"
+        ? Number(row.monto ?? 0)
+        : 0),
     0
   );
 
@@ -188,7 +193,10 @@ export default async function RegistrarSalidaPage({
       fecha: row.fecha,
       hora: row.hora,
       sede: row.sede,
-      naturaleza: "GASTO",
+      naturaleza:
+        clasificarSalidaFinanciera(row) === "GASTO_OPERATIVO"
+          ? "GASTO"
+          : clasificarSalidaFinanciera(row),
       categoria: row.tipo_gasto,
       metodo: row.metodo_salida,
       concepto: row.concepto,

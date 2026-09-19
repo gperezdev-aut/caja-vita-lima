@@ -85,6 +85,7 @@ export async function createSalidaAction(formData: FormData) {
       concepto,
       monto,
       metodo_salida: metodoSalida,
+      categoria_financiera: "GASTO_OPERATIVO",
       responsable,
       source_movimiento_id: sourceMovimientoId || null,
       observacion,

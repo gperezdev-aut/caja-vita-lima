@@ -24,8 +24,8 @@ test("cierre calcula caja física sin atribuir pagos digitales al efectivo", () 
 
   const salidas = resumirSalidasCierre(
     [
-      { metodo_salida: "EFECTIVO", monto: 30 },
-      { metodo_salida: "YAPE", monto: 40 },
+      { metodo_salida: "EFECTIVO", monto: 30, categoria_financiera: "GASTO_OPERATIVO" },
+      { metodo_salida: "YAPE", monto: 40, categoria_financiera: "GASTO_OPERATIVO" },
     ],
     [
       { tipo_movimiento: "RETIRO_CAJA", metodo: "EFECTIVO", monto: 20 },
@@ -60,7 +60,7 @@ test("cierre calcula caja física sin atribuir pagos digitales al efectivo", () 
 
 test("cierre no inventa caja física si existe una salida histórica sin método", () => {
   const salidas = resumirSalidasCierre(
-    [{ monto: 12.5, metodo_salida: null }],
+    [{ monto: 12.5, metodo_salida: null, categoria_financiera: "GASTO_OPERATIVO" }],
     []
   );
 
@@ -187,6 +187,8 @@ test("la app recalcula el cuadre server-side, separa fondos y bloquea cierres du
   assert.match(migration036, /total_procesado/);
 
   assert.match(migration042, /add column if not exists metodo_salida text/);
+  assert.match(migration042, /add column if not exists categoria_financiera text/);
+  assert.match(migration042, /uq_caja_cierres_fecha_sede_cerrado/);
   assert.match(migration042, /create table if not exists public\.caja_movimientos_fondos/);
   assert.match(migration042, /efectivo_vita_lima/);
   assert.match(migration042, /total_salidas_efectivo/);

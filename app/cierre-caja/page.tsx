@@ -196,7 +196,7 @@ export default async function CierreCajaPage({
     supabaseSelectAllWhere<Row>(
       "caja_salidas",
       [
-        "select=salida_id,fecha,sede,monto,metodo_salida",
+        "select=salida_id,fecha,sede,monto,metodo_salida,categoria_financiera,tipo_gasto,concepto",
         ...filtroFechaSede,
       ].join("&")
     ),
@@ -388,6 +388,11 @@ export default async function CierreCajaPage({
             label="Salidas sin método"
             value={numberFmt(resumenSalidas.salidasSinMetodo)}
             tone={resumenSalidas.salidasSinMetodo > 0 ? "warn" : "default"}
+          />
+          <Card
+            label="Salidas sin clasificar"
+            value={numberFmt(resumenSalidas.salidasSinClasificar)}
+            tone={resumenSalidas.salidasSinClasificar > 0 ? "warn" : "default"}
           />
           <Card label="Pax" value={numberFmt(paxTotal)} />
           <Card label="Boletas pendientes" value={numberFmt(boletasPendientes)} tone="warn" />

@@ -97,7 +97,7 @@ export async function createCierreCajaAction(formData: FormData) {
     ),
     supabaseSelectAllWhere<Record<string, unknown>>(
       "caja_salidas",
-      ["select=monto,metodo_salida", ...filtroFechaSede].join("&")
+      ["select=monto,metodo_salida,categoria_financiera,tipo_gasto,concepto", ...filtroFechaSede].join("&")
     ),
     supabaseSelectAllWhere<Record<string, unknown>>(
       "caja_movimientos_fondos",
