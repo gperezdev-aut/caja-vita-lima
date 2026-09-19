@@ -45,3 +45,11 @@ test("la ficha pública expone el proveedor elegido en Caja", () => {
   assert.match(route, /proveedor: esCuponidad \? "Cuponidad" : "Bee Beneficios"/);
   assert.match(route, /codigoCupon\?: string/);
 });
+
+
+test("un convenio pendiente no genera ICS con duración inventada", () => {
+  const route = read("app/api/publico/ficha/[token]/ics/route.ts");
+  assert.match(route, /const esConvenio = cita\.canal === "cuponidad" \|\| cita\.canal === "bee"/);
+  assert.match(route, /esConvenio && \(!cita\.duracion_min \|\| cita\.duracion_min <= 0\)/);
+  assert.match(route, /pendiente de validar antes de agregarlo al calendario/);
+});
